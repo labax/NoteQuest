@@ -636,7 +636,7 @@ The following are not required for MVP acceptance:
 | DEP-MVP-001 | Approved Business Requirements Document v0.1 | Available | Scope and release traceability |
 | DEP-MVP-002 | Approved Digital Adaptation Decision Registers v0.1 and v0.2 | Available | All feature, technical, UX, content, and operations boundaries |
 | DEP-MVP-003 | [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md) | Available; approved baseline | Prototype and all mechanical Must features |
-| DEP-MVP-004 | Product / Functional Requirements Specification | Pending | Implementation breakdown and traceability |
+| DEP-MVP-004 | [Product Requirements Document v0.1](product-requirements-v0.1.md) and [Functional Requirements Document v0.1](functional-requirements-v0.1.md) | Available; approved baselines | Implementation breakdown and traceability |
 | DEP-MVP-005 | Data / Domain Model Specification | Pending | Persistence, definitions, instances, import, and recovery |
 | DEP-MVP-006 | UX Flow and Wireframe Requirements | Pending | Responsive map, action states, accessibility, and estimation |
 | DEP-MVP-007 | Non-Functional Requirements | Pending | Browser, performance, reliability, privacy, accessibility, and operations |
