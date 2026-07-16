@@ -1,0 +1,43 @@
+window "NoteQuest — Local Saves":
+  header:
+    row:
+      text "NoteQuest" bold size=large
+      spacer
+      status "Offline ready" kind=success
+  panel:
+    text "Choose a local save slot" bold size=large
+    text "Your adventurers, dungeons, notes, and history stay in this browser unless you export them." muted
+    row:
+      col:
+        slot "Slot 1 — Empty" active id="slot-one":
+          text "No adventurer or dungeon yet" muted
+          footer:
+            button "Start new game" primary id="start-game"
+      col:
+        slot "Slot 2 — Palace expedition":
+          kv "Adventurer" "Mira"
+          kv "Location" "Town"
+          kv "Last saved" "2 minutes ago"
+          footer:
+            button "Continue"
+      col:
+        slot "Slot 3 — Recovery available" accent=warning:
+          status "Last save failed" kind=warning
+          text "A last-known-valid snapshot is available." muted
+          footer:
+            button "Review recovery" accent=warning
+  section "Local data and safety":
+    row:
+      col:
+        text "Three independent local slots"
+        text "Atomic autosave and last-valid recovery" muted
+      col:
+        text "Export before clearing browser data"
+        text "No cloud account or background upload" muted
+  footer:
+    button "About & credits"
+    spacer
+    button "Import save"
+
+annotation "Each slot exposes its real persistence state." target="slot-one" position=top
+annotation "Primary action starts the canonical creation flow." target="start-game" position=bottom
