@@ -1,0 +1,44 @@
+name: Apply decision register v0.2 on PR
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'docs/apply-decision-register-v0.2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Extract and run update script
+        shell: bash
+        run: |
+          python - <<'EXTRACT'
+          from pathlib import Path
+          import re
+          import textwrap
+
+          source = Path('.github/workflows/apply-decision-register-v0.2.yml').read_text(encoding='utf-8')
+          match = re.search(r"python - <<'PY'\n(.*?)\n\s+PY", source, re.S)
+          if not match:
+              raise RuntimeError('Unable to extract update script')
+          Path('/tmp/apply_decisions.py').write_text(textwrap.dedent(match.group(1)), encoding='utf-8')
+          EXTRACT
+          python /tmp/apply_decisions.py
+
+          rm -f .github/workflows/apply-decision-register-v0.2.yml
+          rm -f .github/workflows/pr-apply-decision-register-v0.2.yml
+          rm -f .github/decision-v0.2-trigger.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/product .github
+          git commit -m "docs: apply approved decision register v0.2"
+          git push origin HEAD:${{ github.head_ref }}
