@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apply:
-    if: github.head_ref == 'docs/apply-decision-register-v0.2'
+    if: github.head_ref == 'docs/apply-decision-register-v0.2' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,13 +32,28 @@ jobs:
               raise RuntimeError('Unable to extract update script')
           Path('/tmp/apply_decisions.py').write_text(textwrap.dedent(match.group(1)), encoding='utf-8')
           EXTRACT
-          python /tmp/apply_decisions.py
+
+          set +e
+          python /tmp/apply_decisions.py > /tmp/decision-update.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/decision-update.log
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/decision-update.log docs/product/decision-update-error.log
+            git add docs/product/decision-update-error.log
+            git commit -m "chore: record decision update workflow error"
+            git push origin HEAD:${{ github.head_ref }}
+            exit "$status"
+          fi
 
           rm -f .github/workflows/apply-decision-register-v0.2.yml
           rm -f .github/workflows/pr-apply-decision-register-v0.2.yml
           rm -f .github/decision-v0.2-trigger.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f docs/product/decision-update-error.log
           git add docs/product .github
           git commit -m "docs: apply approved decision register v0.2"
           git push origin HEAD:${{ github.head_ref }}
