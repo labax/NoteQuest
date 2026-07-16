@@ -24,13 +24,14 @@ jobs:
           python - <<'EXTRACT'
           from pathlib import Path
           import re
-          import textwrap
 
           source = Path('.github/workflows/apply-decision-register-v0.2.yml').read_text(encoding='utf-8')
           match = re.search(r"python - <<'PY'\n(.*?)\n\s+PY", source, re.S)
           if not match:
               raise RuntimeError('Unable to extract update script')
-          Path('/tmp/apply_decisions.py').write_text(textwrap.dedent(match.group(1)), encoding='utf-8')
+          lines = match.group(1).splitlines()
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          Path('/tmp/apply_decisions.py').write_text(script, encoding='utf-8')
           EXTRACT
 
           set +e
