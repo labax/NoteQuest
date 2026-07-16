@@ -1,0 +1,49 @@
+name: Assemble data domain model specification
+
+on:
+  push:
+    branches:
+      - docs/add-data-domain-model-v0.1
+    paths:
+      - .github/workflows/assemble-data-domain-model.yml
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out documentation branch
+        uses: actions/checkout@v4
+        with:
+          ref: docs/add-data-domain-model-v0.1
+          fetch-depth: 0
+
+      - name: Assemble specification
+        run: |
+          cat \
+            .tmp/data-domain-model/01-foundation.md \
+            .tmp/data-domain-model/02-core-entities-a.md \
+            .tmp/data-domain-model/03-core-entities-b.md \
+            .tmp/data-domain-model/04-invariants-lifecycle-storage.md \
+            .tmp/data-domain-model/05-portability-traceability.md \
+            > docs/product/data-domain-model-v0.1.md
+
+      - name: Validate assembled document
+        run: |
+          test -s docs/product/data-domain-model-v0.1.md
+          ! grep -q '{{' docs/product/data-domain-model-v0.1.md
+          grep -q '^## 22. Approval' docs/product/data-domain-model-v0.1.md
+          test "$(grep -c '^| DMI-' docs/product/data-domain-model-v0.1.md)" -eq 70
+          test "$(wc -l < docs/product/data-domain-model-v0.1.md)" -ge 700
+
+      - name: Remove assembly files and commit final document
+        run: |
+          rm -rf .tmp/data-domain-model
+          rm .github/workflows/assemble-data-domain-model.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/product/data-domain-model-v0.1.md .tmp/data-domain-model .github/workflows/assemble-data-domain-model.yml
+          git commit -m "Add data domain model specification v0.1 [skip ci]"
+          git push origin HEAD:docs/add-data-domain-model-v0.1
