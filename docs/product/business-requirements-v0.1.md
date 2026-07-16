@@ -2,15 +2,15 @@
 
 ## NoteQuest Web Application
 
-*Version 0.1 | Draft | Prepared for the NoteQuest Project*
+*Version 0.1 | Updated Baseline | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
 | Document owner | Product Owner |
 | Product / release | NoteQuest Web Application — Core Release |
-| Related documents | [Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Digital Adaptation Feasibility Study](digital-adaptation-feasibility-study.md); *NoteQuest* rulebook, first edition |
+| Related documents | [Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md); [Digital Adaptation Feasibility Study](digital-adaptation-feasibility-study.md); *NoteQuest* rulebook, first edition |
 | Primary audience | Product owner, developer, UX designer, QA/tester, content/licensing reviewer, and project stakeholders |
-| Status | Draft for review |
+| Status | Updated baseline incorporating approved Decision Register v0.2 rulings |
 | Last updated | 2026-07-16 |
 
 ---
@@ -42,7 +42,7 @@
 
 The NoteQuest project will create a free, web-first, fully responsive digital adaptation of the core *NoteQuest* solo dungeon-crawling game. The application will automate character creation, dice and table resolution, incremental dungeon generation, map tracking, combat, inventory, torch consumption, town actions, death, corpse recovery, and the Graveyard while preserving the source game’s meaningful decisions, lethality, procedural exploration, and persistent dungeon state.
 
-The product addresses the friction inherent in manual solo play: consulting multiple random tables, drawing and maintaining a dungeon map, tracking resources and persistent state, applying edge-case rulings consistently, and preserving a dungeon across successive adventurers. The web application will make the complete core loop immediately playable without requiring a mandatory account or permanent network connection after the application is available locally.
+The product addresses the friction inherent in manual solo play: consulting multiple random tables, drawing and maintaining a dungeon map, tracking resources and persistent state, applying edge-case rulings consistently, and preserving a dungeon across successive adventurers. The web application will make the complete core loop immediately playable without requiring a mandatory account or permanent network connection after the application is available locally. The approved technical baseline is an installable Progressive Web Application (PWA) whose versioned shell and static content are service-worker cached, whose game state is stored in IndexedDB, and whose core play does not depend on an application backend.
 
 The approved direction is a faithful full adaptation rather than a tabletop assistant or an expanded conventional roguelike. The initial release is single-player, contains the six core dungeon types and core rules, and excludes Expanded World material, multiplayer, crafting, tactical grid combat, campaign-world systems, account progression, live-service features, and generated narrative systems.
 
@@ -154,6 +154,9 @@ The project has reached the point where the source rules, technical feasibility,
 
 - A single-player web application with full responsive support.
 - Offline-first play with local saves and no mandatory account.
+- An installable PWA using a service worker for the versioned application shell and approved static content, with IndexedDB for game state and no backend dependency for core play.
+- Three named local save slots, each with an active state, last-known-valid recovery snapshot, schema version, rules/content version, and update timestamp.
+- Versioned save export and validated import as Must capabilities, with clear private-data warnings.
 - Weighted 2d6 adventurer race and class generation, starting equipment, abilities, spells, HP, torches, and coins.
 - The six core dungeon types and their approved character, dungeon, encounter, monster, boss, trap, item, spell, and reward content.
 - Incremental procedural dungeon generation using a persistent graph and readable hybrid dungeon map.
@@ -204,21 +207,21 @@ The project has reached the point where the source rules, technical feasibility,
 | BR-005 | The product shall automate dice rolls, table lookups, calculations, triggers, and state changes while making the inputs and results inspectable. | Must | The UI and event history expose relevant dice, source table, modifiers, costs, and final outcomes. | BO-002 |
 | BR-006 | The product shall maintain a readable persistent dungeon map and show the player’s current position, connections, and relevant markers. | Must | Players can navigate generated dungeons and identify entrances, doors, stairs, occupied rooms, dropped items, and boss locations. | BO-002 |
 | BR-007 | The product shall clearly present available actions, resource costs, warnings, and irreversible consequences before commitment where appropriate. | Must | Usability tests confirm players understand torch costs, alerting, damage, inventory overflow, limb loss, retreat limits, and death risks. | BO-002 |
-| BR-008 | The product shall be delivered as a web application designed web-first with full responsive support. | Must | The agreed browser and viewport matrix passes the core journey without clipped or unavailable required controls. | BO-003 |
-| BR-009 | The product shall support offline-first core play and shall not require a mandatory account or continuous server connection. | Must | After initial availability under the selected web delivery approach, the core game and existing saves remain usable under the agreed offline test conditions. | BO-003 |
-| BR-010 | The product shall persist generated dungeon state, adventurer state, inventory, monsters, corpses, dropped items, Graveyard records, and completed outcomes. | Must | Save, close, reopen, and recovery tests restore equivalent required state. | BO-004 |
-| BR-011 | The product shall autosave after meaningful state-changing actions and shall not display false success when persistence fails. | Must | Failure-injection and recovery tests show accurate save status and no silent data loss. | BO-004 |
-| BR-012 | The product shall guarantee that every generated dungeon can reach a final boss room and terminate under approved generation rules. | Must | Large deterministic simulation suites produce no non-terminating dungeon. | BO-004 |
+| BR-008 | The product shall be delivered as a web application designed web-first with full responsive support, including phone browsers. | Must | The current and previous two major versions of Chrome, Edge, Firefox, and Safari pass the core journey at representative widths of 360, 390, 768, 1024, 1280, and 1440 CSS pixels without clipped or unavailable required controls. | BO-003 |
+| BR-009 | The product shall be an installable offline-first PWA and shall not require a mandatory account, continuous server connection, or backend for core play. | Must | The service-worker-cached application shell and static content launch under the agreed offline conditions, while existing IndexedDB saves remain usable. | BO-003 |
+| BR-010 | The product shall persist generated dungeon state, adventurer state, inventory, monsters, corpses, dropped items, Graveyard records, completed outcomes, rules/content versions, and recovery metadata across three named local save slots. | Must | Save, close, reopen, last-valid recovery, export, and validated import tests restore equivalent required state. | BO-004 |
+| BR-011 | The product shall autosave after meaningful state-changing actions, use explicit sequential schema migrations, retain a pre-migration recovery snapshot, reject unsupported newer schemas without modification, and never display false success when persistence fails. | Must | Failure-injection, migration, validation, and recovery tests show accurate save status and no silent data loss. | BO-004 |
+| BR-012 | The product shall guarantee that every generated dungeon can reach a final boss room and terminate using a target of six generated non-stair segments per floor, a hard maximum of ten, increasing post-target stair probability, and a forced staircase at the hard maximum. | Must | At least 100,000 deterministic seeds per dungeon type produce zero non-terminating dungeons and zero unreachable boss rooms. | BO-004 |
 | BR-013 | The product shall preserve death, corpse or belongings, replacement-adventurer, room-repopulation, monster-healing, and equipment-recovery behavior across expeditions. | Must | Integration tests demonstrate the complete death-and-recovery loop across save/reload. | BO-001 |
 | BR-014 | The product shall provide the core release free of charge and shall include no paid-access or monetisation mechanism. | Must | Public access does not require payment and the release contains no monetisation flow. | BO-005 |
 | BR-015 | The product shall include only content and assets with documented source, rights or licence, approval status, and required attribution. | Must | The release content inventory contains no unknown, restricted, or unapproved item. | BO-005 |
 | BR-016 | The product shall preserve user privacy by keeping personal play data local by default and avoiding hidden analytics or reuse of private records. | Must | Network, storage, and policy review confirm no undisclosed collection or external use of private save data. | BO-004 |
-| BR-017 | The product shall meet the agreed accessibility baseline for keyboard use, labels, focus, scalable text, contrast, reduced motion, non-colour status, and textual map access. | Must | Accessibility review and acceptance testing pass the agreed support matrix. | BO-003 |
+| BR-017 | The product shall target WCAG 2.2 Level AA and support keyboard use, labels, focus, scalable text, contrast, reduced motion, non-colour status, and a complete textual map path. | Must | Keyboard-only checks pass in every supported browser; NVDA with Firefox and Chrome, VoiceOver with Safari on macOS and iOS, and TalkBack with Chrome on Android pass the approved matrix. | BO-003 |
 | BR-018 | The product shall use data-driven content definitions and reusable effect mechanisms where practical. | Should | New approved content can be added without duplicating core application logic or changing unrelated systems. | BO-007 |
-| BR-019 | The product shall record sufficient event and random-result history to explain gameplay outcomes and support reproducible defect reports. | Should | Testers can reconstruct the inputs and rule version behind a saved outcome. | BO-002 |
+| BR-019 | The product shall persist every random result and state-changing action needed to explain gameplay outcomes and support reproducible defect reports. | Must | Active and incomplete dungeons retain complete structured history; completed dungeons retain a permanent summary plus the final 500 mechanically relevant entries, with the latest 200 shown by default. | BO-002 |
 | BR-020 | The project shall prevent unapproved major expansion systems from entering the core release. | Must | Release scope review confirms all excluded systems remain absent or separately approved. | BO-007 |
 | BR-021 | The product should use presentation, pacing controls, cosmetic variation, and feedback to reduce perceived repetition without changing mechanical balance. | Should | Playtests show repeated combat and dungeon runs remain understandable and acceptable against agreed satisfaction targets. | BO-006 |
-| BR-022 | The project shall validate the one-dungeon mechanical prototype before committing to full content and presentation production. | Must | Prototype acceptance confirms termination, saving, death/recovery, map readability, torch pressure, and core-loop value. | BO-006 |
+| BR-022 | The project shall validate the Palace one-dungeon mechanical prototype before committing to full content and presentation production. | Must | All Must prototype scenarios pass; the approved seed and fault matrices show zero termination or save-corruption failures; at least 80% of representative users complete the core flow unaided; and at least 70% rate combat pacing, map clarity, and overall play acceptable or better. | BO-006 |
 
 ## 9. High-Level Capabilities
 
@@ -233,11 +236,11 @@ The project has reached the point where the source rules, technical feasibility,
 | CAP-007 | Inventory and equipment | Manage backpack capacity, equipped items, armour durability, keys, consumables, spells, loot choices, and dropped items. | Eliminates manual inventory bookkeeping while preserving trade-offs. | Core |
 | CAP-008 | Town and expedition lifecycle | Support safe retreat, rest, spell restoration, repair, purchasing, sales, re-entry, monster healing, and room repopulation. | Connects repeated dungeon expeditions into a persistent game. | Prototype / Core |
 | CAP-009 | Death, recovery, and Graveyard | Persist death records, corpses or belongings, replacement adventurers, recoverable equipment, and Graveyard history. | Preserves NoteQuest’s distinctive continuity and metagame. | Prototype / Core |
-| CAP-010 | Save, recovery, and reproducibility | Autosave meaningful actions, restore state, version data, preserve random outcomes, and support reproducible testing. | Protects valuable persistent state and increases trust. | Prototype / Core |
-| CAP-011 | Event history and rule transparency | Show dice, table results, action costs, modifiers, traits, state changes, and recent history. | Helps players understand outcomes and supports QA. | Core |
-| CAP-012 | Responsive and accessible interaction | Support agreed browsers, viewports, keyboard use, readable state, textual map navigation, and reduced-motion options. | Broadens access and avoids a desktop-only experience. | Core |
+| CAP-010 | Save, recovery, and reproducibility | Provide three named IndexedDB save slots, last-valid snapshots, explicit migrations, versioned export/import, and separate deterministic random streams whose committed outcomes survive reload. | Protects valuable persistent state and increases trust. | Prototype / Core |
+| CAP-011 | Event history and rule transparency | Persist mechanically relevant random and state-changing events, show the latest 200 by default, retain complete active-dungeon history, and archive a completion summary plus the final 500 entries. | Helps players understand outcomes and supports QA. | Core |
+| CAP-012 | Responsive and accessible interaction | Support the approved browser/version and viewport matrix, phone browsers, WCAG 2.2 AA, keyboard use, the approved assistive-technology matrix, and equivalent visual/textual map navigation. | Broadens access and avoids a desktop-only experience. | Core |
 | CAP-013 | Content and rights management | Maintain content definitions, provenance, approval status, attribution, and release validation. | Protects the project from rights and release-compliance failures. | Foundation / Core |
-| CAP-014 | Free web delivery | Publish and operate the application without paid-access requirements. | Maximises accessibility and conforms to the approved release decision. | Release |
+| CAP-014 | Free web delivery | Publish the static PWA on a CDN-backed platform through protected GitHub Actions, immutable versioned artifacts, retained prior releases, and one-action rollback, without paid-access requirements. | Maximises accessibility and conforms to the approved release decision. | Release |
 
 ## 10. Success Measures
 
@@ -247,15 +250,15 @@ The project has reached the point where the source rules, technical feasibility,
 |---|---|---|---|
 | SM-001 | Core journey completion | 100% of Must end-to-end acceptance scenarios pass for adventurer creation, dungeon exploration, combat, town return, boss completion, death, and recovery. | Acceptance test execution report |
 | SM-002 | Rules conformance | 100% of Must rules requirements and deterministic fixtures pass. | Unit, integration, and rules-matrix results |
-| SM-003 | Dungeon termination | Zero non-terminating dungeons in the agreed large-seed simulation set. | Automated generation simulation |
+| SM-003 | Dungeon termination | Zero non-terminating dungeons and zero unreachable boss rooms across at least 100,000 deterministic seeds per dungeon type. | Automated generation simulation |
 | SM-004 | Save integrity | 100% of required save/reload, interrupted-save, migration, and recovery scenarios preserve or safely recover required state. | Persistence test matrix |
 | SM-005 | Core usability | At least 80% of representative primary users complete the agreed core flow without facilitator intervention or external bookkeeping. | Moderated playtest / UAT |
-| SM-006 | Responsive support | All Must browser and viewport combinations complete the core flow without clipped or inaccessible required controls. | Responsive test matrix |
-| SM-007 | Accessibility | All Must requirements in the agreed accessibility baseline pass automated and manual checks. | Accessibility audit and keyboard/screen-reader smoke tests |
+| SM-006 | Responsive support | Current and previous two major Chrome, Edge, Firefox, and Safari versions complete the core flow at 360, 390, 768, 1024, 1280, and 1440 CSS pixels without inaccessible required controls. | Responsive test matrix |
+| SM-007 | Accessibility | WCAG 2.2 AA requirements and the approved keyboard, NVDA, VoiceOver, TalkBack, reduced-motion, contrast, and textual-map matrix pass. | Accessibility audit and assistive-technology tests |
 | SM-008 | Content release eligibility | 100% of bundled content and assets have an approved provenance record; no unknown or restricted item is present. | Content inventory and release-gate report |
 | SM-009 | Defect readiness | No blocker or critical defect remains open at release; high defects require explicit product-owner waiver. | Defect report and release approval |
 | SM-010 | Free access | The release provides the complete approved core experience without payment or monetisation flow. | Release review |
-| SM-011 | Core-loop validation | The one-dungeon prototype demonstrates meaningful torch decisions, readable mapping, functional death/recovery, and acceptable repeated combat before full production. | Prototype playtest and go/no-go record |
+| SM-011 | Core-loop validation | The Palace prototype passes all Must scenarios, zero-failure seed and persistence matrices, at least 80% unaided completion, and at least 70% acceptable-or-better ratings for combat pacing, map clarity, and overall play. | Prototype playtest and go/no-go record |
 
 ### 10.2 Post-release indicators
 
@@ -288,23 +291,29 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 
 | ID | Dependency | Type | Required by | Status |
 |---|---|---|---|---|
-| DEP-001 | Approved Digital Adaptation Decision Register | Product / rules | BRD and all downstream specifications | Approved baseline recorded |
+| DEP-001 | Approved Digital Adaptation Decision Registers v0.1 and v0.2 | Product / rules | BRD and all downstream specifications | Approved baselines recorded |
 | DEP-002 | Versioned Digital Rules Specification | Product / rules | Mechanical prototype | Required next |
 | DEP-003 | Content and licensing inventory, including permission evidence and asset-level approval | Legal / content | Any public build | In progress; core permissions recorded |
-| DEP-004 | Product Requirements Document and MVP Scope | Product | Detailed planning and release governance | Pending |
+| DEP-004 | Product Requirements Document and MVP Scope | Product | Detailed planning and release governance | MVP Scope available; PRD pending |
 | DEP-005 | Functional Requirements Specification | Product / technical | Production implementation | Pending |
 | DEP-006 | Data / Domain Model Specification | Technical | Persistence and content implementation | Pending |
 | DEP-007 | UX Flow and Wireframe Requirements | UX | Responsive prototype and application design | Pending |
 | DEP-008 | Non-Functional Requirements | Technical / operational | Architecture and release acceptance | Pending |
 | DEP-009 | Acceptance Criteria / Test Plan | QA | Prototype and release approval | Pending |
-| DEP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Technical / operational | Prototype deployment | Pending |
-| DEP-011 | Approved visual direction and asset-production plan | UX / content | Release presentation | Pending |
+| DEP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Technical / operational | Prototype deployment | Direction approved in Decision Register v0.2; detailed architecture pending |
+| DEP-011 | Approved visual direction and asset-production plan | UX / content | Release presentation | Visual direction approved; asset plan and budget pending prototype pass |
 | DEP-012 | Automated test harness and deterministic random-generation support | Technical / QA | Prototype validation | Pending |
-| DEP-013 | Closed playtest participants and feedback process | External / product | Prototype and release validation | Pending |
+| DEP-013 | Closed playtest participants and feedback process | External / product | Prototype and release validation | Thresholds and voluntary feedback model approved; participants pending |
 
 ## 13. Constraints
 
 - The product must be a web application designed web-first with full responsive support.
+- The supported release matrix is the current and previous two major versions of Chrome, Edge, Firefox, and Safari at 360, 390, 768, 1024, 1280, and 1440 CSS pixels; phone-browser support is Must.
+- The application must be an installable static PWA with a service worker, IndexedDB game state, no backend dependency for core play, safe update activation after a save point, and CDN-backed deployment from protected GitHub Actions.
+- The application must provide three named local save slots, last-valid recovery snapshots, explicit sequential migrations, versioned export, validated import, and separate deterministic random streams.
+- Dungeon floors use a six-segment target and ten-segment hard maximum, and release validation uses at least 100,000 seeds per dungeon type.
+- Accessibility targets WCAG 2.2 Level AA and the approved keyboard, NVDA, VoiceOver, TalkBack, and textual-map matrix.
+- The MVP is English-only; source prose and artwork require item-specific digital-use permission, and final art production begins only after the prototype passes.
 - Core play must remain offline-first and require no mandatory account or continuous connection.
 - The initial release is single-player and limited to the six core dungeons and core rules.
 - The approved release is free to use and contains no monetisation or paid-access mechanism.
@@ -323,12 +332,12 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 | ID | Risk | Probability | Impact | Mitigation | Owner |
 |---|---|---:|---:|---|---|
 | RISK-001 | Incomplete or inconsistent rule formalisation causes gameplay defects or rules drift. | High | High | Complete the Digital Rules Specification first; require traceability and deterministic tests for every critical ruling. | Rules / Product Designer |
-| RISK-002 | Procedural generation produces an unreachable or non-terminating dungeon. | Medium | High | Implement hidden targets, hard limits, forced staircases, invariant checks, and large-seed simulations. | Technical Lead / QA |
-| RISK-003 | Save failures or schema defects corrupt persistent dungeons and Graveyard history. | Medium | Critical | Use atomic or transactional persistence, autosave status, versioned schemas, recovery tests, and export/backup guidance. | Technical Lead |
+| RISK-002 | Procedural generation produces an unreachable or non-terminating dungeon. | Medium | High | Enforce the approved six-segment target and ten-segment hard maximum, forced staircases, invariant checks, and at least 100,000 deterministic seeds per dungeon type. | Technical Lead / QA |
+| RISK-003 | Save failures or schema defects corrupt persistent dungeons and Graveyard history. | Medium | Critical | Use three named IndexedDB slots, atomic or transactional writes, last-valid snapshots, explicit migrations, truthful autosave status, fault tests, and required versioned export/import. | Technical Lead |
 | RISK-004 | Automated combat feels repetitive or too passive. | Medium | High | Preserve visible dice and decisions; add clear feedback, repeat-action controls, pacing options, and playtest gates without changing balance. | Product Owner / UX Designer |
 | RISK-005 | Core content repetition becomes visible faster in software. | High | Medium | Use approved cosmetic variation, environmental text, room naming, visual variants, event history, and later content packs. | Product Owner / Content Designer |
 | RISK-006 | The fully responsive interface becomes crowded or hides critical state on mobile. | Medium | High | Design web-first responsive flows from the start; test tabs, panels, textual map access, and portrait/landscape behavior early. | UX/UI Designer |
-| RISK-007 | Browser storage is deleted, restricted, or behaves differently across supported environments. | Medium | High | Define the browser matrix, communicate storage limitations, support safe export/backup where included, and test failure/recovery paths. | Technical Lead / UX Designer |
+| RISK-007 | Browser storage is deleted, restricted, or behaves differently across supported environments. | Medium | High | Test the approved browser matrix, communicate IndexedDB limitations, provide required versioned export/import and last-valid recovery, and test deletion, quota, import, and failure paths. | Technical Lead / UX Designer |
 | RISK-008 | Asset-level rights remain unclear despite core adaptation permission. | Medium | High | Maintain an item-level inventory; block unknown assets; commission replacements; require release review. | Content / Licensing Reviewer |
 | RISK-009 | Scope expands into a generic roguelike before the core loop is validated. | High | High | Enforce the approved exclusions, prototype gate, traceable scope, and separate approval for expansion work. | Product Owner |
 | RISK-010 | Free hosting and maintenance costs become unsustainable. | Medium | Medium | Select a cost-controlled static or low-operation architecture, define budgets, monitor usage only through approved operational metrics, and assign an operations owner. | Product Owner / Operations Owner |
@@ -340,12 +349,12 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 ## 15. Release Approach
 
 1. **Foundation and formalisation** — Approve the BRD, create the Digital Rules Specification, complete the content/rights inventory, and define the MVP and success gates.
-2. **One-dungeon web prototype** — Implement adventurer generation, one dungeon type, incremental mapping, doors and traps, torches, basic combat, town return, death, save/load, and responsive web delivery without final art.
-3. **Prototype validation** — Test termination, torch pressure, combat decisions, map readability, save integrity, death/recovery, offline behavior, and representative responsive layouts. Make an explicit go/no-go decision.
+2. **Palace PWA prototype** — Implement adventurer generation, the Palace dungeon, incremental mapping, doors and traps, torches, basic combat, town return, death, three local save slots, export/import, and responsive PWA delivery with placeholders rather than final art.
+3. **Prototype validation** — Run at least 100,000 seeds for the Palace algorithm, the approved persistence fault matrix, WCAG and browser/viewport checks, and representative playtests. Require all Must scenarios, zero termination/save-corruption failures, at least 80% unaided completion, and at least 70% acceptable-or-better ratings before a written go decision.
 4. **Core MVP implementation** — Add all six dungeons, races, classes, spells, equipment, monster traits, secret passages, stealth, armour, repopulation, corpse recovery, Graveyard, bosses, full persistence, and event history.
-5. **Experience and release hardening** — Complete responsive UX, accessibility, replacement or approved art, sound, tutorial, settings, save recovery/backup behavior, performance work, and content notices.
+5. **Experience and release hardening** — Complete the approved 2D monochrome ink-and-notebook presentation with restrained warm torch accent, WCAG 2.2 AA support, replacement or approved art, sound, tutorial, settings, save recovery/export/import, performance work, About/Credits notices, and English-only content review.
 6. **Closed playtest and release candidate** — Run deterministic tests, simulations, browser/device checks, accessibility review, content/licensing review, and structured UAT.
-7. **Free public web release** — Publish only after scope, rules, data safety, UX, accessibility, defects, operations, and content-rights gates pass.
+7. **Free public web release** — Publish the immutable tagged PWA through protected GitHub Actions to a CDN-backed static platform only after scope, rules, data safety, UX, accessibility, defects, operations, maintenance ownership, and content-rights gates pass.
 
 ## 16. Approval Criteria
 
@@ -375,20 +384,22 @@ A release may be approved when:
 - [ ] No unknown, restricted, or unapproved content or asset is included.
 - [ ] The application is publicly accessible without payment or a mandatory account.
 
-## 17. Open Questions
+## 17. Resolved Decisions from Decision Register v0.2
 
-| ID | Question | Owner | Due / decision point | Resolution |
-|---|---|---|---|---|
-| OQ-001 | Which browsers, operating systems, and minimum viewport sizes form the Must support matrix? | Technical Lead / UX Designer | Before UX and NFR approval | Open |
-| OQ-002 | What exact browser technology and packaging approach will provide offline-first web use? | Technical Lead | Before prototype architecture approval | Open |
-| OQ-003 | What is the approved hosting, deployment, domain, availability, and operating-cost model for the free application? | Product Owner / Operations Owner | Before public prototype deployment | Open |
-| OQ-004 | Which existing artwork, if any, has explicit digital-use permission, and what replacement-art scope is required? | Content / Licensing Reviewer | Before release-art production | Open |
-| OQ-005 | What exact accessibility standard, level, assistive-technology matrix, and textual-map behavior will be required? | UX Designer / QA | Before UX and NFR approval | Open |
-| OQ-006 | Will save export/import be a Must capability for the core release or a release-hardening feature? | Product Owner / Technical Lead | Before MVP scope approval | Open |
-| OQ-007 | What are the final numeric floor target and hard maximum used by the guaranteed-staircase rule? | Rules / Product Designer | Before Digital Rules Specification approval | Open |
-| OQ-008 | What playtest thresholds define acceptable combat repetition, dungeon repetition, torch pressure, and overall replayability? | Product Owner / QA | Before prototype go/no-go | Open |
-| OQ-009 | What approved wording and placement are required for attribution, rights notices, and any unofficial-product statement? | Content / Licensing Reviewer | Before public release candidate | Open |
-| OQ-010 | What is the initial release schedule and who will provide ongoing maintenance after launch? | Product Owner | Before roadmap approval | Open |
+All former BRD open questions are resolved by the approved [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md). These resolutions are controlling unless changed through formal scope control.
+
+| Former ID | Approved resolution |
+|---|---|
+| OQ-001 | Support current and previous two major Chrome, Edge, Firefox, and Safari versions at 360, 390, 768, 1024, 1280, and 1440 CSS pixels; phone browsers are Must. |
+| OQ-002 | Deliver an installable static PWA using service-worker caching and IndexedDB, with no backend dependency for core play and safe update activation after a save point. |
+| OQ-003 | Host on a CDN-backed static platform; deploy immutable tagged artifacts through protected GitHub Actions; retain the previous release and provide one-action rollback. |
+| OQ-004 | Use placeholders through the Palace prototype; require asset-by-asset digital-use evidence; approve final replacement-art plan and capped budget only after prototype success. |
+| OQ-005 | Target WCAG 2.2 AA with the approved keyboard, NVDA, VoiceOver, TalkBack, contrast, reduced-motion, and complete textual-map matrix. |
+| OQ-006 | Versioned export and validated import are Must capabilities; exported files carry a private-data warning. |
+| OQ-007 | Use a target of six non-stair segments and hard maximum of ten per floor, with increasing post-target stair probability and a forced staircase at the maximum. |
+| OQ-008 | Palace prototype acceptance requires all Must scenarios, zero seed/fault failures, at least 80% unaided completion, and at least 70% acceptable-or-better ratings. |
+| OQ-009 | Put approved credits, source-edition and adaptation-rights statements, asset licences, and third-party notices in a main-menu About/Credits view and repository/release notices. |
+| OQ-010 | Use milestone-based planning until the prototype passes; assign named Product and Technical/Operations owners before release; review dependencies and browser support quarterly without a guaranteed feature cadence. |
 
 ## 18. Approval
 

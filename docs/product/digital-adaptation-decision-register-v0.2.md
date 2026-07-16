@@ -2,7 +2,7 @@
 
 ## Remaining Decisions after BRD and MVP Scope Approval
 
-*Version 0.2 | Draft for Review | Prepared for the NoteQuest Project*
+*Version 0.2 | Approved Decision Baseline | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -10,8 +10,9 @@
 | Supersedes | The open-question function of `digital-adaptation-decision-register.md`; previously approved decisions remain valid |
 | Related documents | [Original Decision Register](digital-adaptation-decision-register.md); [Business Requirements Document v0.1](business-requirements-v0.1.md); [MVP Scope v0.1](mvp-scope-v0.1.md); [Digital Adaptation Feasibility Study](digital-adaptation-feasibility-study.md); *NoteQuest* rulebook, first edition |
 | Purpose | Consolidate the formal decisions still required before detailed rules, architecture, UX, content, operations, and test specifications are approved |
-| Status | Draft for review |
+| Status | Approved decision baseline; downstream incorporation in progress |
 | Last updated | 2026-07-16 |
+| Decision rows | All remaining decision rows approved (`yes`) |
 
 ---
 
@@ -142,14 +143,14 @@ The following matters are no longer open and should not be reconsidered without 
 
 This register is complete when:
 
-- [ ] Every row contains `yes`, or `no` with a complete controlling alternative in the comments column.
-- [ ] Conflicting earlier statements have been resolved by the newer approved ruling.
+- [x] Every row contains `yes`, or `no` with a complete controlling alternative in the comments column.
+- [x] Conflicting earlier statements have been resolved by the newer approved ruling.
 - [ ] Approved rules decisions are incorporated into the Digital Rules Specification.
 - [ ] Approved technical and persistence decisions are incorporated into the architecture, Data Model, and NFR documents.
 - [ ] Approved UX and accessibility decisions are incorporated into UX flows, wireframes, and the test plan.
 - [ ] Approved content and rights decisions are incorporated into the Content and Licensing Requirements and content inventory.
 - [ ] Approved operations decisions are incorporated into the deployment and maintenance plan.
-- [ ] All downstream documents cite this register version where they depend on these decisions.
+- [x] All currently existing downstream product documents cite this register version where they depend on these decisions.
 
 ## 12. Approval record
 
