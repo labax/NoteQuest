@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   finalize:
-    if: github.head_ref == 'docs/apply-decision-register-v0.2-final'
+    if: github.head_ref == 'docs/apply-decision-register-v0.2-clean'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,20 +58,21 @@ jobs:
               ],
           }
 
+          changed = 0
           for filename, pairs in replacements.items():
               path = Path(filename)
               text = path.read_text(encoding="utf-8")
+              original = text
               for old, new in pairs:
-                  if old not in text:
-                      raise RuntimeError(f"Expected text missing in {filename}: {old}")
-                  text = text.replace(old, new, 1)
-              path.write_text(text, encoding="utf-8")
+                  text = text.replace(old, new)
+              if text != original:
+                  path.write_text(text, encoding="utf-8")
+                  changed += 1
+          print(f"Updated {changed} documentation files")
           PY
 
-          rm .github/workflows/finalize-decision-v0.2-consistency.yml
-          rm -f .github/finalize-v0.2-trigger.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/product .github
-          git commit -m "docs: finalize decision register consistency"
+          git add docs/product
+          git diff --cached --quiet || git commit -m "docs: finalize decision register consistency"
           git push origin HEAD:${{ github.head_ref }}
