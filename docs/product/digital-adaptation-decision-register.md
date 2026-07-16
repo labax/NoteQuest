@@ -1,4 +1,8 @@
-# NoteQuest Digital Adaptation Decision Register  
+# NoteQuest Digital Adaptation Decision Register
+
+## Current decision status
+
+This document remains the approved historical baseline for the original product, rules, UX, persistence, and MVP decisions. The later [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md) resolves the remaining questions and supersedes any conflicting earlier statement, including the earlier phone-support wording. Approved v0.2 rulings must be used by all downstream specifications.  
   
 **Status:** Draft for review    
 **Purpose:** Record the formal product, rules, architecture, UX, licensing, and release decisions required before the NoteQuest application can be fully designed and specified.    
