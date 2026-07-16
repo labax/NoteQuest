@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -74,12 +74,12 @@ Licensing is a release gate, not a cleanup task after publication.
 
 | Content area | Examples | Owner |
 |---|---|---|
-| Rules and mechanics presentation | Labels, summaries, move references, dice help | {{OWNER}} |
-| Oracle content | Table names, ranges, prompts, source labels | {{OWNER}} |
-| Character / campaign content | Field labels, defaults, help text | {{OWNER}} |
+| Rules and mechanics presentation | Labels, summaries, dice help, action costs | {{OWNER}} |
+| Character-creation content | Race, class, spell, HP, ability, and starting-equipment tables | {{OWNER}} |
+| Dungeon and encounter content | Dungeon names, segments, rooms, traps, monsters, bosses, and rewards | {{OWNER}} |
 | Visual assets | Icons, illustrations, textures, fonts | {{OWNER}} |
 | Product copy | Onboarding, errors, tooltips, release notes | {{OWNER}} |
-| User-authored content | Characters, vows, notes, custom data | {{OWNER}} |
+| User-authored content | Adventurer names, notes, custom dungeon data, and save metadata | {{OWNER}} |
 | Third-party software / assets | Packages, fonts, icon sets, stock assets | {{OWNER}} |
 
 ### 5.2 Out of scope
@@ -111,9 +111,9 @@ Licensing is a release gate, not a cleanup task after publication.
 | `official_rulebook_ncsa` | Content from a non-commercial ShareAlike source. | Internal or approved non-commercial use only. |
 | `official_srd_by` | Content from an attribution-only system reference source. | May be commercially compatible after verification and attribution. |
 | `official_assets_by` | Official asset content under verified attribution terms. | Include only after item-level inventory and approval. |
-| `official_oracles_by` | Official oracle content under verified attribution terms. | Include only after row/table inventory and approval. |
+| `official_tables_by` | Official character, dungeon, encounter, item, or reward table content under verified attribution terms. | Include only after row/table inventory and approval. |
 | `project_original` | Original product copy, examples, explanations, and UI text. | Preferred where appropriate. |
-| `user_authored` | Player-created characters, vows, notes, and custom content. | Private/user-controlled; not bundled as official content. |
+| `user_authored` | Player-created adventurer names, notes, custom dungeon data, and save metadata. | Private/user-controlled; not bundled as official content. |
 | `third_party_open` | Third-party content under compatible open terms. | Include after compatibility and attribution review. |
 | `third_party_commercial` | Licensed paid or proprietary assets. | Include only when embedding/distribution rights are documented. |
 | `unknown` | Unresolved source or license. | Blocked. |
@@ -138,11 +138,11 @@ Selected release mode: **{{SELECTED_MODE}}**
 | Content type | Planned use | Source category | Permitted release modes | Attribution | Approval status |
 |---|---|---|---|---|---|
 | Dice mechanics | {{USE}} | project_original / verified source | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
-| Move names / summaries | {{USE}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
-| Full move text | {{USE_OR_EXCLUDED}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
-| Oracle tables | {{USE}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
-| Asset names / text | {{USE}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
-| Character sheet labels | {{USE}} | project_original / verified source | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
+| Character-creation tables | {{USE}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
+| Dungeon and encounter tables | {{USE}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
+| Rules summaries or full rules text | {{USE_OR_EXCLUDED}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
+| Monster, boss, item, and spell names or descriptions | {{USE}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
+| Adventurer-sheet labels | {{USE}} | project_original / verified source | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
 | Artwork and icons | {{USE_OR_EXCLUDED}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
 | Fonts | {{USE}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
 | Screenshots / documentation | {{USE}} | {{CATEGORY}} | {{MODES}} | {{ATTRIBUTION}} | {{STATUS}} |
@@ -229,7 +229,7 @@ Do not finalize legal wording without review.
 
 - Product name shall not imply official ownership or endorsement.
 - Official logos, marks, or look-alike marks are excluded unless expressly permitted.
-- Marketing copy shall identify the product as an unofficial companion where required.
+- Marketing copy shall identify the product as an unofficial adaptation where required.
 - Metadata, screenshots, social previews, and store copy shall follow the same rule.
 - Domain names and package identifiers shall be reviewed for confusion risk.
 
@@ -250,7 +250,7 @@ Requirements:
 
 ## 16. User-Authored and Imported Content
 
-- User-authored characters, vows, journals, and custom content remain user-controlled data.
+- User-authored adventurer names, notes, custom dungeon data, event logs, and save metadata remain user-controlled data.
 - The app shall not use private user content for marketing, training, examples, or publication without explicit permission.
 - Imported shared content should require source and license metadata where applicable.
 - The app should warn users that they are responsible for rights to imported or shared material.

@@ -1,8 +1,8 @@
 # Product document templates
 
-This folder contains reusable Markdown templates for planning Ironsworn Digital Companion releases and features.
+This folder contains reusable Markdown templates for planning NoteQuest application releases and features.
 
-The templates are intentionally implementation-neutral. Replace every `{{PLACEHOLDER}}`, remove guidance that does not apply, and preserve stable requirement IDs once a document has entered review.
+The templates are intentionally implementation-neutral. Replace every `{{PLACEHOLDER}}`, remove guidance that does not apply, and preserve stable requirement IDs once a document has entered review. Completed NoteQuest documentation belongs under `docs/`, the project’s documentation source of truth.
 
 ## Core templates
 
@@ -37,8 +37,8 @@ The templates are intentionally implementation-neutral. Replace every `{{PLACEHO
 - Use `Must`, `Should`, `Could`, and `Won't` priorities consistently.
 - Give requirements stable IDs, such as `BR-001`, `FR-CHAR-001`, or `NFR-PERF-001`.
 - Link requirements to acceptance criteria and tests instead of duplicating conflicting wording.
-- Keep mechanics, user-authored fiction, and bundled content as separate concerns.
-- Do not add unapproved Ironsworn prose, move text, oracle text, asset text, artwork, icons, copied layouts, screenshots, or trade dress.
+- Keep mechanics, player-created notes, and bundled content as separate concerns.
+- Do not add unapproved NoteQuest rules text, dungeon tables, item or monster descriptions, artwork, icons, copied layouts, screenshots, or trade dress.
 - Record source, license, attribution, and provenance for bundled content.
 - Treat public and commercial release as separate licensing gates.
 - Mark unresolved decisions explicitly; do not hide them inside implementation notes.
@@ -56,5 +56,5 @@ Examples:
 
 ```text
 business-requirements-v0.1.md
-solo-campaign-depth-functional-requirements-addendum-v0.2.md
+core-dungeon-loop-functional-requirements-addendum-v0.2.md
 ```

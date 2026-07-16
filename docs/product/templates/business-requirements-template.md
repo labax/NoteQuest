@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -42,7 +42,7 @@
 
 {{SUMMARIZE_THE_BUSINESS_NEED_PRODUCT_DIRECTION_TARGET_USERS_AND_EXPECTED_VALUE_IN_TWO_TO_FOUR_PARAGRAPHS}}
 
-The product remains a companion to tabletop play. It should reduce friction without replacing player interpretation, reproducing the full rulebook, or introducing unapproved content.
+The product is a digital adaptation of NoteQuest. It should preserve the source game’s core decisions and tone without reproducing unapproved content or extending beyond agreed adaptation rights.
 
 ## 2. Business Context and Opportunity
 
@@ -110,9 +110,9 @@ The product remains a companion to tabletop play. It should reduce friction with
 
 | ID | Principle | Meaning |
 |---|---|---|
-| BP-001 | Fiction-first | Mechanics and prompts support interpretation rather than authoring mandatory narrative outcomes. |
-| BP-002 | Companion, not replacement | The product does not attempt to replace the complete tabletop experience or rulebook. |
-| BP-003 | Data safety | User-authored campaign records are treated as valuable data. |
+| BP-001 | Source-faithful | Mechanics and interfaces preserve the source rules rather than inventing unsupported gameplay outcomes. |
+| BP-002 | Faithful adaptation | The product implements the approved digital scope without claiming rights to unapproved source-book content. |
+| BP-003 | Data safety | Saved adventurers, dungeons, inventories, and Graveyard records are treated as valuable data. |
 | BP-004 | Licensing-conscious | Bundled content is inventoried, attributed, and approved before release. |
 | BP-005 | {{PRINCIPLE}} | {{MEANING}} |
 
@@ -193,7 +193,7 @@ The product remains a companion to tabletop play. It should reduce friction with
 | RISK-001 | {{RISK}} | Low / Medium / High | Low / Medium / High / Critical | {{MITIGATION}} | {{OWNER}} |
 | RISK-002 | {{RISK}} | {{PROBABILITY}} | {{IMPACT}} | {{MITIGATION}} | {{OWNER}} |
 
-Include product-specific risks such as rules-calculation errors, data loss, scope creep, poor solo usability, over-automation, and unapproved content where applicable.
+Include product-specific risks such as rules-calculation errors, save corruption, non-terminating dungeon generation, scope creep, poor solo usability, rules drift, and unapproved content where applicable.
 
 ## 15. Release Approach
 

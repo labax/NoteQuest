@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -33,7 +33,7 @@
 14. Persistence and Storage Guidance
 15. Content Provenance and Licensing Data
 16. Import, Export, and Migration
-17. Audit, History, and Journal Linkage
+17. Audit, History, and Event Log Linkage
 18. Deletion, Archival, and Recovery
 19. Traceability
 20. Acceptance Criteria
@@ -60,7 +60,7 @@ This specification is implementation-neutral unless a section explicitly records
 
 {{DESCRIBE_THE_CURRENT_PRODUCT_MODEL_AND_THE_FUTURE_CAPABILITIES_THE_MODEL_MUST_NOT_BLOCK}}
 
-Examples may include multiple campaigns, multiple characters, session history, custom content, co-op play, export, and migration.
+Examples may include multiple save slots, adventurers, persistent dungeons, expeditions, corpse recovery, Graveyard history, custom content, export, and migration.
 
 ## 4. Data Model Scope
 
@@ -83,7 +83,7 @@ Examples may include multiple campaigns, multiple characters, session history, c
 | ID | Principle | Meaning |
 |---|---|---|
 | DMP-001 | MVP-simple, future-safe | The first interface may simplify concepts that remain explicit in the domain. |
-| DMP-002 | Fiction-first data | User-authored interpretation is stored separately from mechanical results. |
+| DMP-002 | Source-faithful data | Player-created notes are stored separately from mechanical results and licensed source content. |
 | DMP-003 | Stable identity | Persisted entities use stable IDs, not array positions or display names. |
 | DMP-004 | Immutable completed results | Saved rolls and imported snapshots are not silently recalculated. |
 | DMP-005 | Manual override support | Overrides are explicit and do not erase the standard derived value. |
@@ -102,13 +102,13 @@ Examples may include multiple campaigns, multiple characters, session history, c
 
 Suggested contexts:
 
-- Workspace / ownership.
-- Campaign and session.
-- Character.
-- Progress and vows.
-- Rolls and rules results.
-- Oracles and bundled content.
-- Journal and activity history.
+- Save slots and ownership.
+- Adventurers and abilities.
+- Dungeons, floors, segments, doors, and traps.
+- Combat encounters and monster instances.
+- Inventory, equipment, armour, spells, keys, torches, and coins.
+- Town actions, corpse recovery, event logs, and the Graveyard.
+- Rules-table definitions and bundled content.
 - Content / licensing.
 - Import / export / migration.
 
@@ -197,12 +197,13 @@ Repeat this structure for each entity.
 
 Suggested value objects:
 
-- Stat block.
-- Dice result.
-- Progress value.
-- Momentum state.
+- HP and armour pools.
+- Dice and table result.
+- Torch count and light-source state.
+- Damage expression and natural-die result.
+- Dungeon segment connection.
 - Content provenance reference.
-- Date range or session duration.
+- Expedition timestamp or duration.
 - Export manifest metadata.
 
 ## 11. Enumeration Catalogue
@@ -233,7 +234,7 @@ Include:
 - Cross-field rules.
 - Ownership and foreign-key rules.
 - Unique active-record constraints.
-- Progress / roll immutability.
+- Generated dungeon structure and completed roll immutability.
 - Content source and license requirements.
 - Timestamp and schema-version requirements.
 
@@ -306,7 +307,7 @@ Do not store UI-only state inside durable domain records unless it is required t
 
 | Requirement | Definition |
 |---|---|
-| Scope | {{CAMPAIGN_WORKSPACE_OR_RECORD_SCOPE}} |
+| Scope | {{SAVE_SLOT_DUNGEON_OR_RECORD_SCOPE}} |
 | Completeness | {{REQUIRED_RECORDS}} |
 | Ordering | {{STABLE_ORDERING_IF_NEEDED}} |
 | Privacy warning | {{WARNING}} |
@@ -328,14 +329,15 @@ Do not store UI-only state inside durable domain records unless it is required t
 |---|---|---|---:|---|
 | {{FROM}} | {{TO}} | {{DESCRIPTION}} | Yes / No | {{BEHAVIOR}} |
 
-## 17. Audit, History, and Journal Linkage
+## 17. Audit, History, and Event Log Linkage
 
 | Record type | History expectation | Linkage |
 |---|---|---|
-| Roll result | Immutable result plus explicit amendment if corrected. | Character, campaign, session, journal entry. |
-| Progress event | Append-only change reason where implemented. | Progress track and optional vow / session. |
-| Journal entry | User-editable with updated timestamp. | Campaign, session, vow, track, roll, or oracle result. |
-| Import / migration | Import report and schema versions. | Workspace or campaign. |
+| Dice or table result | Immutable result plus explicit amendment if corrected. | Adventurer, dungeon, segment, encounter, or event-log entry. |
+| Dungeon-generation event | Append-only source table, die values, and generated connection. | Dungeon, floor, segment, and door. |
+| Adventurer-state change | Record value before, value after, and change reason where history is retained. | HP, armour, torches, coins, spells, and inventory. |
+| Event-log entry | User-editable with updated timestamp. | Save slot, adventurer, dungeon, segment, encounter, or roll result. |
+| Import / migration | Import report and schema versions. | Save slot or application workspace. |
 | Destructive action | Confirmation and optional recovery record. | Affected aggregate. |
 
 ## 18. Deletion, Archival, and Recovery

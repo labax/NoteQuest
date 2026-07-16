@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -64,9 +64,9 @@ Non-functional requirements must be measurable. Replace vague terms such as “f
 Consider:
 
 - Rules-result accuracy.
-- Character, campaign, vow, and journal data loss.
+- Adventurer, dungeon, inventory, event-log, and Graveyard data loss.
 - Local-first storage limitations.
-- Long-running campaign data growth.
+- Persistent dungeon, event-log, and Graveyard data growth.
 - Mobile browser usability.
 - Content provenance and release compliance.
 
@@ -103,7 +103,7 @@ Measurement conventions:
 
 - Browser timings use a documented device/network profile.
 - Percentiles require a defined sample size and test environment.
-- Storage limits use representative campaign fixtures.
+- Storage limits use representative save-slot and dungeon fixtures.
 - Accessibility references the agreed WCAG version and level.
 - Security requirements identify threat, control, and verification method.
 
@@ -115,7 +115,7 @@ Measurement conventions:
 | NFR-PERF-002 | Navigation between primary local views shall complete within {{TARGET}}. | {{TARGET}} | {{ENVIRONMENT}} | {{METHOD}} | Should |
 | NFR-PERF-003 | A dice or rules calculation shall return within {{TARGET}} after user action. | {{TARGET}} | Supported devices | Automated performance test | Must |
 | NFR-PERF-004 | Save operations shall complete or show an explicit pending/error state within {{TARGET}}. | {{TARGET}} | {{ENVIRONMENT}} | Integration test | Must |
-| NFR-PERF-005 | Journal/history views shall remain responsive with {{FIXTURE_SIZE}} records. | {{TARGET}} | {{ENVIRONMENT}} | Fixture test | Should |
+| NFR-PERF-005 | Event-log and Graveyard views shall remain responsive with {{FIXTURE_SIZE}} records. | {{TARGET}} | {{ENVIRONMENT}} | Fixture test | Should |
 | NFR-PERF-006 | Import validation for a {{FILE_SIZE}} package shall complete within {{TARGET}}. | {{TARGET}} | {{ENVIRONMENT}} | Integration test | Should |
 
 ### Performance budgets
@@ -125,7 +125,7 @@ Measurement conventions:
 | Initial JavaScript | {{BUDGET}} | {{NOTES}} |
 | Initial CSS | {{BUDGET}} | {{NOTES}} |
 | Bundled content | {{BUDGET}} | Keep licensed content separate and reviewable. |
-| Persistent workspace | {{BUDGET}} | Include representative long-running campaign. |
+| Persistent workspace | {{BUDGET}} | Include representative explored dungeons, dropped equipment, event logs, and Graveyard records. |
 
 ## 7. Reliability and Data Integrity
 
@@ -155,7 +155,7 @@ Measurement conventions:
 
 Protected assets:
 
-- Private campaign and journal data.
+- Private save-slot, adventurer, dungeon, event-log, and Graveyard data.
 - Imported/exported backup files.
 - Application integrity and content manifests.
 - Credentials or tokens, if accounts or connectors are introduced.
@@ -185,7 +185,7 @@ Protected assets:
 | NFR-PRIV-002 | Private user-authored content shall not be used for marketing, examples, analytics, or training without explicit permission. | Default private | Policy / code review | Must |
 | NFR-PRIV-003 | Analytics shall be disabled by default unless separately approved and documented. | No hidden telemetry | Network inspection | Must |
 | NFR-PRIV-004 | Storage location and backup limitations shall be explained in plain language. | Notice is discoverable | UX review | Must |
-| NFR-PRIV-005 | Export shall clearly indicate that files may contain private campaign notes. | Warning before / during export | UX test | Should |
+| NFR-PRIV-005 | Export shall clearly indicate that files may contain private notes and complete save-state data. | Warning before / during export | UX test | Should |
 | NFR-PRIV-006 | Deletion and reset behavior shall state what is removed and what may remain in user-controlled backups. | Accurate notice | Content / UX review | Must |
 
 ## 11. Accessibility
@@ -229,10 +229,10 @@ Target standard: **{{WCAG_VERSION_AND_LEVEL}}**
 | ID | Requirement | Target | Verification | Priority |
 |---|---|---|---|---:|
 | NFR-USE-001 | A new user shall complete {{CORE_ONBOARDING_FLOW}} without external instruction. | {{SUCCESS_RATE_OR_TEST_TARGET}} | Moderated playtest | Should |
-| NFR-USE-002 | A returning user shall identify active campaign/session context and next likely action within {{TARGET}}. | {{TARGET}} | Playtest | Should |
+| NFR-USE-002 | A returning user shall identify the active adventurer, current dungeon segment, remaining torches, and next available action within {{TARGET}}. | {{TARGET}} | Playtest | Should |
 | NFR-USE-003 | Common actions shall require no more than {{COUNT}} navigation transitions from the active play view. | {{TARGET}} | UX review | Should |
 | NFR-USE-004 | Errors shall explain what happened, whether data changed, and the next recovery action. | All release-blocking errors | Content / QA review | Must |
-| NFR-USE-005 | The product shall avoid forced narrative text and preserve user interpretation. | No mandatory authored consequence | Acceptance test | Must |
+| NFR-USE-005 | The product shall avoid unsupported rule automation or generated outcomes. | No behavior outside the approved digital rules specification | Acceptance test | Must |
 
 ## 14. Maintainability and Testability
 
@@ -252,7 +252,7 @@ Target standard: **{{WCAG_VERSION_AND_LEVEL}}**
 |---|---|---|---|---:|
 | NFR-OBS-001 | User-facing failures shall include actionable context without exposing sensitive data. | Clear error + recovery | Fault test | Must |
 | NFR-OBS-002 | Development diagnostics shall identify failing persistence, migration, import, and rules operations. | Structured development logs | Review / test | Should |
-| NFR-OBS-003 | Production diagnostics shall not log private journal content or full imported backups by default. | No sensitive logging | Log inspection | Must |
+| NFR-OBS-003 | Production diagnostics shall not log private notes, event-log content, Graveyard details, or full imported backups by default. | No sensitive logging | Log inspection | Must |
 | NFR-OBS-004 | Release builds shall expose application and schema version in a support-accessible location. | Version visible | Manual test | Should |
 | NFR-OBS-005 | {{OBSERVABILITY_REQUIREMENT}} | {{TARGET}} | {{METHOD}} | {{PRIORITY}} |
 
