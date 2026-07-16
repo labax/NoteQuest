@@ -1,0 +1,369 @@
+name: Apply approved decision register v0.2
+
+on:
+  push:
+    branches:
+      - docs/apply-decision-register-v0.2
+
+permissions:
+  contents: write
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/apply-decision-register-v0.2
+          fetch-depth: 0
+
+      - name: Update product documents
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise RuntimeError(f"Missing expected text for {label}: {old[:100]!r}")
+              return text.replace(old, new, 1)
+
+          def replace_section(text: str, start: str, end: str, replacement: str, label: str) -> str:
+              pattern = re.compile(rf"{re.escape(start)}\n.*?(?=\n{re.escape(end)}\n)", re.S)
+              updated, count = pattern.subn(replacement.rstrip() + "\n", text, count=1)
+              if count != 1:
+                  raise RuntimeError(f"Unable to replace section {label}; count={count}")
+              return updated
+
+          # ------------------------------------------------------------------
+          # Original decision register: preserve history and point to v0.2.
+          # ------------------------------------------------------------------
+          p = Path("docs/product/digital-adaptation-decision-register.md")
+          text = p.read_text(encoding="utf-8")
+          marker = "## Current decision status"
+          if marker not in text:
+              text = replace_once(
+                  text,
+                  "# NoteQuest Digital Adaptation Decision Register",
+                  "# NoteQuest Digital Adaptation Decision Register\n\n## Current decision status\n\nThis document remains the approved historical baseline for the original product, rules, UX, persistence, and MVP decisions. The later [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md) resolves the remaining questions and supersedes any conflicting earlier statement, including the earlier phone-support wording. Approved v0.2 rulings must be used by all downstream specifications.",
+                  "original register status note",
+              )
+          p.write_text(text, encoding="utf-8")
+
+          # ------------------------------------------------------------------
+          # Decision register v0.2: record that every row is approved.
+          # ------------------------------------------------------------------
+          p = Path("docs/product/digital-adaptation-decision-register-v0.2.md")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace("*Version 0.2 | Draft for Review |", "*Version 0.2 | Approved Decision Baseline |", 1)
+          text = text.replace("| Status | Draft for review |", "| Status | Approved decision baseline; downstream incorporation in progress |", 1)
+          if "| Decision rows |" not in text:
+              text = text.replace(
+                  "| Last updated | 2026-07-16 |",
+                  "| Last updated | 2026-07-16 |\n| Decision rows | All remaining decision rows approved (`yes`) |",
+                  1,
+              )
+          text = text.replace("- [ ] Every row contains `yes`, or `no` with a complete controlling alternative in the comments column.", "- [x] Every row contains `yes`, or `no` with a complete controlling alternative in the comments column.", 1)
+          text = text.replace("- [ ] Conflicting earlier statements have been resolved by the newer approved ruling.", "- [x] Conflicting earlier statements have been resolved by the newer approved ruling.", 1)
+          text = text.replace("- [ ] All downstream documents cite this register version where they depend on these decisions.", "- [x] All currently existing downstream product documents cite this register version where they depend on these decisions.", 1)
+          p.write_text(text, encoding="utf-8")
+
+          # ------------------------------------------------------------------
+          # Business Requirements Document.
+          # ------------------------------------------------------------------
+          p = Path("docs/product/business-requirements-v0.1.md")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace("*Version 0.1 | Draft |", "*Version 0.1 | Updated Baseline |", 1)
+          text = text.replace(
+              "[Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Digital Adaptation Feasibility Study]",
+              "[Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md); [Digital Adaptation Feasibility Study]",
+              1,
+          )
+          text = text.replace("| Status | Draft for review |", "| Status | Updated baseline incorporating approved Decision Register v0.2 rulings |", 1)
+          text = replace_once(
+              text,
+              "The web application will make the complete core loop immediately playable without requiring a mandatory account or permanent network connection after the application is available locally.",
+              "The web application will make the complete core loop immediately playable without requiring a mandatory account or permanent network connection after the application is available locally. The approved technical baseline is an installable Progressive Web Application (PWA) whose versioned shell and static content are service-worker cached, whose game state is stored in IndexedDB, and whose core play does not depend on an application backend.",
+              "BRD executive technical baseline",
+          )
+          text = replace_once(
+              text,
+              "- Offline-first play with local saves and no mandatory account.",
+              "- Offline-first play with local saves and no mandatory account.\n- An installable PWA using a service worker for the versioned application shell and approved static content, with IndexedDB for game state and no backend dependency for core play.\n- Three named local save slots, each with an active state, last-known-valid recovery snapshot, schema version, rules/content version, and update timestamp.\n- Versioned save export and validated import as Must capabilities, with clear private-data warnings.",
+              "BRD in-scope technical additions",
+          )
+          replacements = {
+              "| BR-008 | The product shall be delivered as a web application designed web-first with full responsive support. | Must | The agreed browser and viewport matrix passes the core journey without clipped or unavailable required controls. | BO-003 |":
+              "| BR-008 | The product shall be delivered as a web application designed web-first with full responsive support, including phone browsers. | Must | The current and previous two major versions of Chrome, Edge, Firefox, and Safari pass the core journey at representative widths of 360, 390, 768, 1024, 1280, and 1440 CSS pixels without clipped or unavailable required controls. | BO-003 |",
+              "| BR-009 | The product shall support offline-first core play and shall not require a mandatory account or continuous server connection. | Must | After initial availability under the selected web delivery approach, the core game and existing saves remain usable under the agreed offline test conditions. | BO-003 |":
+              "| BR-009 | The product shall be an installable offline-first PWA and shall not require a mandatory account, continuous server connection, or backend for core play. | Must | The service-worker-cached application shell and static content launch under the agreed offline conditions, while existing IndexedDB saves remain usable. | BO-003 |",
+              "| BR-010 | The product shall persist generated dungeon state, adventurer state, inventory, monsters, corpses, dropped items, Graveyard records, and completed outcomes. | Must | Save, close, reopen, and recovery tests restore equivalent required state. | BO-004 |":
+              "| BR-010 | The product shall persist generated dungeon state, adventurer state, inventory, monsters, corpses, dropped items, Graveyard records, completed outcomes, rules/content versions, and recovery metadata across three named local save slots. | Must | Save, close, reopen, last-valid recovery, export, and validated import tests restore equivalent required state. | BO-004 |",
+              "| BR-011 | The product shall autosave after meaningful state-changing actions and shall not display false success when persistence fails. | Must | Failure-injection and recovery tests show accurate save status and no silent data loss. | BO-004 |":
+              "| BR-011 | The product shall autosave after meaningful state-changing actions, use explicit sequential schema migrations, retain a pre-migration recovery snapshot, reject unsupported newer schemas without modification, and never display false success when persistence fails. | Must | Failure-injection, migration, validation, and recovery tests show accurate save status and no silent data loss. | BO-004 |",
+              "| BR-012 | The product shall guarantee that every generated dungeon can reach a final boss room and terminate under approved generation rules. | Must | Large deterministic simulation suites produce no non-terminating dungeon. | BO-004 |":
+              "| BR-012 | The product shall guarantee that every generated dungeon can reach a final boss room and terminate using a target of six generated non-stair segments per floor, a hard maximum of ten, increasing post-target stair probability, and a forced staircase at the hard maximum. | Must | At least 100,000 deterministic seeds per dungeon type produce zero non-terminating dungeons and zero unreachable boss rooms. | BO-004 |",
+              "| BR-017 | The product shall meet the agreed accessibility baseline for keyboard use, labels, focus, scalable text, contrast, reduced motion, non-colour status, and textual map access. | Must | Accessibility review and acceptance testing pass the agreed support matrix. | BO-003 |":
+              "| BR-017 | The product shall target WCAG 2.2 Level AA and support keyboard use, labels, focus, scalable text, contrast, reduced motion, non-colour status, and a complete textual map path. | Must | Keyboard-only checks pass in every supported browser; NVDA with Firefox and Chrome, VoiceOver with Safari on macOS and iOS, and TalkBack with Chrome on Android pass the approved matrix. | BO-003 |",
+              "| BR-019 | The product shall record sufficient event and random-result history to explain gameplay outcomes and support reproducible defect reports. | Should | Testers can reconstruct the inputs and rule version behind a saved outcome. | BO-002 |":
+              "| BR-019 | The product shall persist every random result and state-changing action needed to explain gameplay outcomes and support reproducible defect reports. | Must | Active and incomplete dungeons retain complete structured history; completed dungeons retain a permanent summary plus the final 500 mechanically relevant entries, with the latest 200 shown by default. | BO-002 |",
+              "| BR-022 | The project shall validate the one-dungeon mechanical prototype before committing to full content and presentation production. | Must | Prototype acceptance confirms termination, saving, death/recovery, map readability, torch pressure, and core-loop value. | BO-006 |":
+              "| BR-022 | The project shall validate the Palace one-dungeon mechanical prototype before committing to full content and presentation production. | Must | All Must prototype scenarios pass; the approved seed and fault matrices show zero termination or save-corruption failures; at least 80% of representative users complete the core flow unaided; and at least 70% rate combat pacing, map clarity, and overall play acceptable or better. | BO-006 |",
+          }
+          for old, new in replacements.items():
+              text = replace_once(text, old, new, old.split("|")[1].strip())
+
+          text = text.replace(
+              "| CAP-010 | Save, recovery, and reproducibility | Autosave meaningful actions, restore state, version data, preserve random outcomes, and support reproducible testing. | Protects valuable persistent state and increases trust. | Prototype / Core |",
+              "| CAP-010 | Save, recovery, and reproducibility | Provide three named IndexedDB save slots, last-valid snapshots, explicit migrations, versioned export/import, and separate deterministic random streams whose committed outcomes survive reload. | Protects valuable persistent state and increases trust. | Prototype / Core |",
+              1,
+          )
+          text = text.replace(
+              "| CAP-011 | Event history and rule transparency | Show dice, table results, action costs, modifiers, traits, state changes, and recent history. | Helps players understand outcomes and supports QA. | Core |",
+              "| CAP-011 | Event history and rule transparency | Persist mechanically relevant random and state-changing events, show the latest 200 by default, retain complete active-dungeon history, and archive a completion summary plus the final 500 entries. | Helps players understand outcomes and supports QA. | Core |",
+              1,
+          )
+          text = text.replace(
+              "| CAP-012 | Responsive and accessible interaction | Support agreed browsers, viewports, keyboard use, readable state, textual map navigation, and reduced-motion options. | Broadens access and avoids a desktop-only experience. | Core |",
+              "| CAP-012 | Responsive and accessible interaction | Support the approved browser/version and viewport matrix, phone browsers, WCAG 2.2 AA, keyboard use, the approved assistive-technology matrix, and equivalent visual/textual map navigation. | Broadens access and avoids a desktop-only experience. | Core |",
+              1,
+          )
+          text = text.replace(
+              "| CAP-014 | Free web delivery | Publish and operate the application without paid-access requirements. | Maximises accessibility and conforms to the approved release decision. | Release |",
+              "| CAP-014 | Free web delivery | Publish the static PWA on a CDN-backed platform through protected GitHub Actions, immutable versioned artifacts, retained prior releases, and one-action rollback, without paid-access requirements. | Maximises accessibility and conforms to the approved release decision. | Release |",
+              1,
+          )
+          text = text.replace("| SM-003 | Dungeon termination | Zero non-terminating dungeons in the agreed large-seed simulation set. | Automated generation simulation |", "| SM-003 | Dungeon termination | Zero non-terminating dungeons and zero unreachable boss rooms across at least 100,000 deterministic seeds per dungeon type. | Automated generation simulation |", 1)
+          text = text.replace("| SM-006 | Responsive support | All Must browser and viewport combinations complete the core flow without clipped or inaccessible required controls. | Responsive test matrix |", "| SM-006 | Responsive support | Current and previous two major Chrome, Edge, Firefox, and Safari versions complete the core flow at 360, 390, 768, 1024, 1280, and 1440 CSS pixels without inaccessible required controls. | Responsive test matrix |", 1)
+          text = text.replace("| SM-007 | Accessibility | All Must requirements in the agreed accessibility baseline pass automated and manual checks. | Accessibility audit and keyboard/screen-reader smoke tests |", "| SM-007 | Accessibility | WCAG 2.2 AA requirements and the approved keyboard, NVDA, VoiceOver, TalkBack, reduced-motion, contrast, and textual-map matrix pass. | Accessibility audit and assistive-technology tests |", 1)
+          text = text.replace("| SM-011 | Core-loop validation | The one-dungeon prototype demonstrates meaningful torch decisions, readable mapping, functional death/recovery, and acceptable repeated combat before full production. | Prototype playtest and go/no-go record |", "| SM-011 | Core-loop validation | The Palace prototype passes all Must scenarios, zero-failure seed and persistence matrices, at least 80% unaided completion, and at least 70% acceptable-or-better ratings for combat pacing, map clarity, and overall play. | Prototype playtest and go/no-go record |", 1)
+
+          text = text.replace("| DEP-001 | Approved Digital Adaptation Decision Register | Product / rules | BRD and all downstream specifications | Approved baseline recorded |", "| DEP-001 | Approved Digital Adaptation Decision Registers v0.1 and v0.2 | Product / rules | BRD and all downstream specifications | Approved baselines recorded |", 1)
+          text = text.replace("| DEP-004 | Product Requirements Document and MVP Scope | Product | Detailed planning and release governance | Pending |", "| DEP-004 | Product Requirements Document and MVP Scope | Product | Detailed planning and release governance | MVP Scope available; PRD pending |", 1)
+          text = text.replace("| DEP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Technical / operational | Prototype deployment | Pending |", "| DEP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Technical / operational | Prototype deployment | Direction approved in Decision Register v0.2; detailed architecture pending |", 1)
+          text = text.replace("| DEP-011 | Approved visual direction and asset-production plan | UX / content | Release presentation | Pending |", "| DEP-011 | Approved visual direction and asset-production plan | UX / content | Release presentation | Visual direction approved; asset plan and budget pending prototype pass |", 1)
+          text = text.replace("| DEP-013 | Closed playtest participants and feedback process | External / product | Prototype and release validation | Pending |", "| DEP-013 | Closed playtest participants and feedback process | External / product | Prototype and release validation | Thresholds and voluntary feedback model approved; participants pending |", 1)
+
+          constraints_anchor = "- The product must be a web application designed web-first with full responsive support."
+          text = replace_once(
+              text,
+              constraints_anchor,
+              constraints_anchor + "\n- The supported release matrix is the current and previous two major versions of Chrome, Edge, Firefox, and Safari at 360, 390, 768, 1024, 1280, and 1440 CSS pixels; phone-browser support is Must.\n- The application must be an installable static PWA with a service worker, IndexedDB game state, no backend dependency for core play, safe update activation after a save point, and CDN-backed deployment from protected GitHub Actions.\n- The application must provide three named local save slots, last-valid recovery snapshots, explicit sequential migrations, versioned export, validated import, and separate deterministic random streams.\n- Dungeon floors use a six-segment target and ten-segment hard maximum, and release validation uses at least 100,000 seeds per dungeon type.\n- Accessibility targets WCAG 2.2 Level AA and the approved keyboard, NVDA, VoiceOver, TalkBack, and textual-map matrix.\n- The MVP is English-only; source prose and artwork require item-specific digital-use permission, and final art production begins only after the prototype passes.",
+              "BRD constraints",
+          )
+
+          text = text.replace("2. **One-dungeon web prototype** — Implement adventurer generation, one dungeon type, incremental mapping, doors and traps, torches, basic combat, town return, death, save/load, and responsive web delivery without final art.", "2. **Palace PWA prototype** — Implement adventurer generation, the Palace dungeon, incremental mapping, doors and traps, torches, basic combat, town return, death, three local save slots, export/import, and responsive PWA delivery with placeholders rather than final art.", 1)
+          text = text.replace("3. **Prototype validation** — Test termination, torch pressure, combat decisions, map readability, save integrity, death/recovery, offline behavior, and representative responsive layouts. Make an explicit go/no-go decision.", "3. **Prototype validation** — Run at least 100,000 seeds for the Palace algorithm, the approved persistence fault matrix, WCAG and browser/viewport checks, and representative playtests. Require all Must scenarios, zero termination/save-corruption failures, at least 80% unaided completion, and at least 70% acceptable-or-better ratings before a written go decision.", 1)
+          text = text.replace("5. **Experience and release hardening** — Complete responsive UX, accessibility, replacement or approved art, sound, tutorial, settings, save recovery/backup behavior, performance work, and content notices.", "5. **Experience and release hardening** — Complete the approved 2D monochrome ink-and-notebook presentation with restrained warm torch accent, WCAG 2.2 AA support, replacement or approved art, sound, tutorial, settings, save recovery/export/import, performance work, About/Credits notices, and English-only content review.", 1)
+          text = text.replace("7. **Free public web release** — Publish only after scope, rules, data safety, UX, accessibility, defects, operations, and content-rights gates pass.", "7. **Free public web release** — Publish the immutable tagged PWA through protected GitHub Actions to a CDN-backed static platform only after scope, rules, data safety, UX, accessibility, defects, operations, maintenance ownership, and content-rights gates pass.", 1)
+
+          brd_resolved = """## 17. Resolved Decisions from Decision Register v0.2
+
+All former BRD open questions are resolved by the approved [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md). These resolutions are controlling unless changed through formal scope control.
+
+| Former ID | Approved resolution |
+|---|---|
+| OQ-001 | Support current and previous two major Chrome, Edge, Firefox, and Safari versions at 360, 390, 768, 1024, 1280, and 1440 CSS pixels; phone browsers are Must. |
+| OQ-002 | Deliver an installable static PWA using service-worker caching and IndexedDB, with no backend dependency for core play and safe update activation after a save point. |
+| OQ-003 | Host on a CDN-backed static platform; deploy immutable tagged artifacts through protected GitHub Actions; retain the previous release and provide one-action rollback. |
+| OQ-004 | Use placeholders through the Palace prototype; require asset-by-asset digital-use evidence; approve final replacement-art plan and capped budget only after prototype success. |
+| OQ-005 | Target WCAG 2.2 AA with the approved keyboard, NVDA, VoiceOver, TalkBack, contrast, reduced-motion, and complete textual-map matrix. |
+| OQ-006 | Versioned export and validated import are Must capabilities; exported files carry a private-data warning. |
+| OQ-007 | Use a target of six non-stair segments and hard maximum of ten per floor, with increasing post-target stair probability and a forced staircase at the maximum. |
+| OQ-008 | Palace prototype acceptance requires all Must scenarios, zero seed/fault failures, at least 80% unaided completion, and at least 70% acceptable-or-better ratings. |
+| OQ-009 | Put approved credits, source-edition and adaptation-rights statements, asset licences, and third-party notices in a main-menu About/Credits view and repository/release notices. |
+| OQ-010 | Use milestone-based planning until the prototype passes; assign named Product and Technical/Operations owners before release; review dependencies and browser support quarterly without a guaranteed feature cadence. |
+"""
+          text = replace_section(text, "## 17. Open Questions", "## 18. Approval", brd_resolved, "BRD resolved questions")
+          p.write_text(text, encoding="utf-8")
+
+          # ------------------------------------------------------------------
+          # MVP Scope.
+          # ------------------------------------------------------------------
+          p = Path("docs/product/mvp-scope-v0.1.md")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace("*Version 0.1 | Draft for Review |", "*Version 0.1 | Updated Baseline |", 1)
+          text = text.replace(
+              "[Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Digital Adaptation Feasibility Study]",
+              "[Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md); [Digital Adaptation Feasibility Study]",
+              1,
+          )
+          text = text.replace("| Status | Draft for review |", "| Status | Updated baseline incorporating approved Decision Register v0.2 rulings |", 1)
+          text = text.replace("Detailed mechanical behaviour remains governed by the approved Digital Adaptation Decision Register and the versioned Digital Rules Specification.", "Detailed mechanical behaviour remains governed by the approved original Decision Register, the approved Decision Register v0.2, and the versioned Digital Rules Specification.", 1)
+          text = text.replace("- [Digital Adaptation Decision Register](digital-adaptation-decision-register.md), where `yes` accepts the recommendation and `no` makes the comments-column resolution controlling.", "- [Digital Adaptation Decision Register](digital-adaptation-decision-register.md), which records the original approved baseline.\n- [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md), whose approved rulings resolve the remaining prototype, technical, data, UX, content, and operations decisions.", 1)
+          text = text.replace("| MP-005 | Offline-first and private | Core play uses local data, requires no mandatory account, and does not depend on continuous connectivity. |", "| MP-005 | Offline-first and private | Core play runs as an installable static PWA, stores game state in IndexedDB, requires no mandatory account or backend, and does not depend on continuous connectivity. |", 1)
+
+          feature_replacements = {
+              "| MVP-007 | Persistence, recovery, and reproducible randomness | Must Have | Local save slots, autosave, versioned state, failure visibility, deterministic testing, and stable random outcomes | Technical Lead; QA |":
+              "| MVP-007 | Persistence, recovery, and reproducible randomness | Must Have | Three named IndexedDB save slots, autosave, last-valid snapshots, explicit migrations, versioned export/import, truthful failure status, and separate deterministic random streams | Technical Lead; QA |",
+              "| MVP-010 | Responsive and accessible interaction | Must Have | Supported browsers and viewports, keyboard use, focus, labels, scalable text, reduced motion, non-colour feedback, and textual map | UX/UI Designer; QA |":
+              "| MVP-010 | Responsive and accessible interaction | Must Have | Current and previous two Chrome, Edge, Firefox, and Safari versions; 360–1440 CSS-pixel matrix; phone support; WCAG 2.2 AA; approved assistive technologies; and full textual-map equivalence | UX/UI Designer; QA |",
+              "| MVP-012 | Free web delivery | Must Have | Public web deployment of the complete approved MVP with no payment or monetisation mechanism | Product Owner; Operations Owner |":
+              "| MVP-012 | Free web delivery | Must Have | CDN-backed static PWA deployment through protected GitHub Actions, immutable tagged artifacts, retained previous release, one-action rollback, and no payment or monetisation mechanism | Product Owner; Operations Owner |",
+              "| MVP-014 | Save export and manual backup | Should Have | User-controlled export or backup of local save data if viable within the selected web architecture | Technical Lead; UX/UI Designer |":
+              "| MVP-014 | Versioned save export and validated import | Must Have | User-controlled export and validated import of private local save data, with clear warnings, schema checks, and non-destructive failure behaviour | Technical Lead; UX/UI Designer |",
+          }
+          for old, new in feature_replacements.items():
+              text = replace_once(text, old, new, old.split("|")[1].strip())
+
+          text = replace_once(
+              text,
+              "Before full production across all six dungeons, the project shall validate one complete dungeon type using production-intent rules architecture but temporary presentation where necessary.",
+              "Before full production across all six dungeons, the project shall validate the **Palace** dungeon using production-intent rules architecture and temporary placeholder presentation where necessary.",
+              "MVP prototype dungeon",
+          )
+          text = replace_once(
+              text,
+              "Failure of this prototype gate requires rules, UX, or scope revision before implementing all remaining dungeon content.",
+              "The prototype passes only when all Must scenarios succeed, at least 100,000 deterministic Palace seeds produce zero non-terminating or unreachable-boss cases, the persistence fault matrix produces zero save-state corruption, at least 80% of representative users complete the core flow unaided, and at least 70% rate combat pacing, map clarity, and overall play acceptable or better. Failure requires rules, UX, architecture, or scope revision before implementing all remaining dungeon content, and full production requires a written go decision.",
+              "MVP prototype criteria",
+          )
+          text = text.replace("| DUN-S-005 | Apply approved target and hard-maximum rules so every dungeon can reach the third-level final room. | Must | Large seeded simulations contain zero non-terminating dungeons. |", "| DUN-S-005 | Use a target of six generated non-stair segments and hard maximum of ten per floor; increase downward-stair probability by one sixth after the target and force the next valid connection to stairs at the maximum. | Must | At least 100,000 deterministic seeds per dungeon type contain zero non-terminating dungeons and zero unreachable boss rooms. |", 1)
+          text = text.replace("- [ ] Every dungeon seed terminates under the approved simulation target.", "- [ ] At least 100,000 deterministic seeds per dungeon type terminate with a reachable boss room under the approved six/ten generation limits.", 1)
+
+          pers_replacements = {
+              "| PERS-001 | Store all required play data locally by default with no mandatory account. | Must | Network-independent test restores an existing save under agreed conditions. |":
+              "| PERS-001 | Store all required play data in IndexedDB within an installable static PWA, with no mandatory account or backend for core play. | Must | Network-independent tests launch the cached application and restore an existing save under approved conditions. |",
+              "| PERS-004 | Use a versioned save schema with validation and non-destructive recovery behaviour. | Must | Invalid or older fixtures are rejected, migrated, or recovered without overwriting valid data. |":
+              "| PERS-004 | Use explicit sequential schema migrations, retain a pre-migration last-valid snapshot, reject newer unsupported schemas without modification, and report success only after validation and durable write. | Must | Invalid, older, and newer fixtures are migrated, rejected, or recovered without overwriting valid data. |",
+              "| PERS-005 | Preserve generated random outcomes before presentation so reload does not silently create a different resolved event. | Must | Reload comparison returns the same completed result. |":
+              "| PERS-005 | Use separate deterministic streams for dungeon generation, combat, and expedition repopulation, persisting the resolved result or stream state before presentation. | Must | Reload comparison returns the same committed outcome and cannot reroll it. |",
+              "| PERS-007 | Provide user-controlled save export or backup where technically viable within MVP delivery. | Should | Exported data validates and can restore the required state, or is formally deferred before scope approval. |":
+              "| PERS-007 | Provide versioned save export and validated import with a plain warning that exported files contain private play data. | Must | Valid exports restore required state; invalid, corrupted, or unsupported imports fail without modifying existing saves. |",
+          }
+          for old, new in pers_replacements.items():
+              text = replace_once(text, old, new, old.split("|")[1].strip())
+          text = text.replace("| PERS-008 | Explain local-storage limits and browser-data deletion risks in plain language. | Must | Storage notice passes content and usability review. |", "| PERS-008 | Explain IndexedDB limits, browser-data deletion risks, export/import, and recovery behavior in plain language. | Must | Storage and backup notices pass content and usability review. |\n| PERS-009 | Provide three named save slots, each containing active state, a last-known-valid recovery snapshot, schema version, rules/content version, and update timestamp. | Must | Slot creation, naming, overwrite confirmation, recovery, export, import, and version display tests pass. |", 1)
+          text = text.replace("- [ ] Private play data remains local unless the user explicitly exports it.", "- [ ] Three named slots, last-valid recovery, sequential migration, versioned export, and validated import pass across the approved browser matrix.\n- [ ] Private play data remains local unless the user explicitly exports it.", 1)
+
+          ux_replacements = {
+              "| UX-S-003 | Provide recent event history containing dice, table outcomes, modifiers, trait triggers, and state changes needed to explain results. | Must | A tester can reconstruct an accepted outcome from the UI and saved history. |":
+              "| UX-S-003 | Persist mechanically relevant random and state-changing events; keep complete active/incomplete-dungeon history; retain a completion summary plus the final 500 entries; and show the latest 200 by default. | Must | A tester can reconstruct an accepted outcome from the UI and saved history. |",
+              "| UX-S-004 | Support the agreed current desktop, tablet, and mobile viewport matrix with no clipped or unreachable required control. | Must | Responsive matrix passes the complete core journey. |":
+              "| UX-S-004 | Support the current and previous two major versions of Chrome, Edge, Firefox, and Safari at 360, 390, 768, 1024, 1280, and 1440 CSS pixels, including phone browsers. | Must | Every matrix combination exposes the complete required journey without clipped or unreachable controls. |",
+              "| UX-S-006 | Support scalable text, sufficient contrast, non-colour-only state, reduced motion, and no sound-only required information. | Must | Accessibility audit passes the agreed baseline. |":
+              "| UX-S-006 | Target WCAG 2.2 Level AA with scalable text, sufficient contrast, non-colour-only state, reduced motion, and no sound-only required information. | Must | Automated and manual accessibility audits pass or document and approve any exception. |",
+              "| UX-S-007 | Provide a textual alternative for dungeon-map position and available connections. | Must | A user can understand and navigate the dungeon without relying on the visual graph. |":
+              "| UX-S-007 | Provide current segment, floor, occupants, hazards, dropped items or corpses, every connection and door state, and a navigable ordered route toward the entrance; every visual map action has a keyboard and textual equivalent. | Must | A user can understand and navigate the dungeon without relying on the visual graph. |",
+          }
+          for old, new in ux_replacements.items():
+              text = replace_once(text, old, new, old.split("|")[1].strip())
+          text = text.replace("| UX-S-009 | Permit instant or accelerated dice and combat presentation without changing rules outcomes. | Should | Reduced-motion and fast-result modes preserve identical mechanics. |", "| UX-S-009 | Permit instant or accelerated dice and combat presentation without changing rules outcomes. | Should | Reduced-motion and fast-result modes preserve identical mechanics. |\n| UX-S-010 | Test keyboard-only operation in every supported browser, NVDA with Firefox and Chrome on Windows, VoiceOver with Safari on macOS and iOS, and TalkBack with Chrome on Android. | Must | The approved assistive-technology matrix passes the core-flow smoke and acceptance scenarios. |\n| UX-S-011 | Use a 2D monochrome ink-and-notebook presentation with a restrained warm torch accent, flexible diagram map, simple illustrated cards or silhouettes, and optional skippable animation. | Must | Visual-direction review confirms the implementation remains readable, responsive, and reduced-motion compatible. |", 1)
+
+          rel_replacements = {
+              "| REL-002 | Include only approved core NoteQuest content and separately approved original application copy. | Must | Content review confirms the release boundary. |":
+              "| REL-002 | Include only approved core NoteQuest content and approved original concise UI wording or paraphrased rule explanations; exact source prose is used only where written permission explicitly covers digital reproduction. | Must | Content review confirms the release boundary and prose permissions. |",
+              "| REL-004 | Provide required attribution, licence, rights, and unofficial-status notices in a discoverable legal/about location. | Must | Reviewer confirms notice completeness and discoverability. |":
+              "| REL-004 | Provide approved author/publisher credit, source-edition reference, adaptation-rights statement, asset licences, and third-party notices in a main-menu About/Credits view and repository or release notices. | Must | Rights reviewer confirms wording, completeness, and discoverability. |",
+              "| REL-005 | Deploy the complete accepted MVP as a web application. | Must | Public release URL serves the approved build under the supported browser matrix. |":
+              "| REL-005 | Deploy the accepted static PWA to a CDN-backed platform through protected GitHub Actions from versioned tags, with immutable artifacts, retained previous release, and one-action rollback. | Must | Public release and rollback tests serve the approved build under the supported browser matrix. |",
+              "| REL-007 | Support offline-first play under the selected web delivery strategy. | Must | Offline test conditions pass after the required initial availability step. |":
+              "| REL-007 | Cache the versioned PWA shell and approved static content with a service worker and store game state in IndexedDB; activate updates only after a safe save point and reload. | Must | Online, offline, update-notification, safe-activation, and reload tests pass. |",
+          }
+          for old, new in rel_replacements.items():
+              text = replace_once(text, old, new, old.split("|")[1].strip())
+          text = text.replace("| REL-008 | Establish a documented hosting, maintenance, deployment, and rollback owner. | Must | Operational readiness checklist is approved. |", "| REL-008 | Assign a named Product Owner and named Technical/Operations Owner for deployment, rollback, dependency updates, browser compatibility, security, data-loss defects, and quarterly maintenance review. | Must | Operational readiness and ownership checklists are approved. |\n| REL-009 | Release the MVP in English only while externalising user-facing strings where practical. | Must | No translated public release ships, and localisation completeness is not treated as an MVP gate. |", 1)
+
+          cross_cutting = """## 9. Cross-Cutting Scope
+
+### 9.1 Persistence and data safety
+
+- Deliver an installable static PWA; service-worker cache the versioned application shell and approved static content; store game state in IndexedDB; require no backend for core play.
+- Provide three named save slots. Each slot stores active state, a last-known-valid recovery snapshot, schema version, rules/content version, and update timestamp.
+- Autosave after every meaningful state-changing action defined by the Functional Requirements and Digital Rules Specification.
+- Use explicit sequential schema migrations, preserve the pre-migration recovery snapshot, reject newer unsupported schemas without modification, and report success only after validation and durable write.
+- Provide versioned save export and validated import as Must scope, with a plain warning that exported files contain private play data.
+- Use separate deterministic random streams for dungeon generation, combat, and expedition repopulation; persist committed results or stream state before presentation.
+- Keep the active session on its current application/rules version until a safe save point; notify about updates and activate only after reload.
+
+### 9.2 Responsive and accessibility baseline
+
+- Support the current and previous two major versions of Chrome, Edge, Firefox, and Safari at 360, 390, 768, 1024, 1280, and 1440 CSS pixels; phone-browser support is Must, while native mobile packaging is not required.
+- Target WCAG 2.2 Level AA for applicable content and controls; document and approve any exception.
+- Test keyboard-only use in every supported browser; NVDA with Firefox and Chrome on Windows; VoiceOver with Safari on macOS and iOS; and TalkBack with Chrome on Android.
+- Provide scalable text, sufficient contrast, non-colour-only indicators, reduced motion, instant results, touch-safe targets, managed focus, and no hover-, sound-, or animation-only required information.
+- Provide a textual map containing current segment, floor, occupants, hazards, dropped items or corpses, every connection and door state, and a navigable ordered route to the entrance; every visual map action has an equivalent keyboard and textual path.
+- Use a 2D monochrome ink-and-notebook presentation with a restrained warm torch accent, flexible diagram map, simple illustrated cards or silhouettes, and optional skippable animation.
+
+### 9.3 Content and licensing
+
+- Release in English only. Localisation remains deferred, though user-facing strings should be externalised where practical.
+- Default to original concise UI wording and paraphrased rule explanations. Exact source prose requires explicit written digital-reproduction permission.
+- Maintain asset-by-asset rights records; absence of explicit digital-use evidence requires replacement art. Use placeholders through the Palace prototype and approve final art scope and capped budget only after a go decision.
+- Put approved author/publisher credit, source-edition reference, adaptation-rights statement, asset licences, and third-party notices in a main-menu About/Credits view and repository/release notices.
+- The MVP is free to use and contains no monetisation mechanism.
+
+### 9.4 Event history, privacy, and diagnostics
+
+- Persist every random result and state-changing action needed to explain adventurer, dungeon, encounter, inventory, torch, town, death, recovery, and completion outcomes; omit cosmetic-only animation and repeated navigation.
+- Keep complete structured history for active and incomplete dungeons. After completion, retain a permanent summary plus the final 500 mechanically relevant entries; display the latest 200 by default and allow older retained entries to load.
+- Production diagnostics may include event IDs, rules/content versions, error codes, and non-sensitive technical context, but not adventurer names, private notes, full event text, save contents, Graveyard details, or exported files.
+- Monitor availability, deployment status, asset errors, and aggregate infrastructure health only. User telemetry requires a separate decision and privacy approval.
+
+### 9.5 Quality and operations baseline
+
+- Use a target of six generated non-stair segments and a hard maximum of ten per floor. Increase downward-stair probability by one sixth after the target; force the next valid connection to stairs at the maximum.
+- Run at least 100,000 deterministic seeds per dungeon type; require zero non-terminating dungeons and zero unreachable boss rooms with reproducible failure details.
+- The Palace prototype requires all Must scenarios, zero save-state corruption in the fault matrix, at least 80% unaided core-flow completion, and at least 70% acceptable-or-better ratings for combat pacing, map clarity, and overall play.
+- Host on a CDN-backed static platform; deploy through protected GitHub Actions from versioned tags; keep immutable artifacts and the previous production release; support one-action rollback.
+- Assign named Product and Technical/Operations owners before release. Treat critical data-loss and security fixes as blockers, review dependencies and browser compatibility at least quarterly, and promise no fixed feature cadence.
+- Collect feedback through voluntary GitHub issues or a clearly linked form that attaches no save data automatically; diagnostic packages require user review before attachment.
+"""
+          text = replace_section(text, "## 9. Cross-Cutting Scope", "## 10. Explicit MVP Exclusions", cross_cutting, "MVP cross-cutting scope")
+
+          text = text.replace("| Prototype gate | One complete dungeon validates the core loop before full content production. | Termination, map readability, torch pressure, combat, saving, death/recovery, town return, and repeat play meet the approved prototype criteria. |", "| Prototype gate | The Palace dungeon validates the core loop before full content production. | All Must scenarios pass; at least 100,000 Palace seeds and the persistence fault matrix show zero required failures; at least 80% complete unaided; and at least 70% rate pacing, map clarity, and overall play acceptable or better. |", 1)
+          text = text.replace("| Dungeon-generation gate | Every tested dungeon can reach a final room and terminate. | Zero non-terminating or unreachable-boss cases in the agreed large-seed simulation. |", "| Dungeon-generation gate | Every tested dungeon follows the approved six/ten floor limits and reaches a final room. | At least 100,000 deterministic seeds per dungeon type produce zero non-terminating or unreachable-boss cases. |", 1)
+          text = text.replace("| Persistence gate | Required user data survives ordinary and fault scenarios. | All Must save/reload, interrupted-write, validation, and recovery scenarios pass. |", "| Persistence gate | Required user data survives ordinary, migration, import/export, and fault scenarios across three named slots. | All Must IndexedDB, last-valid snapshot, sequential migration, export, validated import, interrupted-write, validation, and recovery scenarios pass. |", 1)
+          text = text.replace("| Responsive gate | The complete journey works across supported viewports. | Every Must browser/viewport combination completes the core flow without clipped or inaccessible required controls. |", "| Responsive gate | The complete journey works across the approved browser/version and viewport matrix. | Current and previous two Chrome, Edge, Firefox, and Safari versions complete the flow at 360, 390, 768, 1024, 1280, and 1440 CSS pixels. |", 1)
+          text = text.replace("| Accessibility gate | Agreed accessibility baseline passes. | All Must keyboard, label, focus, contrast, reduced-motion, non-colour, and textual-map requirements pass. |", "| Accessibility gate | WCAG 2.2 AA and the approved assistive-technology baseline pass. | All Must keyboard, NVDA, VoiceOver, TalkBack, label, focus, contrast, reduced-motion, non-colour, and textual-map requirements pass or have an explicitly approved exception. |", 1)
+          text = text.replace("| Operational gate | Web hosting, deployment, offline behaviour, and rollback are ready. | Deployment and rollback tests pass and ownership is assigned. |", "| Operational gate | CDN-backed PWA hosting, protected tag deployment, offline behaviour, monitoring, maintenance, and rollback are ready. | Immutable release deployment and one-action rollback tests pass, previous production artifact is retained, and named Product and Technical/Operations owners are assigned. |", 1)
+
+          text = text.replace("| MVP-SM-003 | Dungeon termination | Zero non-terminating or unreachable-boss dungeons in the agreed large-seed test set. | Automated simulation report |", "| MVP-SM-003 | Dungeon termination | Zero non-terminating or unreachable-boss dungeons across at least 100,000 deterministic seeds per dungeon type using the approved six/ten limits. | Automated simulation report |", 1)
+          text = text.replace("| MVP-SM-004 | Save integrity | 100% of Must normal, interrupted, validation, and recovery scenarios preserve or safely recover required state. | Persistence test matrix |", "| MVP-SM-004 | Save integrity | 100% of Must three-slot, last-valid snapshot, migration, export/import, normal, interrupted, validation, and recovery scenarios preserve or safely recover required state. | Persistence test matrix |", 1)
+          text = text.replace("| MVP-SM-006 | Responsive support | All Must browser and viewport combinations complete the core flow without inaccessible required controls. | Responsive matrix |", "| MVP-SM-006 | Responsive support | Current and previous two Chrome, Edge, Firefox, and Safari versions pass at 360, 390, 768, 1024, 1280, and 1440 CSS pixels. | Responsive matrix |", 1)
+          text = text.replace("| MVP-SM-007 | Accessibility | All Must baseline checks pass through agreed automated and manual evidence. | Accessibility audit |", "| MVP-SM-007 | Accessibility | WCAG 2.2 AA and the approved keyboard, NVDA, VoiceOver, TalkBack, contrast, reduced-motion, and textual-map checks pass. | Accessibility audit |", 1)
+          text = text.replace("| MVP-SM-011 | Prototype validation | One-dungeon prototype passes its go/no-go criteria before remaining dungeon production. | Prototype review and playtest record |", "| MVP-SM-011 | Prototype validation | Palace passes all Must scenarios, zero-failure seed/fault matrices, at least 80% unaided completion, and at least 70% acceptable-or-better ratings before remaining dungeon production. | Prototype review and playtest record |", 1)
+
+          text = text.replace("- Offline-first local persistence is viable within selected supported browsers.", "- The approved PWA, service-worker, IndexedDB, three-slot, migration, export/import, and deterministic-stream baseline is technically viable within the supported browser matrix.", 1)
+          text = text.replace("- Original or licensed replacement assets can be produced where existing artwork rights are unavailable.", "- Placeholder assets are sufficient through the Palace prototype; original or licensed replacement assets can be produced after the prototype passes and asset-by-asset rights review is complete.", 1)
+          text = text.replace("- Hosting and maintenance costs for a free web application are acceptable to the project owner.", "- CDN-backed static hosting, protected GitHub Actions deployment, immutable artifacts, rollback retention, and quarterly maintenance are acceptable to the project owner.", 1)
+          text = text.replace("- Local-first save limitations can be communicated clearly enough for users to make informed backup decisions.", "- IndexedDB risks, three-slot recovery, versioned export/import, and private-data warnings can be communicated clearly enough for informed backup decisions.", 1)
+
+          text = text.replace("| DEP-MVP-002 | Approved Digital Adaptation Decision Register | Available | All feature and rules boundaries |", "| DEP-MVP-002 | Approved Digital Adaptation Decision Registers v0.1 and v0.2 | Available | All feature, technical, UX, content, and operations boundaries |", 1)
+          text = text.replace("| DEP-MVP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Pending | Prototype deployment, persistence, and operational gate |", "| DEP-MVP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Direction approved in Decision Register v0.2; detailed architecture pending | Prototype deployment, persistence, and operational gate |", 1)
+          text = text.replace("| DEP-MVP-011 | Approved visual direction and asset-production plan | Pending | Release presentation and content gate |", "| DEP-MVP-011 | Approved visual direction and asset-production plan | Visual direction approved; asset plan and capped budget pending Palace go decision | Release presentation and content gate |", 1)
+          text = text.replace("| DEP-MVP-013 | Representative playtest participants and feedback process | Pending | Prototype, usability, and replayability evidence |", "| DEP-MVP-013 | Representative playtest participants and feedback process | Thresholds and voluntary feedback channel approved; participants pending | Prototype, usability, and replayability evidence |", 1)
+
+          mvp_resolved = """## 16. Approved Decisions Incorporated
+
+The approved [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md) resolves every former MVP open question and supplies additional controlling architecture, data, UX, content, and operations rulings.
+
+| Decision | Approved resolution |
+|---|---|
+| Prototype dungeon and gate | Use Palace. Require all Must scenarios, at least 100,000 terminating/reachable seeds, zero save corruption, at least 80% unaided completion, and at least 70% acceptable-or-better ratings before a written go decision. |
+| Browser and viewport matrix | Current and previous two major Chrome, Edge, Firefox, and Safari versions at 360, 390, 768, 1024, 1280, and 1440 CSS pixels; phone-browser support is Must. |
+| Offline architecture | Installable static PWA, service-worker-cached versioned shell/static content, IndexedDB state, no backend dependency for core play, and safe update activation after a save point and reload. |
+| Save model | Three named slots with active state, last-valid snapshot, schema and rules/content versions, timestamp, explicit sequential migration, versioned export, and validated import. |
+| Randomness | Separate deterministic streams for dungeon generation, combat, and expedition repopulation; committed outcomes cannot be rerolled by reload. |
+| Dungeon termination | Target six non-stair segments and hard maximum ten per floor, increasing stair probability after the target and forcing stairs at the maximum; test 100,000 seeds per dungeon type. |
+| Event history and diagnostics | Complete active/incomplete history; completion summary plus final 500 entries; latest 200 shown by default; diagnostics exclude private names, notes, event text, saves, Graveyard details, and exports. |
+| Accessibility and textual map | WCAG 2.2 AA; approved keyboard, NVDA, VoiceOver, and TalkBack matrix; complete visual/textual map action equivalence. |
+| Visual and art direction | 2D monochrome ink-and-notebook presentation with warm torch accent; placeholders through Palace; final replacement-art plan and budget after prototype success and rights review. |
+| Content and language | Original concise UI wording and paraphrase by default; exact prose and source artwork need explicit digital-use permission; About/Credits notices are required; MVP is English-only. |
+| Hosting and operations | CDN-backed static hosting, protected tagged GitHub Actions deployment, immutable artifacts, retained prior release, one-action rollback, privacy-safe monitoring, named owners, quarterly maintenance review, and voluntary feedback channels. |
+"""
+          text = replace_section(text, "## 16. Open Questions", "## 17. Approval", mvp_resolved, "MVP resolved questions")
+          p.write_text(text, encoding="utf-8")
+          PY
+
+          rm .github/workflows/apply-decision-register-v0.2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/product/digital-adaptation-decision-register.md \
+                  docs/product/digital-adaptation-decision-register-v0.2.md \
+                  docs/product/business-requirements-v0.1.md \
+                  docs/product/mvp-scope-v0.1.md \
+                  .github/workflows/apply-decision-register-v0.2.yml
+          git commit -m "docs: apply approved decision register v0.2"
+          git push origin HEAD:docs/apply-decision-register-v0.2
