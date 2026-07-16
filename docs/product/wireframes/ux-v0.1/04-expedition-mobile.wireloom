@@ -1,0 +1,40 @@
+window "Palace Expedition — Mobile":
+  navbar:
+    leading:
+      backbutton "Town"
+    center:
+      text "Palace F1" bold
+    trailing:
+      button "" icon="gear"
+  resourcebar:
+    resource name="HP" value="18/24"
+    resource name="TORCH" value="7"
+    resource name="COIN" value="3"
+  segmented:
+    segment "Map" selected
+    segment "Text route"
+  panel id="mobile-map":
+    grid cols=4 rows=4:
+      cell "E" row=3 col=1 state=maxed
+      cell "3" row=3 col=2 state=maxed
+      cell "5" row=2 col=2 state=maxed
+      cell "6" row=2 col=3 state=maxed
+      cell "7" row=2 col=4 state=active accent=approval
+      cell "?" row=1 col=4 state=locked
+    text "Room 7 — current position" bold
+    text "East: unresolved door" muted
+  section "Actions" badge="No monsters":
+    button "Open east door" primary id="mobile-primary-action"
+    button "Search for secret passage"
+    button "More segment details"
+  section "Latest result":
+    status "Saved" kind=success
+    text "Entered Room 7 — empty room" muted
+  tabbar:
+    tabitem "Explore" icon="planet" selected
+    tabitem "Adventurer" icon="leader"
+    tabitem "Inventory" icon="ship" badge="7/10"
+    tabitem "History" icon="policy"
+
+annotation "The map is compact, but all legal actions remain adjacent." target="mobile-map" position=right
+annotation "The primary action remains reachable without hover." target="mobile-primary-action" position=bottom
