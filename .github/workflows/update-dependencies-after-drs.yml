@@ -1,0 +1,51 @@
+name: Update dependencies after DRS approval
+
+on:
+  push:
+    branches:
+      - docs/update-dependencies-after-drs
+
+permissions:
+  contents: write
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/update-dependencies-after-drs
+          fetch-depth: 0
+
+      - name: Update dependency sections only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              "docs/product/business-requirements-v0.1.md": (
+                  "| DEP-002 | Versioned Digital Rules Specification | Product / rules | Mechanical prototype | Required next |",
+                  "| DEP-002 | [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md) | Product / rules | Mechanical prototype and all mechanical downstream specifications | Available; approved baseline |",
+              ),
+              "docs/product/mvp-scope-v0.1.md": (
+                  "| DEP-MVP-003 | Versioned Digital Rules Specification | Required next | Prototype and all mechanical Must features |",
+                  "| DEP-MVP-003 | [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md) | Available; approved baseline | Prototype and all mechanical Must features |",
+              ),
+          }
+
+          for filename, (old, new) in replacements.items():
+              path = Path(filename)
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"Expected exactly one dependency row in {filename}, found {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+          rm .github/workflows/update-dependencies-after-drs.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/product/business-requirements-v0.1.md docs/product/mvp-scope-v0.1.md .github/workflows/update-dependencies-after-drs.yml
+          git commit -m "docs: update dependencies after DRS approval"
+          git push origin HEAD:docs/update-dependencies-after-drs
