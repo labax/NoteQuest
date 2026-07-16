@@ -1,0 +1,63 @@
+name: Update BRD and MVP dependency tables
+
+on:
+  push:
+    branches:
+      - docs/update-brd-mvp-dependencies
+    paths:
+      - .github/workflows/update-brd-mvp-dependencies.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: docs/update-brd-mvp-dependencies
+          fetch-depth: 0
+
+      - name: Update dependency rows
+        shell: python
+        run: |
+          from pathlib import Path
+
+          updates = {
+              Path("docs/product/business-requirements-v0.1.md"): [
+                  (
+                      "| DEP-004 | Product Requirements Document and MVP Scope | Product | Detailed planning and release governance | MVP Scope available; PRD pending |",
+                      "| DEP-004 | [Product Requirements Document v0.1](product-requirements-v0.1.md) and [MVP Scope v0.1](mvp-scope-v0.1.md) | Product | Detailed planning and release governance | Available; approved baselines |",
+                  ),
+                  (
+                      "| DEP-005 | Functional Requirements Specification | Product / technical | Production implementation | Pending |",
+                      "| DEP-005 | [Functional Requirements Document v0.1](functional-requirements-v0.1.md) | Product / technical | Production implementation | Available; approved baseline |",
+                  ),
+              ],
+              Path("docs/product/mvp-scope-v0.1.md"): [
+                  (
+                      "| DEP-MVP-004 | Product / Functional Requirements Specification | Pending | Implementation breakdown and traceability |",
+                      "| DEP-MVP-004 | [Product Requirements Document v0.1](product-requirements-v0.1.md) and [Functional Requirements Document v0.1](functional-requirements-v0.1.md) | Available; approved baselines | Implementation breakdown and traceability |",
+                  ),
+              ],
+          }
+
+          for path, replacements in updates.items():
+              text = path.read_text(encoding="utf-8")
+              for old, new in replacements:
+                  count = text.count(old)
+                  if count != 1:
+                      raise RuntimeError(f"Expected one occurrence in {path}, found {count}: {old}")
+                  text = text.replace(old, new)
+              path.write_text(text, encoding="utf-8")
+
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/update-brd-mvp-dependencies.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/product/business-requirements-v0.1.md docs/product/mvp-scope-v0.1.md .github/workflows/update-brd-mvp-dependencies.yml
+          git commit -m "Update BRD and MVP dependency tables [skip ci]"
+          git push origin HEAD:docs/update-brd-mvp-dependencies
