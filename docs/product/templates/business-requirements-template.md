@@ -193,7 +193,7 @@ The product is a digital adaptation of NoteQuest. It should preserve the source 
 | RISK-001 | {{RISK}} | Low / Medium / High | Low / Medium / High / Critical | {{MITIGATION}} | {{OWNER}} |
 | RISK-002 | {{RISK}} | {{PROBABILITY}} | {{IMPACT}} | {{MITIGATION}} | {{OWNER}} |
 
-Include product-specific risks such as rules-calculation errors, data loss, scope creep, poor solo usability, over-automation, and unapproved content where applicable.
+Include product-specific risks such as rules-calculation errors, save corruption, non-terminating dungeon generation, scope creep, poor solo usability, rules drift, and unapproved content where applicable.
 
 ## 15. Release Approach
 

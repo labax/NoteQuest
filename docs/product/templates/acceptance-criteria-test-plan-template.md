@@ -71,7 +71,7 @@
 | Rules calculation errors | Incorrect outcomes damage player trust. | Deterministic unit and expected-result tests. |
 | Data loss or corruption | Adventurer, dungeon, inventory, and Graveyard data may be irreplaceable. | Save/reload, migration, import, export, and recovery tests. |
 | Poor active-play UX | Slow or confusing flows defeat the product's purpose. | End-to-end flows and playtesting. |
-| Over-automation | Forced story outcomes undermine source-faithful play. | Acceptance tests preserve user interpretation. |
+| Rules drift | Invented or incorrectly automated rules undermine source-faithful play. | Acceptance tests compare behavior with the approved digital rules specification. |
 | Licensing / content errors | Unapproved content can block release. | Inventory, provenance, notice, and build-gate tests. |
 | {{RISK}} | {{RATIONALE}} | {{RESPONSE}} |
 
@@ -135,7 +135,7 @@
 Must cover where applicable:
 
 - Dice ranges and deterministic injection.
-- Result classifications, ties, matches, caps, and modifier order.
+- d6 and 2d6 table mapping, natural die triggers, modifiers, and boundary handling.
 - HP, armour, torch, damage, and dungeon-depth calculations.
 - Dungeon-table lookup and invalid table data.
 - Domain validation and derived fields.
@@ -145,7 +145,7 @@ Must cover where applicable:
 ### 8.2 Component tests
 
 - Forms and validation.
-- Track controls and boundaries.
+- HP, armour, torch, coin, spell-use, and inventory controls and boundaries.
 - Roll result and confirmation components.
 - Empty, loading, success, error, and recovery states.
 - Save status and destructive confirmations.
@@ -191,11 +191,11 @@ Must cover where applicable:
 
 | Field | Value |
 |---|---|
-| Dungeon | {{DUNGEON_NAME}} |
-| Adventurer | {{ADVENTURER_NAME}} |
+| Dungeon type / floor | {{VALUES}} |
+| Adventurer race / class | {{VALUES}} |
 | HP / armour / torches / coins | {{VALUES}} |
-| Dungeon depth / current HP | {{VALUES}} |
-| Doors / rooms / monsters | {{VALUES}} |
+| Weapon / spells / inventory | {{VALUES}} |
+| Rooms / doors / monsters | {{VALUES}} |
 | Event log / Graveyard | {{VALUES}} |
 
 ### 10.2 Boundary fixtures
@@ -260,7 +260,7 @@ A feature or release passes when:
 |---|---|---:|---|
 | AC-GEN-001 | {{CRITERION}} | Must | {{METHOD}} |
 | AC-GEN-002 | Required data persists across normal close/reopen. | Must | E2E / integration |
-| AC-GEN-003 | Mechanical results are transparent and user interpretation is preserved. | Must | Acceptance review |
+| AC-GEN-003 | Mechanical results and source-rule decisions are transparent and inspectable. | Must | Acceptance review |
 | AC-GEN-004 | Core flows work on supported desktop and mobile widths. | Must / Should | Responsive matrix |
 | AC-GEN-005 | No blocked or unapproved bundled content is included. | Must | Manifest / review |
 
@@ -321,14 +321,14 @@ Include:
 
 Minimum cases where applicable:
 
-- Every result classification.
-- Ties and matches.
-- Minimum and maximum dice.
-- Modifier order and score caps.
-- Negative torch supply and burn behavior.
-- Partial progress and filled-box-only score.
-- Random Table first/last ranges and invalid gaps/overlaps.
-- Manual input and override.
+- Minimum and maximum d6 results and every 2d6 table value.
+- Door outcomes for trap, locked, and unlocked results.
+- Natural 1 and natural 6 monster-trait triggers.
+- Weapon and spell modifiers plus armour damage allocation.
+- Torch capacity, expenditure, alternative light, and zero-light death.
+- Dungeon-table first/last ranges and invalid gaps or overlaps.
+- Inventory, equipment-slot, and spell-use limits.
+- Manual input, house-rule override, and no-change cancellation.
 
 ## 18. Persistence and Data Safety Matrix
 
@@ -384,8 +384,8 @@ Minimum cases where applicable:
 - [ ] App opens with empty and existing data.
 - [ ] Primary record can be created and edited.
 - [ ] Core roll / rules action succeeds.
-- [ ] Progress or primary state can be updated.
-- [ ] Event Log / history entry can be created where in scope.
+- [ ] Dungeon map and adventurer state can be updated.
+- [ ] Event-log or Graveyard entry can be created where in scope.
 - [ ] Save status is accurate.
 - [ ] Reload restores state.
 - [ ] Destructive action can be canceled safely.
@@ -432,7 +432,7 @@ Minimum cases where applicable:
 |---|---|---|---|
 | Blocker | Prevents testing or causes unavoidable severe loss. | App cannot load; all saves destroyed. | Must fix. |
 | Critical | High-impact rules, security, privacy, or data-loss defect. | Incorrect core calculation; import overwrites valid data. | Must fix. |
-| High | Major flow fails with limited workaround. | Cannot complete a required dungeon objective or session action. | Fix or explicit product waiver. |
+| High | Major flow fails with limited workaround. | Cannot enter a dungeon, resolve combat, retreat to town, or recover dropped equipment. | Fix or explicit product waiver. |
 | Medium | Important defect with reasonable workaround. | Incorrect focus return; confusing non-critical validation. | Prioritize. |
 | Low | Cosmetic or minor issue. | Spacing or copy inconsistency. | May defer. |
 

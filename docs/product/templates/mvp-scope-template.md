@@ -40,9 +40,9 @@ The MVP succeeds when {{PRIMARY_USER}} can {{END_TO_END_OUTCOME}} without {{UNAC
 |---|---|---|
 | MP-001 | Minimum but complete | Deliver an end-to-end usable loop rather than isolated controls. |
 | MP-002 | Solo-first | Optimize the first release for the primary solo workflow unless explicitly changed. |
-| MP-003 | Faithful adaptation | Support play without replacing the rulebook or player interpretation. |
+| MP-003 | Faithful adaptation | Implement the approved core rules and gameplay loop without adding unsupported mechanics or content. |
 | MP-004 | Persistent and safe | Required user-created data survives normal save and resume behavior. |
-| MP-005 | Extensible foundation | Avoid choices that block planned adventure, content, or co-op work. |
+| MP-005 | Extensible foundation | Avoid choices that block planned dungeon packs, platform support, accessibility work, or approved expansion content. |
 | MP-006 | Licensing-conscious | Only approved bundled content is included. |
 | MP-007 | {{PRINCIPLE}} | {{MEANING}} |
 
@@ -155,7 +155,7 @@ The following are not required for MVP acceptance:
 - AI-authored narrative or automated GM behavior unless explicitly in scope.
 - Real-time multiplayer unless explicitly in scope.
 - Monetization before content and licensing approval.
-- Unapproved official prose, random table data, assets, art, icons, screenshots, layout, or trade dress.
+- Unapproved NoteQuest rules text, tables, item or monster descriptions, art, icons, screenshots, copied layout, or trade dress.
 
 ## 11. Release Gates
 

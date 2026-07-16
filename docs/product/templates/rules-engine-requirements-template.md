@@ -41,7 +41,7 @@
 
 {{DEFINE_THE_DETERMINISTIC_MECHANICS_AND_RULE_ADJACENT_BEHAVIOR_COVERED_BY_THIS_DOCUMENT}}
 
-The rules engine calculates mechanical results and validates state. It does not replace player interpretation or automatically author narrative consequences unless explicitly approved.
+The rules engine calculates NoteQuest outcomes, validates game state, and records the inputs used. It must not invent rules, tables, or consequences outside the approved digital rules specification.
 
 ## 2. Source Basis
 
@@ -63,21 +63,22 @@ Record the exact source and version for every implemented rule. Do not rely on u
 
 | Area | Rules behavior |
 |---|---|
-| Dice | {{DICE_BEHAVIOR}} |
-| Action rolls | {{ACTION_ROLL_BEHAVIOR}} |
-| Torch Supply | {{TORCH_BEHAVIOR}} |
-| Progress | {{PROGRESS_BEHAVIOR}} |
-| Random Tables | {{TABLE_BEHAVIOR}} |
-| Character state | {{STATE_BEHAVIOR}} |
-| History | {{HISTORY_BEHAVIOR}} |
+| Dice and random generation | d6 and 2d6 rolls, seeded randomness, manual entry, and natural-result preservation |
+| Adventurer creation | Race and class rolls, HP, abilities, spells, starting weapon, coins, and torches |
+| Dungeon generation | Dungeon names, segments, room content, monsters, bosses, floors, and final-room rules |
+| Doors, traps, and secret passages | Door states, trap resolution, keys, torch costs, breakage, and alerting |
+| Light, torches, and hands | Capacity, action costs, alternative light, darkness death, and hand requirements |
+| Combat and monster traits | Initiative, damage, armour allocation, natural die triggers, escape, death, and loot |
+| Inventory, equipment, and spells | Capacity, slots, durability, spell uses, keys, consumables, and dropped items |
+| Town and persistence | Retreat, rest, repair, buying, selling, repopulation, corpse recovery, saves, and the Graveyard |
 
 ### 4.2 Out of scope
 
 - {{OUT_OF_SCOPE_RULE_AUTOMATION_1}}
 - {{OUT_OF_SCOPE_RULE_AUTOMATION_2}}
-- AI interpretation or mandatory narrative outcomes.
-- Full asset automation unless explicitly approved.
-- Unapproved official rules prose in the product or source comments.
+- Unsupported narrative generation or mechanics not present in the approved digital rules specification.
+- Expanded World rules unless separately approved and specified.
+- Unapproved official rules prose, tables, descriptions, artwork, or trade dress in the product or source comments.
 
 ## 5. Rules Engine Principles
 
@@ -86,7 +87,7 @@ Record the exact source and version for every implemented rule. Do not rely on u
 | REP-001 | Deterministic calculations | Identical inputs produce identical outputs. |
 | REP-002 | Transparent results | Inputs, modifiers, caps, cancellations, and classifications are inspectable. |
 | REP-003 | User-confirmed consequences | Major state changes are not silently applied. |
-| REP-004 | Source-faithful | The engine provides mechanical outcomes, not compulsory story prose. |
+| REP-004 | Source-faithful | The engine implements approved NoteQuest rules without inventing additional mechanics or content. |
 | REP-005 | Manual override | Users can correct state for mistakes, variants, and physical dice where safe. |
 | REP-006 | Immutable completed rolls | Saved roll results are not silently recalculated later. |
 | REP-007 | Testability | Pure rules logic can be tested without UI dependencies. |
@@ -106,13 +107,14 @@ Record the exact source and version for every implemented rule. Do not rely on u
 
 | Module | Requirement IDs | Priority | Owner |
 |---|---|---:|---|
-| Dice service | RER-DICE-001 to RER-DICE-{{LAST}} | Must / Should | {{OWNER}} |
-| Action roll resolution | RER-ACT-001 to RER-ACT-{{LAST}} | Must | {{OWNER}} |
-| Torch Supply | RER-MOM-001 to RER-MOM-{{LAST}} | Must / Should | {{OWNER}} |
-| Dungeon progresss | RER-TRK-001 to RER-TRK-{{LAST}} | Must / Should | {{OWNER}} |
-| Progress rolls | RER-PROG-001 to RER-PROG-{{LAST}} | Must | {{OWNER}} |
-| Random Tables | RER-ORC-001 to RER-ORC-{{LAST}} | Must / Should | {{OWNER}} |
-| Character state | RER-CHAR-001 to RER-CHAR-{{LAST}} | Must / Should | {{OWNER}} |
+| Dice and random generation | RER-DICE-001 to RER-DICE-{{LAST}} | Must / Should | {{OWNER}} |
+| Adventurer creation | RER-ADV-001 to RER-ADV-{{LAST}} | Must | {{OWNER}} |
+| Dungeon generation | RER-DUN-001 to RER-DUN-{{LAST}} | Must | {{OWNER}} |
+| Doors, traps, and secret passages | RER-DOOR-001 to RER-DOOR-{{LAST}} | Must | {{OWNER}} |
+| Light, torches, and hands | RER-LIGHT-001 to RER-LIGHT-{{LAST}} | Must | {{OWNER}} |
+| Combat and monster traits | RER-COMBAT-001 to RER-COMBAT-{{LAST}} | Must | {{OWNER}} |
+| Inventory, equipment, and spells | RER-ITEM-001 to RER-ITEM-{{LAST}} | Must / Should | {{OWNER}} |
+| Town and persistence | RER-PERSIST-001 to RER-PERSIST-{{LAST}} | Must / Should | {{OWNER}} |
 | History and validation | RER-HIST-001 / RER-VAL-001 onward | Must / Should | {{OWNER}} |
 
 ## 8. Detailed Requirements
@@ -131,68 +133,86 @@ Repeat the following structure for each module.
 
 ### Suggested module details
 
-#### Dice service
+#### Dice and random generation
 
 Define:
 
-- Supported die types and ranges.
-- Percentile representation, including how 00 is handled.
+- Supported d6 and 2d6 procedures.
 - Generated versus manual rolls.
-- Deterministic dice injection for tests.
-- Reroll behavior and result stability.
+- Seeded or injected randomness for reproducible tests and saves.
+- Preservation of natural die values before modifiers.
+- Reroll rules, if any, and result stability after save/reload.
 
-#### Action roll resolution
-
-Define:
-
-- Inputs and action-score formula.
-- Caps and cancellation order.
-- Strict comparison behavior and tie handling.
-- Successful result, mixed result, and miss classification.
-- Match detection.
-- Pre-burn and post-burn result preservation.
-
-#### Torch Supply
+#### Adventurer creation
 
 Define:
 
-- Minimum, maximum, reset, and current values.
-- Derived values and override behavior.
-- Negative torch supply cancellation.
-- Burn eligibility, preview, confirmation, and reset.
-- Behavior at boundaries.
+- 2d6 race and class lookup.
+- Maximum HP as race HP plus class HP.
+- Starting weapon, abilities, spell results, ten torches, and zero coins.
+- Duplicate spell results as separate uses.
+- Validation for arms, hands, equipment, and light sources.
 
-#### Dungeon progresss and progress rolls
-
-Define:
-
-- Box and tick representation.
-- Rank-based progress helper values.
-- Filled-box-only dungeon depth.
-- Progress-roll comparison and tie behavior.
-- Torch Supply exclusion.
-- Track completion, archive, and correction behavior.
-
-#### Random Tables
+#### Dungeon generation
 
 Define:
 
-- d100 generation.
-- Yes/no odds thresholds.
-- Inclusive table range lookup.
-- Gaps, overlaps, invalid entries, and missing content.
-- Match or twist behavior where applicable.
-- Provenance for bundled table data.
+- Three-part dungeon-name generation and dungeon-type selection.
+- Incremental generation when a door is opened.
+- Segment-table column selection based on staircase, corridor, or room origin.
+- Room-content and monster generation.
+- Floor transitions, guaranteed termination, and final-room generation.
+- Boss generation and boss-treasure resolution.
 
-#### Character and state rules
+#### Doors, traps, and secret passages
 
 Define:
 
-- Track boundaries.
-- Derived values.
-- Debility or condition effects.
-- Manual overrides.
-- Shared versus character-owned state.
+- Door result 1 as trap, 2–3 as locked, and 4–6 as unlocked.
+- Unlocking by torch, key, class ability, or approved item effect.
+- Broken-door persistence and monster-alert propagation.
+- Trap timing, damage, limb loss, spawned monsters, and cancelled traps.
+- One-time secret-passage searches and generated results.
+
+#### Light, torches, and hands
+
+Define:
+
+- Starting and maximum torch count of ten.
+- Torch costs for dungeon entry and qualifying exploration actions.
+- Alternative light from spells, lamps, and approved items.
+- Darkness-death timing when no light source remains.
+- One-handed and two-handed equipment constraints after limb loss.
+
+#### Combat and monster traits
+
+Define:
+
+- Initiative from quiet opening, broken doors, traps, or alert state.
+- Player damage rolls, target selection, and combined surviving-monster damage.
+- Armour-piece allocation, durability, destruction, and spillover.
+- Natural 1 and natural 6 trait triggers and modifier order.
+- Spell and consumable actions, teleport escape, death, and loot.
+
+#### Inventory, equipment, and spells
+
+Define:
+
+- Ten-item backpack capacity and separate ten-torch capacity.
+- Equipped weapon, armour-piece uniqueness, and hand requirements.
+- Item pickup, discard, room persistence, and corpse recovery.
+- Spell-use exhaustion and restoration in town.
+- Normal keys, master keys, consumables, and magical modifiers.
+
+#### Town and persistence
+
+Define:
+
+- Safe retreat-path validation.
+- Rest, armour repair, torch purchase, and item-sale costs.
+- Dungeon state retained across expeditions and replacement adventurers.
+- Monster healing and room repopulation on a later expedition.
+- Death records, dropped equipment, darkness deaths, and the Graveyard.
 
 ## 9. Calculation Reference
 
@@ -253,15 +273,16 @@ Rules:
 | Field | Required | Notes |
 |---|---:|---|
 | ID | Yes | Stable identifier. |
-| Roll type | Yes | Action, progress, random table, or custom. |
-| Inputs | Yes | Dice, stat, adds, dungeon depth, odds, or table. |
-| Initial result | Yes where applicable | Result before optional mutation such as torch expenditure. |
-| Final result | Yes | Result accepted by the user. |
-| Match state | Yes where applicable | Preserve exact matched value. |
+| Result type | Yes | Race, class, door, segment, room content, monster, combat, reward, trap, or custom. |
+| Inputs | Yes | Natural die values, source table, modifiers, relevant item or ability, and current state. |
+| Initial result | Yes | Unmodified dice or source-table result. |
+| Final result | Yes | Resolved outcome after approved modifiers and user choices. |
+| Natural die values | Yes where applicable | Preserve natural 1 and 6 results used by monster traits and item effects. |
+| Context | Should | Save slot, adventurer, dungeon, floor, segment, encounter, and expedition. |
 | Rule version | Should | Supports future migrations and interpretation. |
-| Source | Should | Generated or manual dice. |
-| Timestamp / session | Should | Links the record to play history. |
-| User note | Could | Interpretation remains user-authored. |
+| Source | Should | Generated, manual, seeded, or imported result. |
+| Timestamp | Should | Links the record to the event log and save history. |
+| User note | Could | Optional player-created note. |
 
 ## 13. Deterministic Test Matrix
 
@@ -274,17 +295,16 @@ Rules:
 
 Minimum categories:
 
-- Minimum and maximum die results.
-- Every result classification.
-- Ties.
-- Matches.
-- Score caps.
-- Negative torch supply cancellation.
-- Torch expenditure eligibility and reset.
-- Partially filled progress boxes.
-- Random Table table first and last ranges.
-- Invalid manual input.
-- Manual override behavior.
+- Minimum and maximum d6 results and every 2d6 table value.
+- Race, class, spell, dungeon-name, door, segment, room, monster, boss, and reward lookups.
+- Door trap, locked, and unlocked boundaries.
+- Torch capacity, qualifying action costs, alternative light, and zero-light death.
+- Floor transitions, final-room generation, and dungeon-termination rules.
+- Weapon and spell modifiers, armour allocation, and monster natural 1 or 6 trait triggers.
+- Inventory, equipment-slot, spell-use, key, and hand constraints.
+- Monster healing, room repopulation, dropped items, and corpse recovery across expeditions.
+- First and last table ranges plus invalid gaps or overlaps.
+- Invalid manual input and explicit override behavior.
 
 ## 14. Traceability
 

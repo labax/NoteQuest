@@ -146,16 +146,15 @@ Repeat the following structure for every feature area.
 
 Use only the areas relevant to the release:
 
-- Character and adventure management.
-- Session lifecycle.
-- Move and dice roller.
-- Torch Supply and status tracking.
-- Dungeon progresss and dungeon objectives.
-- Random Table browsing and rolling.
-- Event Log and history.
-- Persistence, migration, import, and export.
-- Onboarding and navigation.
-- Settings and application reset.
+- Adventurer creation and management.
+- Dungeon creation, map generation, and exploration.
+- Door, trap, and secret-passage resolution.
+- Torch, light-source, and hand-use rules.
+- Combat and monster-trait resolution.
+- Inventory, equipment, armour, spells, and keys.
+- Town actions, retreat, and resupply.
+- Persistence, dungeon repopulation, corpse recovery, and the Graveyard.
+- Onboarding, navigation, accessibility, settings, and application reset.
 - Content provenance and licensing support.
 
 ## 10. Cross-Feature Behavior
@@ -210,7 +209,7 @@ Use only the areas relevant to the release:
 - {{EXCLUSION_2}}
 - {{EXCLUSION_3}}
 - Unapproved official rules prose or content.
-- Automatic narrative interpretation unless explicitly approved.
+- Unsupported rule automation or generated narrative content unless explicitly approved.
 
 ## 13. Traceability Matrix
 

@@ -97,8 +97,8 @@
 
 | ID | Principle | Product implication |
 |---|---|---|
-| PP-001 | Session-first | Common play actions remain close to the active session context. |
-| PP-002 | Source-faithful | The product calculates mechanics and records interpretation without forcing narrative outcomes. |
+| PP-001 | Expedition-first | Exploration, combat, inventory, and retreat actions remain close to the active dungeon context. |
+| PP-002 | Source-faithful | The product implements approved NoteQuest mechanics transparently without inventing unsupported rules or content. |
 | PP-003 | Transparent automation | Dice, modifiers, derived values, migrations, and state changes are visible or inspectable. |
 | PP-004 | Manual control | Users can correct mistakes and support house rules where safe. |
 | PP-005 | Data safety | Destructive operations are deliberate and recovery is considered. |

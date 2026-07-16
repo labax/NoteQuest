@@ -55,7 +55,7 @@ This document is not a final visual design system. It should provide enough stru
 
 ## 3. UX Context
 
-{{DESCRIBE_THE_SESSION_OR_TASK_CONTEXT_AND_THE_MAIN_QUESTIONS_THE_UI_MUST_HELP_THE_USER_ANSWER}}
+{{DESCRIBE_THE_EXPEDITION_OR_TASK_CONTEXT_AND_THE_MAIN_QUESTIONS_THE_UI_MUST_HELP_THE_USER_ANSWER}}
 
 Typical questions include:
 
@@ -84,13 +84,13 @@ Typical questions include:
 
 | ID | Principle | UX meaning |
 |---|---|---|
-| UX-P001 | Session-first | Active-play actions take priority over administrative navigation. |
+| UX-P001 | Expedition-first | Exploration, combat, inventory, retreat, and town actions take priority over administrative navigation. |
 | UX-P002 | Low interruption | Common actions use compact panels, drawers, or dialogs and return the user to context. |
-| UX-P003 | State nearby | Important character, adventure, dungeon objective, and save state is visible or one action away. |
-| UX-P004 | Interpretation preserved | Mechanical outcomes are clear without writing compulsory narrative consequences. |
+| UX-P003 | State nearby | Adventurer HP, armour, torches, equipment, current dungeon segment, monsters, and save state are visible or one action away. |
+| UX-P004 | Source-rule clarity | Mechanical outcomes show the dice, tables, modifiers, and state changes that produced them. |
 | UX-P005 | Manual control | Users can correct values and support variants where safe. |
 | UX-P006 | Progressive disclosure | Guidance is available without slowing experienced players. |
-| UX-P007 | Safe destructive actions | Delete, reset, import, overwrite, burn, and outcome actions are deliberate. |
+| UX-P007 | Safe destructive actions | Delete, reset, import, overwrite, item discard, door breaking, and last-torch actions are deliberate. |
 | UX-P008 | Provenance visible | Bundled, custom, and user-authored content are distinguishable. |
 | UX-P009 | Mobile viable | Core workflows remain usable on supported phone widths. |
 | UX-P010 | Accessible by default | Keyboard, focus, labels, contrast, and status announcements are designed in. |
@@ -183,13 +183,15 @@ flowchart TD
 Suggested flows:
 
 - First launch and onboarding.
-- Resume active adventure or session.
-- Create or edit a character.
-- Create, update, fulfill, or forsake a dungeon objective.
-- Action roll with optional torch expenditure.
-- Progress update and progress roll.
-- Random Table roll and save to event log.
-- Start, pause, complete, and review a session.
+- Create or select an adventurer.
+- Generate and enter a dungeon.
+- Open a door and resolve its lock or trap state.
+- Generate a segment, room content, and monsters.
+- Resolve combat, spells, armour damage, loot, and inventory choices.
+- Spend torches on exploration actions and respond to low-light warnings.
+- Retreat to town, rest, repair, sell, buy torches, and re-enter the dungeon.
+- Record death, create a replacement adventurer, and recover dropped equipment.
+- Defeat the boss, complete the dungeon, and review the Graveyard or event log.
 - Export, import preview, restore, and reset.
 
 ## 10. Screen and Wireframe Requirements
@@ -247,15 +249,16 @@ Repeat for every screen or major panel.
 
 Suggested components:
 
-- Status / resource control.
-- Dungeon progress.
-- Dice result card.
-- Torch expenditure confirmation.
-- Random Table result card.
-- Event Log editor.
-- Dungeon Objective card and milestone list.
+- Adventurer HP, armour, torch, coin, spell-use, and hand-status controls.
+- Procedural dungeon map and current-segment panel.
+- Door, trap, secret-passage, and chest action panel.
+- Dice and table-result card with source and modifiers.
+- Monster list, turn indicator, damage preview, and trait feedback.
+- Inventory, equipment, armour-piece, spell, and key controls.
+- Low-light and last-torch confirmation.
+- Town-action panel.
+- Event-log and Graveyard views.
 - Save-status banner.
-- Adventure / session selector.
 - Destructive confirmation dialog.
 - Import preview and validation report.
 
@@ -272,7 +275,7 @@ Requirements:
 - No required control is clipped or available only by hover.
 - Tables have a small-screen strategy: cards, horizontal scrolling, or reduced columns.
 - Dialogs fit the viewport and preserve access to close / confirm controls.
-- Long adventure names, event log text, and error messages wrap without breaking layout.
+- Long adventurer names, dungeon names, event-log text, and error messages wrap without breaking layout.
 - Touch targets meet the agreed accessibility baseline.
 
 ## 13. Accessibility Requirements
@@ -311,7 +314,7 @@ Requirements:
 - Show provenance labels where users select or browse bundled, custom, imported, or user-authored content.
 - Place attribution and unofficial-product notices in a discoverable About / Legal area.
 - Do not show blocked or unknown content in release builds.
-- Keep user-authored event log entries, dungeon objectives, and custom content clearly separate from bundled content.
+- Keep player-created notes, event-log entries, custom dungeon data, and save metadata clearly separate from bundled content.
 
 ## 16. Traceability
 
@@ -328,7 +331,7 @@ Requirements:
 - [ ] Keyboard, labels, focus, and non-color status requirements pass the agreed baseline.
 - [ ] Save and local-storage state is understandable.
 - [ ] Destructive actions are deliberate and cancel safely.
-- [ ] Mechanical results remain clear without forced narrative prose.
+- [ ] Mechanical results remain clear, traceable to their dice or tables, and free of unsupported outcomes.
 - [ ] No unapproved official art, icons, copied layout, screenshots, or trade dress is required.
 
 ## 18. Open Questions

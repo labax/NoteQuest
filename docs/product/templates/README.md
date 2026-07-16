@@ -1,8 +1,8 @@
 # Product document templates
 
-This folder contains reusable Markdown templates for planning NoteQuest Digital Adaptation releases and features.
+This folder contains reusable Markdown templates for planning NoteQuest application releases and features.
 
-The templates are intentionally implementation-neutral. Replace every `{{PLACEHOLDER}}`, remove guidance that does not apply, and preserve stable requirement IDs once a document has entered review.
+The templates are intentionally implementation-neutral. Replace every `{{PLACEHOLDER}}`, remove guidance that does not apply, and preserve stable requirement IDs once a document has entered review. Completed NoteQuest documentation belongs under `docs/`, the project’s documentation source of truth.
 
 ## Core templates
 
