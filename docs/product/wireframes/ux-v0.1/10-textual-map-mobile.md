@@ -1,0 +1,48 @@
+# Textual Map — Mobile
+
+Canonical source: [`10-textual-map-mobile.wireloom`](10-textual-map-mobile.wireloom)
+
+```wireloom
+window "Textual Map — Mobile":
+  navbar:
+    leading:
+      backbutton "Explore"
+    center:
+      text "Palace route" bold
+    trailing:
+      status "Saved" kind=success
+  segmented:
+    segment "Visual map"
+    segment "Text route" selected
+  section "Current position" badge="Room 7" id="current-route":
+    text "Room 7 — quiet ordinary room" bold
+    status "No living monsters" kind=success
+    kv "Floor" "1"
+    kv "Route to entrance" "Safe"
+  section "Connections":
+    list:
+      slot "West — Room 6" chevron state=maxed:
+        text "Open passage; discovered" muted
+      slot "East — Unknown segment" chevron state=available:
+        text "Locked door; trap already resolved" muted
+  section "Legal actions":
+    button "Open east door" primary id="text-action"
+    button "Move west to Room 6"
+    button "Search for secret passage"
+  section "Route to entrance":
+    tree:
+      node "Room 7 — current" selected:
+        node "Room 6":
+          node "Room 5":
+            node "Hall":
+              node "Entrance"
+    text "All connections and actions match the visual map." muted
+  tabbar:
+    tabitem "Explore" icon="planet" selected
+    tabitem "Adventurer" icon="leader"
+    tabitem "Inventory" icon="ship"
+    tabitem "History" icon="policy"
+
+annotation "Current position is announced as text and heading structure." target="current-route" position=right
+annotation "Equivalent actions do not require interpreting the visual grid." target="text-action" position=bottom
+```
