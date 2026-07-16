@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -65,9 +65,9 @@ Record the exact source and version for every implemented rule. Do not rely on u
 |---|---|
 | Dice | {{DICE_BEHAVIOR}} |
 | Action rolls | {{ACTION_ROLL_BEHAVIOR}} |
-| Momentum | {{MOMENTUM_BEHAVIOR}} |
+| Torch Supply | {{TORCH_BEHAVIOR}} |
 | Progress | {{PROGRESS_BEHAVIOR}} |
-| Oracles | {{ORACLE_BEHAVIOR}} |
+| Random Tables | {{TABLE_BEHAVIOR}} |
 | Character state | {{STATE_BEHAVIOR}} |
 | History | {{HISTORY_BEHAVIOR}} |
 
@@ -86,7 +86,7 @@ Record the exact source and version for every implemented rule. Do not rely on u
 | REP-001 | Deterministic calculations | Identical inputs produce identical outputs. |
 | REP-002 | Transparent results | Inputs, modifiers, caps, cancellations, and classifications are inspectable. |
 | REP-003 | User-confirmed consequences | Major state changes are not silently applied. |
-| REP-004 | Fiction-first | The engine provides mechanical outcomes, not compulsory story prose. |
+| REP-004 | Source-faithful | The engine provides mechanical outcomes, not compulsory story prose. |
 | REP-005 | Manual override | Users can correct state for mistakes, variants, and physical dice where safe. |
 | REP-006 | Immutable completed rolls | Saved roll results are not silently recalculated later. |
 | REP-007 | Testability | Pure rules logic can be tested without UI dependencies. |
@@ -108,10 +108,10 @@ Record the exact source and version for every implemented rule. Do not rely on u
 |---|---|---:|---|
 | Dice service | RER-DICE-001 to RER-DICE-{{LAST}} | Must / Should | {{OWNER}} |
 | Action roll resolution | RER-ACT-001 to RER-ACT-{{LAST}} | Must | {{OWNER}} |
-| Momentum | RER-MOM-001 to RER-MOM-{{LAST}} | Must / Should | {{OWNER}} |
-| Progress tracks | RER-TRK-001 to RER-TRK-{{LAST}} | Must / Should | {{OWNER}} |
+| Torch Supply | RER-MOM-001 to RER-MOM-{{LAST}} | Must / Should | {{OWNER}} |
+| Dungeon progresss | RER-TRK-001 to RER-TRK-{{LAST}} | Must / Should | {{OWNER}} |
 | Progress rolls | RER-PROG-001 to RER-PROG-{{LAST}} | Must | {{OWNER}} |
-| Oracles | RER-ORC-001 to RER-ORC-{{LAST}} | Must / Should | {{OWNER}} |
+| Random Tables | RER-ORC-001 to RER-ORC-{{LAST}} | Must / Should | {{OWNER}} |
 | Character state | RER-CHAR-001 to RER-CHAR-{{LAST}} | Must / Should | {{OWNER}} |
 | History and validation | RER-HIST-001 / RER-VAL-001 onward | Must / Should | {{OWNER}} |
 
@@ -148,32 +148,32 @@ Define:
 - Inputs and action-score formula.
 - Caps and cancellation order.
 - Strict comparison behavior and tie handling.
-- Strong hit, weak hit, and miss classification.
+- Successful result, mixed result, and miss classification.
 - Match detection.
 - Pre-burn and post-burn result preservation.
 
-#### Momentum
+#### Torch Supply
 
 Define:
 
 - Minimum, maximum, reset, and current values.
 - Derived values and override behavior.
-- Negative momentum cancellation.
+- Negative torch supply cancellation.
 - Burn eligibility, preview, confirmation, and reset.
 - Behavior at boundaries.
 
-#### Progress tracks and progress rolls
+#### Dungeon progresss and progress rolls
 
 Define:
 
 - Box and tick representation.
 - Rank-based progress helper values.
-- Filled-box-only progress score.
+- Filled-box-only dungeon depth.
 - Progress-roll comparison and tie behavior.
-- Momentum exclusion.
+- Torch Supply exclusion.
 - Track completion, archive, and correction behavior.
 
-#### Oracles
+#### Random Tables
 
 Define:
 
@@ -253,9 +253,9 @@ Rules:
 | Field | Required | Notes |
 |---|---:|---|
 | ID | Yes | Stable identifier. |
-| Roll type | Yes | Action, progress, oracle, or custom. |
-| Inputs | Yes | Dice, stat, adds, progress score, odds, or table. |
-| Initial result | Yes where applicable | Result before optional mutation such as momentum burn. |
+| Roll type | Yes | Action, progress, random table, or custom. |
+| Inputs | Yes | Dice, stat, adds, dungeon depth, odds, or table. |
+| Initial result | Yes where applicable | Result before optional mutation such as torch expenditure. |
 | Final result | Yes | Result accepted by the user. |
 | Match state | Yes where applicable | Preserve exact matched value. |
 | Rule version | Should | Supports future migrations and interpretation. |
@@ -279,10 +279,10 @@ Minimum categories:
 - Ties.
 - Matches.
 - Score caps.
-- Negative momentum cancellation.
-- Momentum burn eligibility and reset.
+- Negative torch supply cancellation.
+- Torch expenditure eligibility and reset.
 - Partially filled progress boxes.
-- Oracle table first and last ranges.
+- Random Table table first and last ranges.
 - Invalid manual input.
 - Manual override behavior.
 

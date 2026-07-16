@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -33,7 +33,7 @@
 14. Persistence and Storage Guidance
 15. Content Provenance and Licensing Data
 16. Import, Export, and Migration
-17. Audit, History, and Journal Linkage
+17. Audit, History, and Event Log Linkage
 18. Deletion, Archival, and Recovery
 19. Traceability
 20. Acceptance Criteria
@@ -60,7 +60,7 @@ This specification is implementation-neutral unless a section explicitly records
 
 {{DESCRIBE_THE_CURRENT_PRODUCT_MODEL_AND_THE_FUTURE_CAPABILITIES_THE_MODEL_MUST_NOT_BLOCK}}
 
-Examples may include multiple campaigns, multiple characters, session history, custom content, co-op play, export, and migration.
+Examples may include multiple adventures, multiple characters, session history, custom content, co-op play, export, and migration.
 
 ## 4. Data Model Scope
 
@@ -83,7 +83,7 @@ Examples may include multiple campaigns, multiple characters, session history, c
 | ID | Principle | Meaning |
 |---|---|---|
 | DMP-001 | MVP-simple, future-safe | The first interface may simplify concepts that remain explicit in the domain. |
-| DMP-002 | Fiction-first data | User-authored interpretation is stored separately from mechanical results. |
+| DMP-002 | Source-faithful data | User-authored interpretation is stored separately from mechanical results. |
 | DMP-003 | Stable identity | Persisted entities use stable IDs, not array positions or display names. |
 | DMP-004 | Immutable completed results | Saved rolls and imported snapshots are not silently recalculated. |
 | DMP-005 | Manual override support | Overrides are explicit and do not erase the standard derived value. |
@@ -103,12 +103,12 @@ Examples may include multiple campaigns, multiple characters, session history, c
 Suggested contexts:
 
 - Workspace / ownership.
-- Campaign and session.
+- Adventure and session.
 - Character.
-- Progress and vows.
+- Progress and dungeon objectives.
 - Rolls and rules results.
-- Oracles and bundled content.
-- Journal and activity history.
+- Random Tables and bundled content.
+- Event Log and activity history.
 - Content / licensing.
 - Import / export / migration.
 
@@ -200,7 +200,7 @@ Suggested value objects:
 - Stat block.
 - Dice result.
 - Progress value.
-- Momentum state.
+- Torch Supply state.
 - Content provenance reference.
 - Date range or session duration.
 - Export manifest metadata.
@@ -306,7 +306,7 @@ Do not store UI-only state inside durable domain records unless it is required t
 
 | Requirement | Definition |
 |---|---|
-| Scope | {{CAMPAIGN_WORKSPACE_OR_RECORD_SCOPE}} |
+| Scope | {{ADVENTURE_WORKSPACE_OR_RECORD_SCOPE}} |
 | Completeness | {{REQUIRED_RECORDS}} |
 | Ordering | {{STABLE_ORDERING_IF_NEEDED}} |
 | Privacy warning | {{WARNING}} |
@@ -328,14 +328,14 @@ Do not store UI-only state inside durable domain records unless it is required t
 |---|---|---|---:|---|
 | {{FROM}} | {{TO}} | {{DESCRIPTION}} | Yes / No | {{BEHAVIOR}} |
 
-## 17. Audit, History, and Journal Linkage
+## 17. Audit, History, and Event Log Linkage
 
 | Record type | History expectation | Linkage |
 |---|---|---|
-| Roll result | Immutable result plus explicit amendment if corrected. | Character, campaign, session, journal entry. |
-| Progress event | Append-only change reason where implemented. | Progress track and optional vow / session. |
-| Journal entry | User-editable with updated timestamp. | Campaign, session, vow, track, roll, or oracle result. |
-| Import / migration | Import report and schema versions. | Workspace or campaign. |
+| Roll result | Immutable result plus explicit amendment if corrected. | Character, adventure, session, event log entry. |
+| Progress event | Append-only change reason where implemented. | Dungeon progress and optional dungeon objective / session. |
+| Event Log entry | User-editable with updated timestamp. | Adventure, session, dungeon objective, track, roll, or random table result. |
+| Import / migration | Import report and schema versions. | Workspace or adventure. |
 | Destructive action | Confirmation and optional recovery record. | Affected aggregate. |
 
 ## 18. Deletion, Archival, and Recovery

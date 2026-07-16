@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -98,7 +98,7 @@
 | ID | Principle | Product implication |
 |---|---|---|
 | PP-001 | Session-first | Common play actions remain close to the active session context. |
-| PP-002 | Fiction-first | The product calculates mechanics and records interpretation without forcing narrative outcomes. |
+| PP-002 | Source-faithful | The product calculates mechanics and records interpretation without forcing narrative outcomes. |
 | PP-003 | Transparent automation | Dice, modifiers, derived values, migrations, and state changes are visible or inspectable. |
 | PP-004 | Manual control | Users can correct mistakes and support house rules where safe. |
 | PP-005 | Data safety | Destructive operations are deliberate and recovery is considered. |

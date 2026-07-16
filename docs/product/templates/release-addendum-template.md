@@ -2,7 +2,7 @@
 
 ## {{VERSION}} — {{RELEASE_NAME}}: {{DOCUMENT_TYPE}} Addendum
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -29,7 +29,7 @@ The following baseline principles and boundaries remain in force:
 - {{BASELINE_PRINCIPLE_2}}
 - {{BASELINE_PRINCIPLE_3}}
 - Content and licensing requirements remain release gates.
-- User-authored fiction remains separate from deterministic mechanics and bundled content.
+- Player-created notes remains separate from deterministic mechanics and bundled content.
 
 ### Explicit baseline changes
 
@@ -104,7 +104,7 @@ Use `None` when the addendum introduces no baseline changes.
 - {{EXCLUSION_2}}
 - {{EXCLUSION_3}}
 - Capabilities assigned to later roadmap milestones.
-- New unapproved bundled Ironsworn content.
+- New unapproved bundled NoteQuest content.
 - Monetization changes unless separately reviewed.
 
 ## 10. Changed User Journeys

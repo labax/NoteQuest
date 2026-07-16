@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -146,13 +146,13 @@ Repeat the following structure for every feature area.
 
 Use only the areas relevant to the release:
 
-- Character and campaign management.
+- Character and adventure management.
 - Session lifecycle.
 - Move and dice roller.
-- Momentum and status tracking.
-- Progress tracks and vows.
-- Oracle browsing and rolling.
-- Journal and history.
+- Torch Supply and status tracking.
+- Dungeon progresss and dungeon objectives.
+- Random Table browsing and rolling.
+- Event Log and history.
 - Persistence, migration, import, and export.
 - Onboarding and navigation.
 - Settings and application reset.

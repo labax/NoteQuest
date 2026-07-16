@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -86,7 +86,7 @@ Typical questions include:
 |---|---|---|
 | UX-P001 | Session-first | Active-play actions take priority over administrative navigation. |
 | UX-P002 | Low interruption | Common actions use compact panels, drawers, or dialogs and return the user to context. |
-| UX-P003 | State nearby | Important character, campaign, vow, and save state is visible or one action away. |
+| UX-P003 | State nearby | Important character, adventure, dungeon objective, and save state is visible or one action away. |
 | UX-P004 | Interpretation preserved | Mechanical outcomes are clear without writing compulsory narrative consequences. |
 | UX-P005 | Manual control | Users can correct values and support variants where safe. |
 | UX-P006 | Progressive disclosure | Guidance is available without slowing experienced players. |
@@ -183,12 +183,12 @@ flowchart TD
 Suggested flows:
 
 - First launch and onboarding.
-- Resume active campaign or session.
+- Resume active adventure or session.
 - Create or edit a character.
-- Create, update, fulfill, or forsake a vow.
-- Action roll with optional momentum burn.
+- Create, update, fulfill, or forsake a dungeon objective.
+- Action roll with optional torch expenditure.
 - Progress update and progress roll.
-- Oracle roll and save to journal.
+- Random Table roll and save to event log.
 - Start, pause, complete, and review a session.
 - Export, import preview, restore, and reset.
 
@@ -248,14 +248,14 @@ Repeat for every screen or major panel.
 Suggested components:
 
 - Status / resource control.
-- Progress track.
+- Dungeon progress.
 - Dice result card.
-- Momentum burn confirmation.
-- Oracle result card.
-- Journal editor.
-- Vow card and milestone list.
+- Torch expenditure confirmation.
+- Random Table result card.
+- Event Log editor.
+- Dungeon Objective card and milestone list.
 - Save-status banner.
-- Campaign / session selector.
+- Adventure / session selector.
 - Destructive confirmation dialog.
 - Import preview and validation report.
 
@@ -272,7 +272,7 @@ Requirements:
 - No required control is clipped or available only by hover.
 - Tables have a small-screen strategy: cards, horizontal scrolling, or reduced columns.
 - Dialogs fit the viewport and preserve access to close / confirm controls.
-- Long campaign names, journal text, and error messages wrap without breaking layout.
+- Long adventure names, event log text, and error messages wrap without breaking layout.
 - Touch targets meet the agreed accessibility baseline.
 
 ## 13. Accessibility Requirements
@@ -311,7 +311,7 @@ Requirements:
 - Show provenance labels where users select or browse bundled, custom, imported, or user-authored content.
 - Place attribution and unofficial-product notices in a discoverable About / Legal area.
 - Do not show blocked or unknown content in release builds.
-- Keep user-authored journal entries, vows, and custom content clearly separate from bundled content.
+- Keep user-authored event log entries, dungeon objectives, and custom content clearly separate from bundled content.
 
 ## 16. Traceability
 

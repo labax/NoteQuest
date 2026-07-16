@@ -2,7 +2,7 @@
 
 ## {{PRODUCT_OR_RELEASE_NAME}}
 
-*Version {{VERSION}} | {{STATUS}} | Prepared for the Ironsworn Project*
+*Version {{VERSION}} | {{STATUS}} | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -69,9 +69,9 @@
 | Risk area | Why it matters | Test response |
 |---|---|---|
 | Rules calculation errors | Incorrect outcomes damage player trust. | Deterministic unit and expected-result tests. |
-| Data loss or corruption | Campaign and journal data may be irreplaceable. | Save/reload, migration, import, export, and recovery tests. |
-| Poor active-play UX | Slow or confusing flows defeat the companion's purpose. | End-to-end flows and playtesting. |
-| Over-automation | Forced story outcomes undermine fiction-first play. | Acceptance tests preserve user interpretation. |
+| Data loss or corruption | Adventurer, dungeon, inventory, and Graveyard data may be irreplaceable. | Save/reload, migration, import, export, and recovery tests. |
+| Poor active-play UX | Slow or confusing flows defeat the product's purpose. | End-to-end flows and playtesting. |
+| Over-automation | Forced story outcomes undermine source-faithful play. | Acceptance tests preserve user interpretation. |
 | Licensing / content errors | Unapproved content can block release. | Inventory, provenance, notice, and build-gate tests. |
 | {{RISK}} | {{RATIONALE}} | {{RESPONSE}} |
 
@@ -82,7 +82,7 @@
 | QO-001 | {{OBJECTIVE}} | {{SIGNAL}} |
 | QO-002 | Produce correct deterministic rules results. | Rules matrix passes. |
 | QO-003 | Preserve required user data. | Persistence and recovery gates pass. |
-| QO-004 | Preserve fiction-first play. | No mandatory narrative interpretation is applied. |
+| QO-004 | Preserve source-faithful play. | No unsupported rule outcome or source content is introduced. |
 | QO-005 | Meet responsive and accessibility baseline. | Supported matrix passes. |
 | QO-006 | Be release-eligible from a content perspective. | Content and licensing gate passes. |
 
@@ -136,8 +136,8 @@ Must cover where applicable:
 
 - Dice ranges and deterministic injection.
 - Result classifications, ties, matches, caps, and modifier order.
-- Momentum and progress calculations.
-- Oracle range lookup and invalid table data.
+- HP, armour, torch, damage, and dungeon-depth calculations.
+- Dungeon-table lookup and invalid table data.
 - Domain validation and derived fields.
 - Serialization, migration, and import validation.
 - Content-manifest validation.
@@ -153,10 +153,10 @@ Must cover where applicable:
 
 ### 8.3 Integration tests
 
-- Character / campaign state used by rules inputs.
-- Roll, oracle, progress, and journal linkage.
+- Adventurer and dungeon state used by rules inputs.
+- Roll, room, combat, inventory, and event-log linkage.
 - Save/reload of linked objects.
-- Session and campaign ownership.
+- Save-slot and adventure ownership.
 - Migration and import atomicity.
 - Application reset scope.
 
@@ -187,25 +187,25 @@ Must cover where applicable:
 
 ## 10. Test Data Strategy
 
-### 10.1 Standard character / campaign fixture
+### 10.1 Standard adventurer / dungeon fixture
 
 | Field | Value |
 |---|---|
-| Campaign | {{CAMPAIGN_NAME}} |
-| Character | {{CHARACTER_NAME}} |
-| Stats / resources | {{VALUES}} |
-| Momentum | {{VALUES}} |
-| Vows / tracks | {{VALUES}} |
-| Journal / history | {{VALUES}} |
+| Dungeon | {{DUNGEON_NAME}} |
+| Adventurer | {{ADVENTURER_NAME}} |
+| HP / armour / torches / coins | {{VALUES}} |
+| Dungeon depth / current HP | {{VALUES}} |
+| Doors / rooms / monsters | {{VALUES}} |
+| Event log / Graveyard | {{VALUES}} |
 
 ### 10.2 Boundary fixtures
 
-- Minimum and maximum track values.
-- Partially filled progress.
-- Empty campaign / no active record.
-- Long names and long journal entries.
-- Multiple campaigns and sessions.
-- Large history fixture.
+- Minimum and maximum HP, armour, torch, coin, and inventory values.
+- Partially explored dungeons and damaged armour.
+- Empty save slot / no active adventurer.
+- Long adventurer names and long event-log entries.
+- Multiple save slots and expeditions.
+- Large event-log and Graveyard fixture.
 - Invalid and older schema versions.
 - Corrupted or incomplete stored data.
 - Unknown / restricted content manifest entries.
@@ -325,9 +325,9 @@ Minimum cases where applicable:
 - Ties and matches.
 - Minimum and maximum dice.
 - Modifier order and score caps.
-- Negative momentum and burn behavior.
+- Negative torch supply and burn behavior.
 - Partial progress and filled-box-only score.
-- Oracle first/last ranges and invalid gaps/overlaps.
+- Random Table first/last ranges and invalid gaps/overlaps.
 - Manual input and override.
 
 ## 18. Persistence and Data Safety Matrix
@@ -385,7 +385,7 @@ Minimum cases where applicable:
 - [ ] Primary record can be created and edited.
 - [ ] Core roll / rules action succeeds.
 - [ ] Progress or primary state can be updated.
-- [ ] Journal / history entry can be created where in scope.
+- [ ] Event Log / history entry can be created where in scope.
 - [ ] Save status is accurate.
 - [ ] Reload restores state.
 - [ ] Destructive action can be canceled safely.
@@ -432,7 +432,7 @@ Minimum cases where applicable:
 |---|---|---|---|
 | Blocker | Prevents testing or causes unavoidable severe loss. | App cannot load; all saves destroyed. | Must fix. |
 | Critical | High-impact rules, security, privacy, or data-loss defect. | Incorrect core calculation; import overwrites valid data. | Must fix. |
-| High | Major flow fails with limited workaround. | Cannot complete a required vow or session action. | Fix or explicit product waiver. |
+| High | Major flow fails with limited workaround. | Cannot complete a required dungeon objective or session action. | Fix or explicit product waiver. |
 | Medium | Important defect with reasonable workaround. | Incorrect focus return; confusing non-critical validation. | Prioritize. |
 | Low | Cosmetic or minor issue. | Spacing or copy inconsistency. | May defer. |
 
