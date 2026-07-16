@@ -1,0 +1,76 @@
+name: Finalize decision register v0.2 consistency
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.head_ref == 'docs/apply-decision-register-v0.2' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Apply final consistency fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              "docs/product/digital-adaptation-decision-register.md": [
+                  ("**Status:** Draft for review", "**Status:** Historical approved baseline"),
+              ],
+              "docs/product/business-requirements-v0.1.md": [
+                  (
+                      "| RISK-002 | Procedural generation produces an unreachable or non-terminating dungeon. | Medium | High | Implement hidden targets, hard limits, forced staircases, invariant checks, and large-seed simulations. | Technical Lead / QA |",
+                      "| RISK-002 | Procedural generation produces an unreachable or non-terminating dungeon. | Medium | High | Enforce the approved six-segment target and ten-segment hard maximum, forced staircases, invariant checks, and at least 100,000 deterministic seeds per dungeon type. | Technical Lead / QA |",
+                  ),
+                  (
+                      "| RISK-003 | Save failures or schema defects corrupt persistent dungeons and Graveyard history. | Medium | Critical | Use atomic or transactional persistence, autosave status, versioned schemas, recovery tests, and export/backup guidance. | Technical Lead |",
+                      "| RISK-003 | Save failures or schema defects corrupt persistent dungeons and Graveyard history. | Medium | Critical | Use three named IndexedDB slots, atomic or transactional writes, last-valid snapshots, explicit migrations, truthful autosave status, fault tests, and required versioned export/import. | Technical Lead |",
+                  ),
+                  (
+                      "| RISK-007 | Browser storage is deleted, restricted, or behaves differently across supported environments. | Medium | High | Define the browser matrix, communicate storage limitations, support safe export/backup where included, and test failure/recovery paths. | Technical Lead / UX Designer |",
+                      "| RISK-007 | Browser storage is deleted, restricted, or behaves differently across supported environments. | Medium | High | Test the approved browser matrix, communicate IndexedDB limitations, provide required versioned export/import and last-valid recovery, and test deletion, quota, import, and failure paths. | Technical Lead / UX Designer |",
+                  ),
+              ],
+              "docs/product/mvp-scope-v0.1.md": [
+                  (
+                      "| Non-terminating or unreachable dungeon | Breaks the core journey | Use approved floor targets and hard maximums; validate through large seeded simulations. |",
+                      "| Non-terminating or unreachable dungeon | Breaks the core journey | Enforce the six-segment target and ten-segment hard maximum; validate at least 100,000 deterministic seeds per dungeon type with zero non-terminating or unreachable-boss cases. |",
+                  ),
+                  (
+                      "| Save corruption or browser-data loss | Destroys persistent player value | Transactional/last-valid saves, schema validation, fault tests, truthful status, storage notice, and evaluate export as Should scope. |",
+                      "| Save corruption or browser-data loss | Destroys persistent player value | Use three named IndexedDB slots, transactional/last-valid saves, explicit migrations, schema validation, fault tests, truthful status, storage notices, and required versioned export/import. |",
+                  ),
+                  (
+                      "| Overly broad event history | Increases storage and UI complexity | Define minimum explainability records and retention rules in data and NFR documents. |",
+                      "| Overly broad event history | Increases storage and UI complexity | Apply the approved retention policy: complete active/incomplete history, completion summary plus final 500 mechanical entries, and latest 200 displayed by default. |",
+                  ),
+              ],
+          }
+
+          for filename, pairs in replacements.items():
+              path = Path(filename)
+              text = path.read_text(encoding="utf-8")
+              for old, new in pairs:
+                  if old not in text:
+                      raise RuntimeError(f"Expected text missing in {filename}: {old}")
+                  text = text.replace(old, new, 1)
+              path.write_text(text, encoding="utf-8")
+          PY
+
+          rm .github/workflows/finalize-decision-v0.2-consistency.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/product .github/workflows/finalize-decision-v0.2-consistency.yml
+          git commit -m "docs: finalize decision register consistency"
+          git push origin HEAD:${{ github.head_ref }}
