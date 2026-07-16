@@ -2,7 +2,7 @@
 
 ## NoteQuest Web Application - Core Rules
 
-*Version 0.1 | Draft for Review | Prepared for the NoteQuest Project*
+*Version 0.1 | Approved Baseline | Prepared for the NoteQuest Project*
 
 | Field | Value |
 |---|---|
@@ -10,7 +10,7 @@
 | Related documents | [Business Requirements Document v0.1](business-requirements-v0.1.md); [MVP Scope v0.1](mvp-scope-v0.1.md); [Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md); [Digital Adaptation Feasibility Study](digital-adaptation-feasibility-study.md); *NoteQuest* rulebook, first edition |
 | Rules scope | Canonical single-player Core Book rules for the Palace prototype and six-dungeon MVP |
 | Primary audience | Product owner, rules designer, developer, QA/tester, UX designer, data modeller, and content/licensing reviewer |
-| Status | Draft for review; normative after approval |
+| Status | Approved normative baseline; Section 23 interpretive rulings approved as written |
 | Last updated | 2026-07-16 |
 
 ---
@@ -39,7 +39,7 @@
 20. Deterministic Test Matrix
 21. Traceability
 22. Acceptance Criteria
-23. Draft Interpretive Rulings
+23. Approved Interpretive Rulings
 24. Approval
 
 ---
@@ -989,11 +989,11 @@ The Digital Rules Specification may be approved when:
 - [ ] Random streams, committed outcomes, event history, save versions, and import/migration behaviour are traceable.
 - [ ] Exact source prose is not required by implementation logic.
 - [ ] Content/licensing review confirms that referenced tables and names are eligible for the intended build.
-- [ ] Product, rules, technical, QA, and content reviewers approve the draft interpretive rulings below.
+- [x] The Product Owner approved all Section 23 interpretive rulings as written; they are normative in v0.1.
 
-## 23. Draft Interpretive Rulings
+## 23. Approved Interpretive Rulings
 
-The following implementation-level rulings are made explicit in v0.1 because the source text does not fully specify digital timing. They are normative only after this document is approved.
+The following implementation-level rulings are made explicit because the source text does not fully specify digital timing. The Product Owner approved all 24 rulings as written on 2026-07-16. They are normative parts of Digital Rules Specification v0.1 and may be changed only through an approved versioned amendment.
 
 | ID | Ruling |
 |---|---|
@@ -1026,7 +1026,7 @@ The following implementation-level rulings are made explicit in v0.1 because the
 
 | Role | Name | Decision | Date | Notes |
 |---|---|---|---|---|
-| Product Owner |  | Pending / Approved / Rejected |  |  |
+| Product Owner | labax | Approved | 2026-07-16 | Approved the Digital Rules Specification through PR #12 and approved all Section 23 interpretive rulings as written. |
 | Rules / Product Designer |  | Pending / Approved / Rejected |  |  |
 | Technical Lead |  | Pending / Approved / Rejected |  |  |
 | QA Reviewer |  | Pending / Approved / Rejected |  |  |
