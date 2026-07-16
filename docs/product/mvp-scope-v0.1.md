@@ -652,8 +652,8 @@ The following are not required for MVP acceptance:
 | Risk | Scope impact | Control |
 |---|---|---|
 | Incomplete rule formalisation | Rework, inconsistent gameplay, and blocked acceptance | Complete the Digital Rules Specification before production implementation; require traceability and deterministic tests. |
-| Non-terminating or unreachable dungeon | Breaks the core journey | Use approved floor targets and hard maximums; validate through large seeded simulations. |
-| Save corruption or browser-data loss | Destroys persistent player value | Transactional/last-valid saves, schema validation, fault tests, truthful status, storage notice, and evaluate export as Should scope. |
+| Non-terminating or unreachable dungeon | Breaks the core journey | Enforce the six-segment target and ten-segment hard maximum; validate at least 100,000 deterministic seeds per dungeon type with zero non-terminating or unreachable-boss cases. |
+| Save corruption or browser-data loss | Destroys persistent player value | Use three named IndexedDB slots, transactional/last-valid saves, explicit migrations, schema validation, fault tests, truthful status, storage notices, and required versioned export/import. |
 | Responsive interface overload | Makes mobile or tablet play impractical | Validate adaptive map/state/action layouts early in the one-dungeon prototype. |
 | Combat or content repetition | Reduces replayability | Fast controls, clear feedback, optional pacing acceleration, and cosmetic variation without balance changes. |
 | Scope creep | Delays validation and increases defects | New work requires an explicit Must/Should/Could/Won't decision and approved change to this document. |
@@ -662,7 +662,7 @@ The following are not required for MVP acceptance:
 | Browser offline limitations | Breaks the approved connectivity model | Architecture spike and supported-browser matrix before persistence implementation. |
 | Accessibility deferred as polish | Creates structural rework and exclusion | Include keyboard, textual map, responsive, and reduced-motion requirements in initial UX and prototype work. |
 | Source-faithful imbalance | Some adventurers may be much stronger than others | Preserve canonical behaviour; use simulation and playtest evidence, with optional variants deferred. |
-| Overly broad event history | Increases storage and UI complexity | Define minimum explainability records and retention rules in data and NFR documents. |
+| Overly broad event history | Increases storage and UI complexity | Apply the approved retention policy: complete active/incomplete history, completion summary plus final 500 mechanical entries, and latest 200 displayed by default. |
 
 ## 15. Deferred Backlog
 
