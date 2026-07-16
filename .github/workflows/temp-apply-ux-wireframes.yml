@@ -6,6 +6,14 @@ on:
       - docs/add-ux-flow-wireframes-v0.1
     paths:
       - .github/workflows/temp-apply-ux-wireframes.yml
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+  workflow_dispatch:
 
 permissions:
   contents: write
