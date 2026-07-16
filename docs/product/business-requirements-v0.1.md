@@ -292,7 +292,7 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 | ID | Dependency | Type | Required by | Status |
 |---|---|---|---|---|
 | DEP-001 | Approved Digital Adaptation Decision Registers v0.1 and v0.2 | Product / rules | BRD and all downstream specifications | Approved baselines recorded |
-| DEP-002 | Versioned Digital Rules Specification | Product / rules | Mechanical prototype | Required next |
+| DEP-002 | [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md) | Product / rules | Mechanical prototype and all mechanical downstream specifications | Available; approved baseline |
 | DEP-003 | Content and licensing inventory, including permission evidence and asset-level approval | Legal / content | Any public build | In progress; core permissions recorded |
 | DEP-004 | Product Requirements Document and MVP Scope | Product | Detailed planning and release governance | MVP Scope available; PRD pending |
 | DEP-005 | Functional Requirements Specification | Product / technical | Production implementation | Pending |
