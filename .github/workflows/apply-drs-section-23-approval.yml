@@ -1,0 +1,81 @@
+name: Apply DRS Section 23 approval
+
+on:
+  push:
+    branches:
+      - docs/approve-drs-section-23
+    paths:
+      - .github/workflows/apply-drs-section-23-approval.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-drs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: docs/approve-drs-section-23
+          fetch-depth: 0
+
+      - name: Apply approved status
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("docs/product/digital-rules-specification-v0.1.md")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = [
+              (
+                  "*Version 0.1 | Draft for Review | Prepared for the NoteQuest Project*",
+                  "*Version 0.1 | Approved Baseline | Prepared for the NoteQuest Project*",
+                  1,
+              ),
+              (
+                  "| Status | Draft for review; normative after approval |",
+                  "| Status | Approved normative baseline; Section 23 interpretive rulings approved as written |",
+                  1,
+              ),
+              (
+                  "23. Draft Interpretive Rulings",
+                  "23. Approved Interpretive Rulings",
+                  2,
+              ),
+              (
+                  "- [ ] Product, rules, technical, QA, and content reviewers approve the draft interpretive rulings below.",
+                  "- [x] The Product Owner approved all Section 23 interpretive rulings as written; they are normative in v0.1.",
+                  1,
+              ),
+              (
+                  "The following implementation-level rulings are made explicit in v0.1 because the source text does not fully specify digital timing. They are normative only after this document is approved.",
+                  "The following implementation-level rulings are made explicit because the source text does not fully specify digital timing. The Product Owner approved all 24 rulings as written on 2026-07-16. They are normative parts of Digital Rules Specification v0.1 and may be changed only through an approved versioned amendment.",
+                  1,
+              ),
+              (
+                  "| Product Owner |  | Pending / Approved / Rejected |  |  |",
+                  "| Product Owner | labax | Approved | 2026-07-16 | Approved the Digital Rules Specification through PR #12 and approved all Section 23 interpretive rulings as written. |",
+                  1,
+              ),
+          ]
+
+          for old, new, expected in replacements:
+              actual = text.count(old)
+              if actual != expected:
+                  raise RuntimeError(
+                      f"Expected {expected} occurrence(s), found {actual}: {old}"
+                  )
+              text = text.replace(old, new)
+
+          path.write_text(text, encoding="utf-8")
+
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/apply-drs-section-23-approval.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/product/digital-rules-specification-v0.1.md .github/workflows/apply-drs-section-23-approval.yml
+          git commit -m "Approve DRS interpretive rulings [skip ci]"
+          git push origin HEAD:docs/approve-drs-section-23
