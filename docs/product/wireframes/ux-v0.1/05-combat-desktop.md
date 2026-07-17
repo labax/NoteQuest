@@ -1,0 +1,71 @@
+# Combat — Desktop
+
+Canonical source: [`05-combat-desktop.wireloom`](05-combat-desktop.wireloom)
+
+```wireloom
+window "Combat — Desktop":
+  header:
+    row:
+      text "Encounter in Room 8" bold size=large
+      spacer
+      status "Your turn" kind=info id="turn-state"
+  resourcebar:
+    resource name="HP" value="18 / 24"
+    resource name="ARMOUR" value="4 / 6"
+    resource name="TORCHES" value="6"
+    resource name="HANDS" value="2 / 2"
+  row:
+    col 280:
+      section "Adventurer":
+        text "Mira — Guard" bold
+        progress value=18 max=24 label="Health"
+        kv "Weapon" "Short Sword"
+        kv "Damage" "1d6"
+        kv "Armour" "Leather 4/6"
+      section "Conditions":
+        status "No active effects" kind=success
+      section "Legal actions":
+        button "Attack selected monster" primary id="attack-button"
+        button "Cast spell" disabled
+        button "Use item"
+        button "Attempt escape"
+    col fill:
+      section "Monsters" badge="2 living" id="monster-list":
+        slot "Goblin A" active accent=danger:
+          progress value=3 max=5 label="HP"
+          kv "Damage" "2"
+          kv "Traits" "None"
+          footer:
+            chip "Selected" selected accent=approval
+        slot "Goblin B" accent=danger:
+          progress value=5 max=5 label="HP"
+          kv "Damage" "2"
+          kv "Traits" "None"
+          footer:
+            button "Select target"
+      section "Turn sequence":
+        slot "1. Choose action" state=active
+        slot "2. Commit result" state=available
+        slot "3. Monster turn" state=locked
+    col 340:
+      section "Damage preview":
+        kv "Weapon expression" "1d6"
+        kv "Target" "Goblin A"
+        text "Final damage is shown only after the committed natural die and modifiers resolve." muted
+      section "Last mechanical result" id="combat-result":
+        kv "Action" "Previous attack"
+        kv "Natural d6" "5"
+        kv "Modifiers" "+0"
+        kv "Final damage" "5"
+        kv "Target HP" "5 → 0"
+        button "Open full trace"
+      section "Safety":
+        text "Leaving this screen cannot discard an unresolved target or capacity decision." muted
+  footer:
+    status "Saved after last completed action" kind=success
+
+annotation "Turn status is announced and not colour-only." target="turn-state" position=top
+annotation "Target selection is explicit before attacking." target="monster-list" position=top
+annotation "One activation creates at most one committed combat action." target="attack-button" position=bottom
+annotation "Dice, modifiers, prevention, and resulting state remain inspectable." target="combat-result" position=right
+```

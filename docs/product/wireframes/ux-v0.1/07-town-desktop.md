@@ -1,0 +1,77 @@
+# Town — Desktop
+
+Canonical source: [`07-town-desktop.wireloom`](07-town-desktop.wireloom)
+
+```wireloom
+window "Town":
+  header:
+    row:
+      text "Town" bold size=large
+      spacer
+      status "Saved" kind=success
+  resourcebar:
+    resource name="HP" value="18 / 24"
+    resource name="TORCHES" value="7 / 10"
+    resource name="COINS" value="3"
+    resource name="SPELLS" value="0"
+  row:
+    col 300:
+      section "Adventurer":
+        text "Mira — Human Guard" bold
+        progress value=18 max=24 label="Health"
+        kv "Armour" "Leather 4/6"
+        kv "Backpack" "7/10"
+        button "View adventurer"
+      section "Expedition status":
+        kv "Last dungeon" "Palace"
+        kv "Last exit" "Safe retreat"
+        kv "Next repopulation" "On eligible first entry"
+    col fill:
+      section "Town actions" id="town-actions":
+        row:
+          col:
+            slot "Rest — 1 coin" active:
+              text "Restore HP and all spell charges" muted
+              footer:
+                button "Rest" primary
+          col:
+            slot "Repair armour — 1 coin":
+              text "Fully restore one damaged piece" muted
+              footer:
+                button "Choose armour"
+        row:
+          col:
+            slot "Buy torch — 1 coin":
+              text "Up to physical capacity 10" muted
+              footer:
+                button "Buy torch"
+          col:
+            slot "Sell item":
+              text "Resolve ordinary or magic sale rules" muted
+              footer:
+                button "Choose item"
+      section "Dungeons":
+        slot "Palace — In progress" active accent=approval:
+          kv "Floors" "1 of 3 visited"
+          kv "Safe entrance route" "Available"
+          footer:
+            button "Resume expedition" primary
+        slot "New core dungeon":
+          text "Generate another authorised dungeon after safely returning to town." muted
+          footer:
+            button "Generate dungeon"
+    col 300:
+      section "Recent history":
+        list:
+          item "Retreated safely to town"
+          item "Expedition #2 ended"
+          item "Surviving monsters will heal on re-entry"
+        button "Open full history"
+      section "Backup reminder":
+        text "Local browser data can be lost if site storage is cleared." muted
+        button "Export save"
+  footer:
+    text "Town actions are unavailable while an expedition is active." muted
+
+annotation "Only affordable and currently valid town actions are enabled." target="town-actions" position=top
+```

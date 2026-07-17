@@ -1,0 +1,61 @@
+# Death and Recovery — Desktop
+
+Canonical source: [`08-death-recovery-desktop.wireloom`](08-death-recovery-desktop.wireloom)
+
+```wireloom
+window "Death, Graveyard, and Recovery":
+  header:
+    row:
+      text "Graveyard" bold size=large
+      spacer
+      button "Create replacement adventurer" primary id="replacement-action"
+  tabs:
+    tab "Graveyard" active badge="2"
+    tab "Belongings"
+    tab "Dungeon history"
+  row:
+    col 380:
+      section "Recorded deaths":
+        slot "Mira — Palace Room 12" active accent=danger id="death-record":
+          kv "Cause" "Monster damage"
+          kv "When" "Today, 18:42"
+          kv "Recovery" "Belongings remain"
+        slot "Tarin — Palace Room 6" accent=warning:
+          kv "Cause" "Darkness"
+          kv "When" "Yesterday"
+          kv "Recovery" "Partially recovered"
+    col fill:
+      section "Selected record":
+        text "Mira — Human Guard" bold size=large
+        kv "Dungeon" "Palace"
+        kv "Floor" "2"
+        kv "Segment" "Room 12"
+        kv "Cause" "Monster damage"
+        kv "Corpse marker" "Present"
+        kv "Recovery container" "5 objects + 2 coins"
+      section "Belongings in Room 12" id="belongings-list":
+        list:
+          item "Short Sword"
+          item "Leather Armour"
+          item "Healing Potion"
+          item "Normal Key — Palace"
+          item "2 coins"
+        text "A replacement adventurer must reach the segment. Normal capacity rules apply; uncollected belongings remain." muted
+      row:
+        button "View textual route"
+        button "View event trace"
+        spacer
+        button "Plan recovery expedition" primary
+    col 300:
+      section "Recovery status":
+        status "Container persists" kind=success
+        text "The record and remaining objects survive save, reload, import, and later expeditions." muted
+      section "Safety":
+        text "Creating a replacement does not erase the deceased adventurer, Graveyard record, dungeon, or belongings." muted
+  footer:
+    status "Death and Graveyard record committed atomically" kind=success
+
+annotation "Each death remains a distinct permanent fact." target="death-record" position=left
+annotation "Recovered and unrecovered item identities remain explicit." target="belongings-list" position=bottom
+annotation "Replacement creation continues the same save slot." target="replacement-action" position=top
+```

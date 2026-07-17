@@ -1,0 +1,12 @@
+{
+  "name": "notequest-ux-wireframes",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "render": "node render-wireframes.mjs"
+  },
+  "devDependencies": {
+    "wireloom": "0.7.0"
+  }
+}
