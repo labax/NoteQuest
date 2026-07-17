@@ -10,37 +10,37 @@
 | Related documents | [Business Requirements Document v0.1](business-requirements-v0.1.md); [MVP Scope v0.1](mvp-scope-v0.1.md); [Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md); [Digital Adaptation Feasibility Study](digital-adaptation-feasibility-study.md); *NoteQuest* rulebook, first edition |
 | Rules scope | Canonical single-player Core Book rules for the Palace prototype and six-dungeon MVP |
 | Primary audience | Product owner, rules designer, developer, QA/tester, UX designer, data modeller, and content/licensing reviewer |
-| Status | Approved normative baseline; Section 23 interpretive rulings approved as written |
+| Status | Approved normative baseline; [Section 23](#23-approved-interpretive-rulings) interpretive rulings approved as written |
 | Last updated | 2026-07-16 |
 
 ---
 
 ## Contents
 
-1. Purpose and Authority
-2. Source Basis and Precedence
-3. Normative Language and Conventions
-4. Scope
-5. Rules Principles
-6. Rules Modules
-7. Randomness and Dice
-8. Adventurer Creation and State
-9. Dungeon Creation, Topology, and Termination
-10. Doors, Traps, Secret Passages, and Chests
-11. Exploration, Torches, Light, Arms, and Hands
-12. Encounters, Combat, and Monster Traits
-13. Inventory, Equipment, Armour, Rewards, and Coins
-14. Spells and Special Effects
-15. Town, Expeditions, Persistence, Death, and Recovery
-16. Calculation Reference
-17. State Machines and Transition Guards
-18. Validation, Manual Input, and Overrides
-19. Rules and Event History
-20. Deterministic Test Matrix
-21. Traceability
-22. Acceptance Criteria
-23. Approved Interpretive Rulings
-24. Approval
+1. [Purpose and Authority](#1-purpose-and-authority)
+2. [Source Basis and Precedence](#2-source-basis-and-precedence)
+3. [Normative Language and Conventions](#3-normative-language-and-conventions)
+4. [Scope](#4-scope)
+5. [Rules Principles](#5-rules-principles)
+6. [Rules Modules](#6-rules-modules)
+7. [Randomness and Dice](#7-randomness-and-dice)
+8. [Adventurer Creation and State](#8-adventurer-creation-and-state)
+9. [Dungeon Creation, Topology, and Termination](#9-dungeon-creation-topology-and-termination)
+10. [Doors, Traps, Secret Passages, and Chests](#10-doors-traps-secret-passages-and-chests)
+11. [Exploration, Torches, Light, Arms, and Hands](#11-exploration-torches-light-arms-and-hands)
+12. [Encounters, Combat, and Monster Traits](#12-encounters-combat-and-monster-traits)
+13. [Inventory, Equipment, Armour, Rewards, and Coins](#13-inventory-equipment-armour-rewards-and-coins)
+14. [Spells and Special Effects](#14-spells-and-special-effects)
+15. [Town, Expeditions, Persistence, Death, and Recovery](#15-town-expeditions-persistence-death-and-recovery)
+16. [Calculation Reference](#16-calculation-reference)
+17. [State Machines and Transition Guards](#17-state-machines-and-transition-guards)
+18. [Validation, Manual Input, and Overrides](#18-validation-manual-input-and-overrides)
+19. [Rules and Event History](#19-rules-and-event-history)
+20. [Deterministic Test Matrix](#20-deterministic-test-matrix)
+21. [Traceability](#21-traceability)
+22. [Acceptance Criteria](#22-acceptance-criteria)
+23. [Approved Interpretive Rulings](#23-approved-interpretive-rulings)
+24. [Approval](#24-approval)
 
 ---
 
@@ -989,7 +989,7 @@ The Digital Rules Specification may be approved when:
 - [ ] Random streams, committed outcomes, event history, save versions, and import/migration behaviour are traceable.
 - [ ] Exact source prose is not required by implementation logic.
 - [ ] Content/licensing review confirms that referenced tables and names are eligible for the intended build.
-- [x] The Product Owner approved all Section 23 interpretive rulings as written; they are normative in v0.1.
+- [x] The Product Owner approved all [Section 23](#23-approved-interpretive-rulings) interpretive rulings as written; they are normative in v0.1.
 
 ## 23. Approved Interpretive Rulings
 
@@ -1026,7 +1026,7 @@ The following implementation-level rulings are made explicit because the source 
 
 | Role | Name | Decision | Date | Notes |
 |---|---|---|---|---|
-| Product Owner | labax | Approved | 2026-07-16 | Approved the Digital Rules Specification through PR #12 and approved all Section 23 interpretive rulings as written. |
+| Product Owner | labax | Approved | 2026-07-16 | Approved the Digital Rules Specification through PR #12 and approved all [Section 23](#23-approved-interpretive-rulings) interpretive rulings as written. |
 | Rules / Product Designer |  | Pending / Approved / Rejected |  |  |
 | Technical Lead |  | Pending / Approved / Rejected |  |  |
 | QA Reviewer |  | Pending / Approved / Rejected |  |  |

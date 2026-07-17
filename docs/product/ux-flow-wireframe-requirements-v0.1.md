@@ -18,25 +18,25 @@
 
 ## Contents
 
-1. Purpose
-2. Source Basis
-3. UX Context
-4. UX Scope
-5. UX Principles
-6. Target Users and Needs
-7. Information Architecture
-8. App Shell and Navigation
-9. Core User Flows
-10. Screen and Wireframe Requirements
-11. Component Requirements
-12. Responsive Behaviour
-13. Accessibility Requirements
-14. Empty, Loading, Error, Confirmation, and Recovery States
-15. Content and Licensing UX
-16. Traceability
-17. UX Acceptance Criteria
-18. Open Questions
-19. Approval
+1. [Purpose](#1-purpose)
+2. [Source Basis](#2-source-basis)
+3. [UX Context](#3-ux-context)
+4. [UX Scope](#4-ux-scope)
+5. [UX Principles](#5-ux-principles)
+6. [Target Users and Needs](#6-target-users-and-needs)
+7. [Information Architecture](#7-information-architecture)
+8. [App Shell and Navigation](#8-app-shell-and-navigation)
+9. [Core User Flows](#9-core-user-flows)
+10. [Screen and Wireframe Requirements](#10-screen-and-wireframe-requirements)
+11. [Component Requirements](#11-component-requirements)
+12. [Responsive Behaviour](#12-responsive-behaviour)
+13. [Accessibility Requirements](#13-accessibility-requirements)
+14. [Empty, Loading, Error, Confirmation, and Recovery States](#14-empty-loading-error-confirmation-and-recovery-states)
+15. [Content and Licensing UX](#15-content-and-licensing-ux)
+16. [Traceability](#16-traceability)
+17. [UX Acceptance Criteria](#17-ux-acceptance-criteria)
+18. [Open Questions](#18-open-questions)
+19. [Approval](#19-approval)
 
 ---
 

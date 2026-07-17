@@ -17,22 +17,22 @@
 
 ## Contents
 
-1. Product Summary
-2. User Problem
-3. Product Outcomes
-4. Users and Use Cases
-5. Product Principles
-6. Scope and Priorities
-7. User Journeys
-8. Product Requirements
-9. Feature Requirements
-10. UX and Accessibility Expectations
-11. Data, Rules, and Content Impact
-12. Analytics and Success Metrics
-13. Dependencies and Risks
-14. Release and Rollout
-15. Acceptance and Sign-Off
-16. Open Questions
+1. [Product Summary](#1-product-summary)
+2. [User Problem](#2-user-problem)
+3. [Product Outcomes](#3-product-outcomes)
+4. [Users and Use Cases](#4-users-and-use-cases)
+5. [Product Principles](#5-product-principles)
+6. [Scope and Priorities](#6-scope-and-priorities)
+7. [User Journeys](#7-user-journeys)
+8. [Product Requirements](#8-product-requirements)
+9. [Feature Requirements](#9-feature-requirements)
+10. [UX and Accessibility Expectations](#10-ux-and-accessibility-expectations)
+11. [Data, Rules, and Content Impact](#11-data-rules-and-content-impact)
+12. [Analytics and Success Metrics](#12-analytics-and-success-metrics)
+13. [Dependencies and Risks](#13-dependencies-and-risks)
+14. [Release and Rollout](#14-release-and-rollout)
+15. [Acceptance and Sign-Off](#15-acceptance-and-sign-off)
+16. [Open Questions](#16-open-questions)
 
 ---
 

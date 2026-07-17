@@ -21,43 +21,43 @@
 
 ## Contents
 
-1. Purpose
-2. Source Hierarchy and Authority
-3. Scope, Goals, and Non-Goals
-4. Architecture Principles
-5. System Context
-6. Technology Baseline
-7. Repository and Package Structure
-8. Dependency Rules
-9. Runtime Components
-10. Command, State, and Concurrency Model
-11. Routing and Navigation
-12. Content Package Architecture
-13. Physical IndexedDB Architecture
-14. Atomic Persistence
-15. Snapshots, Recovery, Retention, and Quota
-16. Migration and Staging
-17. Deterministic Randomness
-18. Canonical Serialisation, Hashing, Export, and Import
-19. PWA and Service-Worker Architecture
-20. Offline and Capability Handling
-21. Security Architecture
-22. Privacy and Diagnostics
-23. Performance and Resource Architecture
-24. Accessibility and Responsive Architecture
-25. Error and Recovery Architecture
-26. Testing and Simulation Architecture
-27. CI and Supply-Chain Architecture
-28. Hosting and Deployment
-29. Monitoring, Operations, and Rollback
-30. Release Artifact and Versioning Model
-31. Architecture Diagrams
-32. Traceability
-33. Implementation Sequence and Spikes
-34. Risks and Controls
-35. Acceptance Criteria
-36. Open Implementation Details
-37. Approval
+1. [Purpose](#1-purpose)
+2. [Source Hierarchy and Authority](#2-source-hierarchy-and-authority)
+3. [Scope, Goals, and Non-Goals](#3-scope-goals-and-non-goals)
+4. [Architecture Principles](#4-architecture-principles)
+5. [System Context](#5-system-context)
+6. [Technology Baseline](#6-technology-baseline)
+7. [Repository and Package Structure](#7-repository-and-package-structure)
+8. [Dependency Rules](#8-dependency-rules)
+9. [Runtime Components](#9-runtime-components)
+10. [Command, State, and Concurrency Model](#10-command-state-and-concurrency-model)
+11. [Routing and Navigation](#11-routing-and-navigation)
+12. [Content Package Architecture](#12-content-package-architecture)
+13. [Physical IndexedDB Architecture](#13-physical-indexeddb-architecture)
+14. [Atomic Persistence](#14-atomic-persistence)
+15. [Snapshots, Recovery, Retention, and Quota](#15-snapshots-recovery-retention-and-quota)
+16. [Migration and Staging](#16-migration-and-staging)
+17. [Deterministic Randomness](#17-deterministic-randomness)
+18. [Canonical Serialisation, Hashing, Export, and Import](#18-canonical-serialisation-hashing-export-and-import)
+19. [PWA and Service-Worker Architecture](#19-pwa-and-service-worker-architecture)
+20. [Offline and Capability Handling](#20-offline-and-capability-handling)
+21. [Security Architecture](#21-security-architecture)
+22. [Privacy and Diagnostics](#22-privacy-and-diagnostics)
+23. [Performance and Resource Architecture](#23-performance-and-resource-architecture)
+24. [Accessibility and Responsive Architecture](#24-accessibility-and-responsive-architecture)
+25. [Error and Recovery Architecture](#25-error-and-recovery-architecture)
+26. [Testing and Simulation Architecture](#26-testing-and-simulation-architecture)
+27. [CI and Supply-Chain Architecture](#27-ci-and-supply-chain-architecture)
+28. [Hosting and Deployment](#28-hosting-and-deployment)
+29. [Monitoring, Operations, and Rollback](#29-monitoring-operations-and-rollback)
+30. [Release Artifact and Versioning Model](#30-release-artifact-and-versioning-model)
+31. [Architecture Diagrams](#31-architecture-diagrams)
+32. [Traceability](#32-traceability)
+33. [Implementation Sequence and Spikes](#33-implementation-sequence-and-spikes)
+34. [Risks and Controls](#34-risks-and-controls)
+35. [Acceptance Criteria](#35-acceptance-criteria)
+36. [Open Implementation Details](#36-open-implementation-details)
+37. [Approval](#37-approval)
 
 ---
 

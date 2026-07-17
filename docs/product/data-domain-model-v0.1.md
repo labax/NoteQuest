@@ -17,28 +17,28 @@
 
 ## Contents
 
-1. Purpose
-2. Source Basis
-3. Modeling Context
-4. Data Model Scope
-5. Modeling Principles
-6. Bounded Contexts
-7. Domain Overview
-8. Entity Relationship Summary
-9. Core Entities
-10. Value Objects
-11. Enumeration Catalogue
-12. Validation Rules and Invariants
-13. Lifecycle and State Transitions
-14. Persistence and Storage Guidance
-15. Content Provenance and Licensing Data
-16. Import, Export, and Migration
-17. Audit, History, and Event Log Linkage
-18. Deletion, Archival, and Recovery
-19. Traceability
-20. Acceptance Criteria
-21. Open Questions
-22. Approval
+1. [Purpose](#1-purpose)
+2. [Source Basis](#2-source-basis)
+3. [Modeling Context](#3-modeling-context)
+4. [Data Model Scope](#4-data-model-scope)
+5. [Modeling Principles](#5-modeling-principles)
+6. [Bounded Contexts](#6-bounded-contexts)
+7. [Domain Overview](#7-domain-overview)
+8. [Entity Relationship Summary](#8-entity-relationship-summary)
+9. [Core Entities](#9-core-entities)
+10. [Value Objects](#10-value-objects)
+11. [Enumeration Catalogue](#11-enumeration-catalogue)
+12. [Validation Rules and Invariants](#12-validation-rules-and-invariants)
+13. [Lifecycle and State Transitions](#13-lifecycle-and-state-transitions)
+14. [Persistence and Storage Guidance](#14-persistence-and-storage-guidance)
+15. [Content Provenance and Licensing Data](#15-content-provenance-and-licensing-data)
+16. [Import, Export, and Migration](#16-import-export-and-migration)
+17. [Audit, History, and Event Log Linkage](#17-audit-history-and-event-log-linkage)
+18. [Deletion, Archival, and Recovery](#18-deletion-archival-and-recovery)
+19. [Traceability](#19-traceability)
+20. [Acceptance Criteria](#20-acceptance-criteria)
+21. [Open Questions](#21-open-questions)
+22. [Approval](#22-approval)
 
 ---
 

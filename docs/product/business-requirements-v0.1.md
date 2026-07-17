@@ -17,24 +17,24 @@
 
 ## Contents
 
-1. Executive Summary
-2. Business Context and Opportunity
-3. Problem Statement
-4. Business Objectives
-5. Stakeholders and Target Users
-6. Product Vision
-7. Scope
-8. Business Requirements
-9. High-Level Capabilities
-10. Success Measures
-11. Assumptions
-12. Dependencies
-13. Constraints
-14. Risks and Mitigations
-15. Release Approach
-16. Approval Criteria
+1. [Executive Summary](#1-executive-summary)
+2. [Business Context and Opportunity](#2-business-context-and-opportunity)
+3. [Problem Statement](#3-problem-statement)
+4. [Business Objectives](#4-business-objectives)
+5. [Stakeholders and Target Users](#5-stakeholders-and-target-users)
+6. [Product Vision](#6-product-vision)
+7. [Scope](#7-scope)
+8. [Business Requirements](#8-business-requirements)
+9. [High-Level Capabilities](#9-high-level-capabilities)
+10. [Success Measures](#10-success-measures)
+11. [Assumptions](#11-assumptions)
+12. [Dependencies](#12-dependencies)
+13. [Constraints](#13-constraints)
+14. [Risks and Mitigations](#14-risks-and-mitigations)
+15. [Release Approach](#15-release-approach)
+16. [Approval Criteria](#16-approval-criteria)
 17. Open Questions
-18. Approval
+18. [Approval](#18-approval)
 
 ---
 
