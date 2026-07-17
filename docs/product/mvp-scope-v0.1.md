@@ -639,9 +639,9 @@ The following are not required for MVP acceptance:
 | DEP-MVP-004 | [Product Requirements Document v0.1](product-requirements-v0.1.md) and [Functional Requirements Document v0.1](functional-requirements-v0.1.md) | Available; approved baselines | Implementation breakdown and traceability |
 | DEP-MVP-005 | [Data Model / Domain Model Specification v0.1](data-domain-model-v0.1.md) | Available; approved baseline | Persistence, definitions, instances, import, and recovery |
 | DEP-MVP-006 | [UX Flow / Wireframe Requirements v0.1](ux-flow-wireframe-requirements-v0.1.md) | Available; approved baseline | Responsive map, action states, accessibility, and estimation |
-| DEP-MVP-007 | Non-Functional Requirements | Pending | Browser, performance, reliability, privacy, accessibility, and operations |
-| DEP-MVP-008 | Content and Licensing Requirements plus approved inventory | Pending / in progress | Content gate and public release |
-| DEP-MVP-009 | Acceptance Criteria / Test Plan | Pending | Prototype and release gates |
+| DEP-MVP-007 | [Non-Functional Requirements v0.1](non-functional-requirements-v0.1.md) | Available; approved baseline | Browser, performance, reliability, privacy, accessibility, and operations |
+| DEP-MVP-008 | [Content & Licensing Requirements v0.1](content-licensing-requirements-v0.1.md) and approved baseline inventory | Available; approved requirements and baseline inventory; final item-level evidence and production assets remain release-gated | Content gate and public release |
+| DEP-MVP-009 | [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md) | Available; approved baseline | Prototype and release gates |
 | DEP-MVP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Direction approved in Decision Register v0.2; detailed architecture pending | Prototype deployment, persistence, and operational gate |
 | DEP-MVP-011 | Approved visual direction and asset-production plan | Visual direction approved; asset plan and capped budget pending Palace go decision | Release presentation and content gate |
 | DEP-MVP-012 | Deterministic random and automated simulation harness | Pending | Rules, generation, persistence, and prototype gates |
