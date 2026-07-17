@@ -17,28 +17,28 @@
 
 ## Contents
 
-1. Purpose
-2. Source Basis
-3. Quality Context
-4. Scope and Assumptions
-5. Priority and Measurement Conventions
-6. Performance
-7. Reliability and Data Integrity
-8. Availability and Offline Behaviour
-9. Security
-10. Privacy
-11. Accessibility
-12. Compatibility and Responsive Support
-13. Usability
-14. Maintainability and Testability
-15. Observability and Diagnostics
-16. Backup, Recovery, Migration, and Portability
-17. Content and Licensing Quality Controls
-18. Build, Release, and Operations
-19. Traceability and Verification
-20. Acceptance Criteria
-21. Open Questions
-22. Approval
+1. [Purpose](#1-purpose)
+2. [Source Basis](#2-source-basis)
+3. [Quality Context](#3-quality-context)
+4. [Scope and Assumptions](#4-scope-and-assumptions)
+5. [Priority and Measurement Conventions](#5-priority-and-measurement-conventions)
+6. [Performance](#6-performance)
+7. [Reliability and Data Integrity](#7-reliability-and-data-integrity)
+8. [Availability and Offline Behaviour](#8-availability-and-offline-behaviour)
+9. [Security](#9-security)
+10. [Privacy](#10-privacy)
+11. [Accessibility](#11-accessibility)
+12. [Compatibility and Responsive Support](#12-compatibility-and-responsive-support)
+13. [Usability](#13-usability)
+14. [Maintainability and Testability](#14-maintainability-and-testability)
+15. [Observability and Diagnostics](#15-observability-and-diagnostics)
+16. [Backup, Recovery, Migration, and Portability](#16-backup-recovery-migration-and-portability)
+17. [Content and Licensing Quality Controls](#17-content-and-licensing-quality-controls)
+18. [Build, Release, and Operations](#18-build-release-and-operations)
+19. [Traceability and Verification](#19-traceability-and-verification)
+20. [Acceptance Criteria](#20-acceptance-criteria)
+21. [Open Questions](#21-open-questions)
+22. [Approval](#22-approval)
 
 ---
 
@@ -59,7 +59,7 @@ This document does not:
 ### 1.1 Requirement language
 
 - **Shall** identifies a mandatory or explicitly prioritised requirement.
-- **Must**, **Should**, **Could**, and **Won't** retain the project priority meanings defined in Section 5.
+- **Must**, **Should**, **Could**, and **Won't** retain the project priority meanings defined in [Section 5](#5-priority-and-measurement-conventions).
 - A numeric target marked **Proposed** is intended to become binding when this document is approved.
 - An inherited target marked **Approved baseline** is already controlled by an approved upstream document.
 - An implementation may exceed a target, but may not weaken it without an approved change.
@@ -404,7 +404,7 @@ The Core MVP has no approved accounts, backend API, cloud database, shared saves
 | ID | Requirement | Target | Verification | Priority |
 |---|---|---|---|---:|
 | NFR-SEC-025 | Static analysis, dependency audit, and secret scan shall run on release candidates. | 100% release candidates; no unreviewed failure | CI evidence | Must |
-| NFR-SEC-026 | Security defects shall use the project severity model. | Critical and High release treatment as Section 3.2 | Defect review | Must |
+| NFR-SEC-026 | Security defects shall use the project severity model. | Critical and High release treatment as [Section 3.2](#32-quality-failure-severity) | Defect review | Must |
 | NFR-SEC-027 | A newly confirmed Critical vulnerability affecting production shall receive owner triage within one business day. | Triage record | Operations audit | Should |
 | NFR-SEC-028 | A security fix shall not bypass rules, persistence, migration, accessibility, or content gates. | Full affected regression suite passes | Release evidence | Must |
 | NFR-SEC-029 | Security waivers shall name scope, rationale, compensating controls, owner, expiry/review date, and affected releases. | Complete waiver record | Release review | Must |

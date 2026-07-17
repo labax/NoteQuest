@@ -17,22 +17,22 @@
 
 ## Contents
 
-1. Purpose
-2. Source Basis
-3. Product Context
-4. Functional Scope
-5. Users and Permissions
-6. Functional Assumptions
-7. Priority Definitions
-8. Requirement Summary
-9. Detailed Functional Requirements
-10. Cross-Feature Behavior
-11. Error and Recovery Behavior
-12. MVP / Release Exclusions
-13. Traceability Matrix
-14. Acceptance Criteria Summary
-15. Open Questions
-16. Approval
+1. [Purpose](#1-purpose)
+2. [Source Basis](#2-source-basis)
+3. [Product Context](#3-product-context)
+4. [Functional Scope](#4-functional-scope)
+5. [Users and Permissions](#5-users-and-permissions)
+6. [Functional Assumptions](#6-functional-assumptions)
+7. [Priority Definitions](#7-priority-definitions)
+8. [Requirement Summary](#8-requirement-summary)
+9. [Detailed Functional Requirements](#9-detailed-functional-requirements)
+10. [Cross-Feature Behavior](#10-cross-feature-behavior)
+11. [Error and Recovery Behavior](#11-error-and-recovery-behavior)
+12. [MVP / Release Exclusions](#12-mvp-release-exclusions)
+13. [Traceability Matrix](#13-traceability-matrix)
+14. [Acceptance Criteria Summary](#14-acceptance-criteria-summary)
+15. [Open Questions](#15-open-questions)
+16. [Approval](#16-approval)
 
 ---
 

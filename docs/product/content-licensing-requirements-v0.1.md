@@ -18,30 +18,30 @@
 
 ## Contents
 
-1. Purpose
-2. Source Basis
-3. Disclaimer and Review Position
-4. Content Context
-5. Content Scope
-6. Licensing Principles
-7. Source Categories and Approval States
-8. Release Mode Policy
-9. Content Usage Matrix
-10. Product-Level Requirements
-11. Feature-Level Requirements
-12. Provenance Data Requirements
-13. Attribution and Notices
-14. Branding and Unofficial Product Requirements
-15. Art, Icons, Fonts, UI, and Trade Dress
-16. User-Authored and Imported Content
-17. Third-Party and Open-Source Content
-18. Approved Baseline Content Inventory
-19. Review Workflow and Release Gates
-20. Risk Register
-21. Acceptance Criteria
-22. Open Questions
-23. Approval
-24. Pre-Release Checklist
+1. [Purpose](#1-purpose)
+2. [Source Basis](#2-source-basis)
+3. [Disclaimer and Review Position](#3-disclaimer-and-review-position)
+4. [Content Context](#4-content-context)
+5. [Content Scope](#5-content-scope)
+6. [Licensing Principles](#6-licensing-principles)
+7. [Source Categories and Approval States](#7-source-categories-and-approval-states)
+8. [Release Mode Policy](#8-release-mode-policy)
+9. [Content Usage Matrix](#9-content-usage-matrix)
+10. [Product-Level Requirements](#10-product-level-requirements)
+11. [Feature-Level Requirements](#11-feature-level-requirements)
+12. [Provenance Data Requirements](#12-provenance-data-requirements)
+13. [Attribution and Notices](#13-attribution-and-notices)
+14. [Branding and Unofficial Product Requirements](#14-branding-and-unofficial-product-requirements)
+15. [Art, Icons, Fonts, UI, and Trade Dress](#15-art-icons-fonts-ui-and-trade-dress)
+16. [User-Authored and Imported Content](#16-user-authored-and-imported-content)
+17. [Third-Party and Open-Source Content](#17-third-party-and-open-source-content)
+18. [Approved Baseline Content Inventory](#18-approved-baseline-content-inventory)
+19. [Review Workflow and Release Gates](#19-review-workflow-and-release-gates)
+20. [Risk Register](#20-risk-register)
+21. [Acceptance Criteria](#21-acceptance-criteria)
+22. [Open Questions](#22-open-questions)
+23. [Approval](#23-approval)
+24. [Pre-Release Checklist](#24-pre-release-checklist)
 
 ---
 
@@ -345,7 +345,7 @@ Selected release mode: **Public free, non-monetised web release**.
 |---|---|---|
 | contentId | Yes | Stable identifier independent of file order, display name, or source page position. |
 | contentType | Yes | Definition, table, row, prose, visual, font, icon, dependency, notice, fixture, or documentation asset. |
-| sourceCategory | Yes | Approved category from Section 7. |
+| sourceCategory | Yes | Approved category from [Section 7](#7-source-categories-and-approval-states). |
 | sourceName | Yes for bundled/imported content | Human-readable source, e.g. NoteQuest first edition or project-original. |
 | sourceLocation | Yes for source-derived content | PDF page/table/row or controlled source-record reference. |
 | sourceEditionVersion | Yes | Edition, package version, asset version, or reviewed date. |
@@ -356,7 +356,7 @@ Selected release mode: **Public free, non-monetised web release**.
 | restrictions | Yes | Verbatim, visual, attribution, territory, expiry, modification, redistribution, or other constraints. |
 | attributionNoticeId | When required | Reference to approved display-ready notice. |
 | modifications | Should | Paraphrase, transcription, correction, normalisation, cropped/derived asset, or original implementation note. |
-| approvalStatus | Yes | State from Section 7.2. |
+| approvalStatus | Yes | State from [Section 7.2](#72-approval-states). |
 | approvedBy | Yes for approved items | Reviewer identity or controlled reviewer record. |
 | approvedAt | Yes for approved items | ISO 8601 date/time. |
 | contentVersion | Yes | Version used by runtime and saves. |
@@ -367,7 +367,7 @@ Selected release mode: **Public free, non-monetised web release**.
 
 ### 12.1 Row-level inventory rule
 
-A table-level inventory entry in Section 18 authorises the planned content family only. Before a public release candidate:
+A table-level inventory entry in [Section 18](#18-approved-baseline-content-inventory) authorises the planned content family only. Before a public release candidate:
 
 - each playable table row, monster, boss, item, spell, race, class, ability, trap, reward, armour, and weapon definition must have its own stable runtime `contentId`;
 - the release manifest may group shared provenance, but it must still enumerate every selected runtime definition;
