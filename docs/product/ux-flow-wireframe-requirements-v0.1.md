@@ -53,7 +53,7 @@ The wireframes are authored as version-controlled Wireloom 0.7.0 sources under [
 ### 2.1 Controlling sources
 
 1. The BRD defines product purpose, target experience, constraints, privacy, accessibility, and release goals.
-2. The MVP Scope defines the Palace prototype, six-dungeon release boundary, responsive widths, gates, and exclusions.
+2. The [MVP Scope](mvp-scope-v0.1.md) defines the Palace prototype, six-dungeon release boundary, responsive widths, gates, and exclusions.
 3. The PRD defines product outcomes, capabilities, user problems, and product-level recovery expectations.
 4. The FRD defines observable behaviour, legal actions, screen states, responsive behaviour, accessibility, and recovery.
 5. The DRS defines legal game actions, guards, timing, calculations, random results, persistent consequences, and rule transparency.
@@ -68,7 +68,7 @@ When a proposed interaction conflicts with approved behaviour, apply this order:
 2. DRS for mechanical legality and timing.
 3. FRD for observable behaviour.
 4. Data Model for ownership, persistence, history, import, and recovery.
-5. PRD and MVP Scope for product and release boundaries.
+5. PRD and [MVP Scope](mvp-scope-v0.1.md) for product and release boundaries.
 6. This document for interaction and presentation choices.
 
 A wireframe may simplify visual detail, but it must not omit a required state, invent an action, permit an illegal transition, or alter a probability or consequence.

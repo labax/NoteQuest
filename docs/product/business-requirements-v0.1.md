@@ -10,7 +10,7 @@
 | Product / release | NoteQuest Web Application — Core Release |
 | Related documents | [Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md); [Digital Adaptation Feasibility Study](digital-adaptation-feasibility-study.md); *NoteQuest* rulebook, first edition |
 | Primary audience | Product owner, developer, UX designer, QA/tester, content/licensing reviewer, and project stakeholders |
-| Status | Updated baseline incorporating approved Decision Register v0.2 rulings |
+| Status | Updated baseline incorporating approved [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md) rulings |
 | Last updated | 2026-07-16 |
 
 ---
@@ -72,7 +72,7 @@ A faithful web adaptation can:
 
 ### 2.3 Why now
 
-The project has reached the point where the source rules, technical feasibility, and formal product decisions are sufficiently understood to define business requirements. Creating the BRD now provides the business baseline needed before the Product Requirements Document, Digital Rules Specification, Functional Requirements, Data Model, UX Flow, Non-Functional Requirements, and Acceptance Criteria are completed.
+The project has reached the point where the source rules, technical feasibility, and formal product decisions are sufficiently understood to define business requirements. Creating the BRD now provides the business baseline needed before the [Product Requirements Document](product-requirements-v0.1.md), [Digital Rules Specification](digital-rules-specification-v0.1.md), Functional Requirements, Data Model, UX Flow, [Non-Functional Requirements](non-functional-requirements-v0.1.md), and Acceptance Criteria are completed.
 
 ## 3. Problem Statement
 
@@ -111,7 +111,7 @@ The project has reached the point where the source rules, technical feasibility,
 | Stakeholder | Interest / responsibility | Decision authority |
 |---|---|---|
 | Product Owner | Product vision, scope, prioritisation, business acceptance, and release decisions | Final authority for product scope and business acceptance |
-| Rules / Product Designer | Digital Rules Specification, source fidelity, approved rulings, and gameplay interpretation | Approves rules definitions before implementation |
+| Rules / Product Designer | [Digital Rules Specification](digital-rules-specification-v0.1.md), source fidelity, approved rulings, and gameplay interpretation | Approves rules definitions before implementation |
 | Developer / Technical Lead | Architecture, implementation feasibility, persistence, web delivery, and technical quality | Approves technical approach within product constraints |
 | UX/UI Designer | Responsive flows, map readability, action clarity, accessibility, and presentation | Approves UX design against requirements |
 | QA / Tester | Rules verification, regression, persistence testing, simulations, and release evidence | Recommends release acceptance or rejection based on evidence |
@@ -201,7 +201,7 @@ The project has reached the point where the source rules, technical feasibility,
 | ID | Requirement | Priority | Acceptance signal | Source objective |
 |---|---|---:|---|---|
 | BR-001 | The product shall provide a complete playable loop from adventurer creation through dungeon completion, town return, or character death and recovery. | Must | A player can complete the full end-to-end journey without external bookkeeping tools. | BO-001 |
-| BR-002 | The product shall implement the approved core NoteQuest rules and digital rulings without silently inventing or changing mechanics. | Must | Every implemented mechanic traces to the rulebook or an approved decision-register / Digital Rules Specification entry. | BO-001 |
+| BR-002 | The product shall implement the approved core NoteQuest rules and digital rulings without silently inventing or changing mechanics. | Must | Every implemented mechanic traces to the rulebook or an approved decision-register / [Digital Rules Specification](digital-rules-specification-v0.1.md) entry. | BO-001 |
 | BR-003 | The product shall include the six core dungeon types and approved core character, spell, item, monster, boss, trap, and reward content. | Must | The content inventory and functional test suite confirm all approved core content is available. | BO-001 |
 | BR-004 | The product shall support single-player play without requiring a second participant, game master, or manual table interpretation. | Must | Primary users complete the core loop independently during acceptance testing. | BO-001 |
 | BR-005 | The product shall automate dice rolls, table lookups, calculations, triggers, and state changes while making the inputs and results inspectable. | Must | The UI and event history expose relevant dice, source table, modifiers, costs, and final outcomes. | BO-002 |
@@ -282,7 +282,7 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 | ASM-004 | A web-first responsive interface can present the map, critical adventurer state, enemies, and actions effectively across agreed viewports. | Responsive wireframes, prototypes, and usability testing. | UX/UI Designer |
 | ASM-005 | Offline-first local persistence is technically viable under the selected browser support matrix. | Architecture spike and persistence tests. | Technical Lead |
 | ASM-006 | Players accept canonical 2d6 generation and source balance differences without mandatory rebalancing. | Playtest feedback and simulation results. | Rules / Product Designer |
-| ASM-007 | Approved digital rulings in the decision register will be converted into a versioned Digital Rules Specification before production implementation. | Requirements review and traceability audit. | Rules / Product Designer |
+| ASM-007 | Approved digital rulings in the decision register will be converted into a versioned [Digital Rules Specification](digital-rules-specification-v0.1.md) before production implementation. | Requirements review and traceability audit. | Rules / Product Designer |
 | ASM-008 | Replacement artwork can be commissioned or created when existing artwork lacks documented digital-use rights. | Asset inventory and art-production plan. | Content / Licensing Reviewer |
 | ASM-009 | The project can operate the free web application within an approved hosting and maintenance budget. | Hosting architecture, cost estimate, and owner approval. | Product Owner / Operations Owner |
 | ASM-010 | Users understand that local-first saves may require explicit export or backup procedures to protect against browser-data deletion. | UX testing of storage notices and backup flows. | UX/UI Designer |
@@ -300,7 +300,7 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 | DEP-007 | [UX Flow / Wireframe Requirements v0.1](ux-flow-wireframe-requirements-v0.1.md) | UX | Responsive prototype and application design | Available; approved baseline |
 | DEP-008 | [Non-Functional Requirements v0.1](non-functional-requirements-v0.1.md) | Technical / operational | Architecture and release acceptance | Available; approved baseline |
 | DEP-009 | [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md) | QA | Prototype and release approval | Available; approved baseline |
-| DEP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Technical / operational | Prototype deployment | Direction approved in Decision Register v0.2; detailed architecture pending |
+| DEP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Technical / operational | Prototype deployment | Direction approved in [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md); detailed architecture pending |
 | DEP-011 | Approved visual direction and asset-production plan | UX / content | Release presentation | Visual direction approved; asset plan and budget pending prototype pass |
 | DEP-012 | Automated test harness and deterministic random-generation support | Technical / QA | Prototype validation | Pending |
 | DEP-013 | Closed playtest participants and feedback process | External / product | Prototype and release validation | Thresholds and voluntary feedback model approved; participants pending |
@@ -331,7 +331,7 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 
 | ID | Risk | Probability | Impact | Mitigation | Owner |
 |---|---|---:|---:|---|---|
-| RISK-001 | Incomplete or inconsistent rule formalisation causes gameplay defects or rules drift. | High | High | Complete the Digital Rules Specification first; require traceability and deterministic tests for every critical ruling. | Rules / Product Designer |
+| RISK-001 | Incomplete or inconsistent rule formalisation causes gameplay defects or rules drift. | High | High | Complete the [Digital Rules Specification](digital-rules-specification-v0.1.md) first; require traceability and deterministic tests for every critical ruling. | Rules / Product Designer |
 | RISK-002 | Procedural generation produces an unreachable or non-terminating dungeon. | Medium | High | Enforce the approved six-segment target and ten-segment hard maximum, forced staircases, invariant checks, and at least 100,000 deterministic seeds per dungeon type. | Technical Lead / QA |
 | RISK-003 | Save failures or schema defects corrupt persistent dungeons and Graveyard history. | Medium | Critical | Use three named IndexedDB slots, atomic or transactional writes, last-valid snapshots, explicit migrations, truthful autosave status, fault tests, and required versioned export/import. | Technical Lead |
 | RISK-004 | Automated combat feels repetitive or too passive. | Medium | High | Preserve visible dice and decisions; add clear feedback, repeat-action controls, pacing options, and playtest gates without changing balance. | Product Owner / UX Designer |
@@ -348,7 +348,7 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 
 ## 15. Release Approach
 
-1. **Foundation and formalisation** — Approve the BRD, create the Digital Rules Specification, complete the content/rights inventory, and define the MVP and success gates.
+1. **Foundation and formalisation** — Approve the BRD, create the [Digital Rules Specification](digital-rules-specification-v0.1.md), complete the content/rights inventory, and define the MVP and success gates.
 2. **Palace PWA prototype** — Implement adventurer generation, the Palace dungeon, incremental mapping, doors and traps, torches, basic combat, town return, death, three local save slots, export/import, and responsive PWA delivery with placeholders rather than final art.
 3. **Prototype validation** — Run at least 100,000 seeds for the Palace algorithm, the approved persistence fault matrix, WCAG and browser/viewport checks, and representative playtests. Require all Must scenarios, zero termination/save-corruption failures, at least 80% unaided completion, and at least 70% acceptable-or-better ratings before a written go decision.
 4. **Core MVP implementation** — Add all six dungeons, races, classes, spells, equipment, monster traits, secret passages, stealth, armour, repopulation, corpse recovery, Graveyard, bosses, full persistence, and event history.
@@ -384,7 +384,7 @@ A release may be approved when:
 - [ ] No unknown, restricted, or unapproved content or asset is included.
 - [ ] The application is publicly accessible without payment or a mandatory account.
 
-## 17. Resolved Decisions from Decision Register v0.2
+## 17. Resolved Decisions from [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md)
 
 All former BRD open questions are resolved by the approved [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md). These resolutions are controlling unless changed through formal scope control.
 

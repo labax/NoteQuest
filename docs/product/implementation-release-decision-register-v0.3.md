@@ -26,7 +26,7 @@
 - A blank **Approved** cell means the decision remains open.
 - An approved row must be incorporated into its named downstream architecture, test, content, operations, UX, or release document.
 - Later implementation details may refine an approved ruling, but may not contradict it without an approved amendment.
-- Earlier approved rows concerning exact source prose and language scope are not reopened. In particular, LIC-002 and LIC-010 remain governed by the conservative paraphrase-by-default and English-only baselines already incorporated into Decision Register v0.2 and the Content & Licensing Requirements.
+- Earlier approved rows concerning exact source prose and language scope are not reopened. In particular, LIC-002 and LIC-010 remain governed by the conservative paraphrase-by-default and English-only baselines already incorporated into [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md) and the [Content & Licensing Requirements](content-licensing-requirements-v0.1.md).
 
 ### 1.1 Decision status vocabulary
 
@@ -48,7 +48,7 @@
 | Delivery | Free, English-only, single-player, web-first Core MVP with no monetisation. |
 | Connectivity | Installable static PWA; service-worker-cached application and approved static content; IndexedDB game state; no backend dependency for core play. |
 | Persistence | Three named slots, truthful autosave, last-known-valid recovery, sequential migrations, versioned export/import, slot isolation, and no silent reset or reroll. |
-| Rules | Digital Rules Specification v0.1 and all approved Section 23 rulings. |
+| Rules | [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md) and all approved Section 23 rulings. |
 | Randomness | Separate deterministic streams for dungeon generation, combat, and expedition repopulation; committed outcomes survive reload. |
 | Prototype | Palace is the one-dungeon prototype; all Must scenarios, seed/fault gates, usability thresholds, accessibility evidence, and written go/no-go are required. |
 | Accessibility | WCAG 2.2 AA; approved keyboard, browser, NVDA, VoiceOver, TalkBack, reduced-motion, reflow, contrast, and textual-map baseline. |
@@ -97,7 +97,7 @@
 | IRD-SER-001 | Which canonical serialisation and integrity-hash standards are used? | OQ-DM-003; OQ-CL-008 | Canonicalise JSON-compatible manifests, snapshots, and exported state using **RFC 8785 JSON Canonicalization Scheme** semantics and calculate **SHA-256** hashes over UTF-8 canonical bytes. Binary attachments, if later approved, receive individual SHA-256 entries in the manifest. Hashes detect accidental corruption and are not signatures or encryption. | Technical Lead / QA / Content Reviewer — architecture approval |  | yes |
 | IRD-EXP-001 | What is the user-facing export format? | OQ-DM-004; OQ-NFR-004; OQ-UX-004 | Export one versioned `.nqsave` ZIP archive containing at minimum `manifest.json`, `save.json`, and `checksums.sha256`. JSON payloads remain human-inspectable after extraction. The archive contains no executable content and is not encrypted. The export UI must explain that the file contains private play data. | Product Owner / Technical Lead / UX — architecture and UX approval |  | yes |
 | IRD-EXP-002 | What import process is normative? | Data Model import lifecycle; NFR security | Read the archive into isolated staging; enforce file-count, path, compression, and uncompressed-size limits; reject traversal, duplicate, unsupported, or extra required files; verify hashes; parse without executing content; validate schema and content references; migrate sequentially if supported; show a privacy/scope preview; create a protected pre-import snapshot; and commit only after explicit confirmation. Any failure leaves the target slot unchanged. | Technical Lead / QA / Security / UX — import implementation |  | yes |
-| IRD-SER-002 | Does the content manifest use the same canonicalisation and hashing policy? | Content & Licensing Requirements; OQ-CL-008 | Yes. Runtime content packages and the release content inventory use the same canonical JSON and SHA-256 policy, with independent package/version IDs and per-item provenance. A release build fails when selected content and the recorded manifest hashes differ. | Technical Lead / Content Reviewer / QA — content pipeline |  | yes |
+| IRD-SER-002 | Does the content manifest use the same canonicalisation and hashing policy? | [Content & Licensing Requirements](content-licensing-requirements-v0.1.md); OQ-CL-008 | Yes. Runtime content packages and the release content inventory use the same canonical JSON and SHA-256 policy, with independent package/version IDs and per-item provenance. A release build fails when selected content and the recorded manifest hashes differ. | Technical Lead / Content Reviewer / QA — content pipeline |  | yes |
 
 ---
 
@@ -228,7 +228,7 @@ Approval of this register requires the following follow-up work:
 
 | Area | Required update |
 |---|---|
-| Architecture | Create the Web Architecture, Offline Strategy and Hosting Plan with component boundaries, physical IndexedDB schema/indexes, PWA lifecycle, import/export pipeline, deployment design, threat controls, and architecture diagrams. |
+| Architecture | Create the [Web Architecture, Offline Strategy and Hosting Plan](web-architecture-offline-hosting-plan-v0.1.md) with component boundaries, physical IndexedDB schema/indexes, PWA lifecycle, import/export pipeline, deployment design, threat controls, and architecture diagrams. |
 | Data Model | Add a physical-schema mapping appendix or implementation note without changing logical invariants. |
 | UX | Apply approved mobile-combat, diagnostics, blocking-workflow, and post-test Wireloom governance decisions. |
 | NFR | Record accepted provider/reference-environment refinements while preserving approved Must thresholds. |
@@ -244,14 +244,14 @@ Approval of this register requires the following follow-up work:
 The decision-approval portion of this register is complete. Downstream incorporation and implementation evidence remain open.
 
 - [x] Every decision row contains `yes`, or `no` with a complete controlling alternative.
-- [x] No approved alternative contradicts Decision Registers v0.1/v0.2, the DRS, BRD, MVP Scope, or approved licensing boundaries without an explicit scope amendment.
-- [ ] Architecture-blocking rows are incorporated into the approved Web Architecture, Offline Strategy and Hosting Plan.
+- [x] No approved alternative contradicts Decision Registers v0.1/v0.2, the DRS, BRD, [MVP Scope](mvp-scope-v0.1.md), or approved licensing boundaries without an explicit scope amendment.
+- [ ] Architecture-blocking rows are incorporated into the approved [Web Architecture, Offline Strategy and Hosting Plan](web-architecture-offline-hosting-plan-v0.1.md).
 - [ ] Physical persistence, RNG, canonical serialisation, export, import, and recovery decisions have deterministic reference tests.
 - [ ] Test, security, licence, simulation, and CI decisions are implemented in protected workflows.
 - [ ] Palace content, placeholder, participant, consent, task, questionnaire, seed, and evidence plans are frozen before external testing.
 - [x] Hosting, monitoring, logging, diagnostics, owner, access, rollback, evidence, identity, notice, and licence-boundary decision rulings are approved; their required implementation and specialist review remain release-gated.
 - [x] Post-Palace asset decisions remain deferred until a written go decision and are not treated as pre-approved production spend.
-- [ ] BRD, MVP Scope, PRD, FRD, Data Model, UX, NFR, Content Requirements, Test Plan, and future Architecture documents reference this register where applicable.
+- [ ] BRD, [MVP Scope](mvp-scope-v0.1.md), PRD, FRD, Data Model, UX, NFR, Content Requirements, Test Plan, and future Architecture documents reference this register where applicable.
 
 ---
 

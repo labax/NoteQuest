@@ -1,4 +1,4 @@
-# Acceptance Criteria / Test Plan v0.1 - Part D - Purpose, Sources, Context, Scope, and Strategy
+# [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md) - Part D - Purpose, Sources, Context, Scope, and Strategy
 
 This file is a normative part of [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md).
 
@@ -45,14 +45,14 @@ This plan introduces proposed execution details such as fixture names, minimum U
 The controlling sources are:
 
 1. **BRD** - business outcomes, free release, rights, privacy, operational ownership, and high-level acceptance.
-2. **MVP Scope** - Palace gate, six-dungeon boundary, supported browser/viewport matrix, release gates, simulation volume, exclusions, and success measures.
+2. **[MVP Scope](mvp-scope-v0.1.md)** - Palace gate, six-dungeon boundary, supported browser/viewport matrix, release gates, simulation volume, exclusions, and success measures.
 3. **PRD** - user outcomes, product capabilities, rollout, privacy, and measurable product success.
 4. **FRD** - 12 feature areas, observable states, cross-feature behaviour, functional errors, and requirement IDs.
 5. **DRS** - canonical mechanics, action timing, legal transitions, random results, persistence consequences, and reference tests.
 6. **Data Model** - entities, ownership, identities, invariants, snapshots, events, import/export, migration, provenance, and retention.
 7. **UX specification** - journeys, screens, component states, responsive transformations, keyboard/focus/announcement behaviour, visual/textual map parity, and Wireloom references.
 8. **NFR** - reference performance profiles, quality thresholds, security/privacy, WCAG 2.2 AA, browser/AT matrix, fault volumes, build/release, and rollback.
-9. **Content & Licensing Requirements** - content use, paraphrase/visual restrictions, source inventory, provenance, notices, dependencies, and release gates.
+9. **[Content & Licensing Requirements](content-licensing-requirements-v0.1.md)** - content use, paraphrase/visual restrictions, source inventory, provenance, notices, dependencies, and release gates.
 10. **Decision Registers** - controlling approved rulings and any approved alternative comments.
 
 When documents conflict, the later approved decision register and explicitly approved downstream baseline control. No test may redefine a rule through expected output; ambiguous behaviour must return to the requirements/decision process.

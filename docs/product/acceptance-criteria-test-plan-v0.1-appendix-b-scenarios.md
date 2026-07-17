@@ -1,4 +1,4 @@
-# Acceptance Criteria / Test Plan v0.1 - Appendix B - Detailed Acceptance Scenarios
+# [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md) - Appendix B - Detailed Acceptance Scenarios
 
 This file is a normative part of [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md).
 

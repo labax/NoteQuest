@@ -1211,7 +1211,7 @@ Until this is resolved, technical prototyping may be possible internally, but pu
 
 ## Phase 0: Rules formalisation
 
-Before production code, create a Digital Rules Specification containing:
+Before production code, create a [Digital Rules Specification](digital-rules-specification-v0.1.md) containing:
 
 - Definitions.
 - Action timing.
@@ -1390,7 +1390,7 @@ A digital companion rather than a complete game could be produced much faster. A
 
 | Risk | Probability | Impact | Mitigation |
 |---|---:|---:|---|
-| Rules ambiguities produce inconsistent gameplay | High | High | Complete a Digital Rules Specification first |
+| Rules ambiguities produce inconsistent gameplay | High | High | Complete a [Digital Rules Specification](digital-rules-specification-v0.1.md) first |
 | Dungeon generation fails to terminate cleanly | Medium | High | Add floor budgets and guaranteed staircase rules |
 | Combat feels repetitive | Medium | High | Strong presentation, fast controls, event feedback |
 | Limited content becomes repetitive | High | Medium | Cosmetic variation and later content packs |

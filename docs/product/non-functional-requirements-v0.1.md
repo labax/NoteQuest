@@ -51,8 +51,8 @@ It translates the approved product, rules, data, persistence, UX, accessibility,
 This document does not:
 
 - choose the frontend framework, state library, build system, IndexedDB wrapper, CDN provider, hosting vendor, or monitoring vendor;
-- replace the Digital Rules Specification or Functional Requirements Document;
-- define final executable test cases, which belong to the Acceptance Criteria / Test Plan;
+- replace the [Digital Rules Specification](digital-rules-specification-v0.1.md) or [Functional Requirements Document](functional-requirements-v0.1.md);
+- define final executable test cases, which belong to the [Acceptance Criteria / Test Plan](acceptance-criteria-test-plan-v0.1.md);
 - approve new telemetry, cloud accounts, backend services, monetisation, localisation, or content;
 - change source-faithful probabilities, outcomes, persistence semantics, or release scope.
 
@@ -71,7 +71,7 @@ This document does not:
 ### 2.1 Controlling sources
 
 1. The BRD defines business outcomes, release constraints, privacy, free access, rights obligations, and operational ownership.
-2. The MVP Scope defines the Palace gate, six-dungeon boundary, browser and viewport matrix, deterministic simulation thresholds, release gates, and exclusions.
+2. The [MVP Scope](mvp-scope-v0.1.md) defines the Palace gate, six-dungeon boundary, browser and viewport matrix, deterministic simulation thresholds, release gates, and exclusions.
 3. The PRD defines product-level capabilities, recovery expectations, local-first use, success measures, and rollout.
 4. The FRD defines observable application behaviour, functional error states, responsive behaviour, persistence obligations, and traceability.
 5. The DRS defines deterministic mechanics, legal actions, timing, rules-result evidence, random-stream behaviour, and persistent consequences.
@@ -88,7 +88,7 @@ When requirements conflict, apply this order:
 3. FRD for observable functional behaviour.
 4. Data Model for durable ownership, persistence, identity, history, import, migration, and recovery.
 5. UX specification for information hierarchy, interaction, focus, announcements, and responsive presentation.
-6. PRD and MVP Scope for product and release boundaries.
+6. PRD and [MVP Scope](mvp-scope-v0.1.md) for product and release boundaries.
 7. This document for measurable quality attributes and verification thresholds.
 8. Architecture and implementation documents for technical realisation.
 
@@ -785,7 +785,7 @@ Observability for Core MVP is intentionally limited. It supports release availab
 
 ### 19.2 Requirement verification status
 
-At draft stage, each requirement is **Specified**. The Acceptance Criteria / Test Plan shall assign:
+At draft stage, each requirement is **Specified**. The [Acceptance Criteria / Test Plan](acceptance-criteria-test-plan-v0.1.md) shall assign:
 
 - test case or review ID;
 - automated/manual classification;

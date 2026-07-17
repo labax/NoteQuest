@@ -13,7 +13,7 @@ This document remains the approved historical baseline for the original product,
 - Review each recommended ruling.  
 - Add comments, alternatives, conditions, or questions in the **Comments / alternative ruling** column.  
 - Tick **Approved** only when the recommendation is accepted as the project baseline.  
-- An approved row becomes an input to the Product Requirements, Functional Requirements, Digital Rules Specification, Data Model, UX Flow, and Acceptance Criteria documents.  
+- An approved row becomes an input to the Product Requirements, Functional Requirements, [Digital Rules Specification](digital-rules-specification-v0.1.md), Data Model, UX Flow, and Acceptance Criteria documents.  
 - Where a comment changes the recommendation, the approved baseline is the recommendation as amended by that comment.  
 - Legal and licensing recommendations require confirmation by an appropriately qualified rights or legal reviewer before public release.  
   
@@ -27,7 +27,7 @@ This document remains the approved historical baseline for the original product,
 | PROD-002 | What is the product’s primary design principle? | Preserve the source game’s procedural exploration, torch pressure, lethality, simple combat, persistent dungeons, corpse recovery, and Graveyard. | <!-- comments -->                                 | yes      |  
 | PROD-003 | What is the initial player model? | Single-player only for the initial release. Multiplayer and cooperative play are explicitly deferred. | <!-- comments -->                                 | yes      |  
 | PROD-004 | What content is included in the initial adaptation? | Include the six core dungeon types and core rules only. Treat Expanded World and other supplements as separate future scopes. | <!-- comments -->                                 | yes      |  
-| PROD-005 | How should ambiguities in the tabletop rules be handled? | Use approved digital rulings documented in a versioned Digital Rules Specification. Never resolve ambiguity silently in code. | <!-- comments -->                                 | yes      |  
+| PROD-005 | How should ambiguities in the tabletop rules be handled? | Use approved digital rulings documented in a versioned [Digital Rules Specification](digital-rules-specification-v0.1.md). Never resolve ambiguity silently in code. | <!-- comments -->                                 | yes      |  
 | PROD-006 | Are house rules part of the baseline? | Keep one canonical rules mode for MVP. Defer optional house-rule presets until after the faithful baseline is stable. | <!-- comments -->                                 | yes      |  
 | PROD-007 | What is the intended release model? | Develop as a releasable standalone application, while treating commercial publication as dependent on confirmed adaptation and content rights. | develop a web application                         | no       |  
 | PROD-008 | What platforms are the initial design target? | Design desktop and tablet first, with responsive mobile support considered but not allowed to compromise the primary interface. | design for web first with full responsive support | no       |  
@@ -314,7 +314,7 @@ This document remains the approved historical baseline for the original product,
 | MVP-007 | Are crafting and detailed town exploration included? | No. | <!-- comments --> | yes |  
 | MVP-008 | Are cloud accounts, leaderboards, and live services included? | No. | <!-- comments --> | yes |  
 | MVP-009 | Is fully animated combat required? | No. Use lightweight 2D feedback, readable logs, and optional acceleration. | <!-- comments --> | yes |  
-| MVP-010 | What must be approved before detailed application design is considered complete? | Approve adaptation scope, rights position, Digital Rules Specification, dungeon termination, map model, combat timing, resource rules, persistence model, save/randomness policy, platform baseline, accessibility baseline, and MVP acceptance criteria. | <!-- comments --> | yes |  
+| MVP-010 | What must be approved before detailed application design is considered complete? | Approve adaptation scope, rights position, [Digital Rules Specification](digital-rules-specification-v0.1.md), dungeon termination, map model, combat timing, resource rules, persistence model, save/randomness policy, platform baseline, accessibility baseline, and MVP acceptance criteria. | <!-- comments --> | yes |  
   
 ---  
   
@@ -324,7 +324,7 @@ This document remains the approved historical baseline for the original product,
 |---|---|---|---|  
 | GATE-001 | Product direction and MVP boundaries are approved. | <!-- comments --> | yes |  
 | GATE-002 | Adaptation, content, artwork, branding, commercial, and localisation rights are confirmed or explicitly constrained for prototype-only work. | <!-- comments --> | yes |  
-| GATE-003 | All core rules decisions are approved and ready to be converted into the Digital Rules Specification. | <!-- comments --> | yes |  
+| GATE-003 | All core rules decisions are approved and ready to be converted into the [Digital Rules Specification](digital-rules-specification-v0.1.md). | <!-- comments --> | yes |  
 | GATE-004 | Dungeon generation is guaranteed to terminate and the map model is approved. | <!-- comments --> | yes |  
 | GATE-005 | Combat, traits, armour, inventory, spells, stealth, light, death, retreat, town, and recovery timing are approved. | <!-- comments --> | yes |  
 | GATE-006 | Domain entities, application states, persistence, randomness, save migration, import, and export policies are approved. | <!-- comments --> | yes |  

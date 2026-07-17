@@ -57,9 +57,9 @@ Implementation must not invent a mechanic, timing exception, probability, reward
 ### 2.1 Sources
 
 1. The *NoteQuest* first-edition Core Book is the source for canonical mechanics, tables, names, and content.
-2. The approved original Digital Adaptation Decision Register formalises ambiguous digital behaviour.
-3. Decision Register v0.2 supplies the controlling prototype, dungeon-generation, randomness, persistence, accessibility, and operations decisions.
-4. The approved BRD and MVP Scope define the required release boundary.
+2. The approved original [Digital Adaptation Decision Register](digital-adaptation-decision-register.md) formalises ambiguous digital behaviour.
+3. [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md) supplies the controlling prototype, dungeon-generation, randomness, persistence, accessibility, and operations decisions.
+4. The approved BRD and [MVP Scope](mvp-scope-v0.1.md) define the required release boundary.
 5. Approved content definitions provide the authorised rows for races, classes, spells, dungeon tables, monsters, bosses, traps, rewards, weapons, and armour.
 
 ### 2.2 Precedence
