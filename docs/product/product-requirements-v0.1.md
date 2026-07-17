@@ -143,7 +143,7 @@ This creates avoidable setup and bookkeeping effort, inconsistent rule resolutio
 | PP-009 | Explicit correction | Manual dice entry or correction, where supported, is deliberate, validated, and recorded; silent overrides and baseline house-rule presets are excluded. |
 | PP-010 | Licensing-conscious | Bundled content and assets require provenance, approval, attribution, and the correct rights position before release. |
 | PP-011 | Free core experience | The complete approved Core MVP contains no payment, advertising, subscription, or paid-access mechanism. |
-| PP-012 | Scope discipline | Expansion systems cannot enter the Core MVP without an approved change to the BRD, MVP Scope, and affected specifications. |
+| PP-012 | Scope discipline | Expansion systems cannot enter the Core MVP without an approved change to the BRD, [MVP Scope](mvp-scope-v0.1.md), and affected specifications. |
 
 ## 6. Scope and Priorities
 
@@ -151,7 +151,7 @@ This creates avoidable setup and bookkeeping effort, inconsistent rule resolutio
 
 - Complete single-player gameplay from save creation and adventurer generation through exploration, combat, retreat, town, death and recovery, boss victory, and later resume.
 - All six approved Core Book dungeon types and authorised core races, classes, spells, equipment, monsters, bosses, traps, rewards, and town procedures.
-- Canonical rules behavior defined by the approved decision registers and Digital Rules Specification.
+- Canonical rules behavior defined by the approved decision registers and [Digital Rules Specification](digital-rules-specification-v0.1.md).
 - Incremental graph-based dungeon generation with persistent floors, connections, content, and a readable hybrid dungeon map.
 - Guaranteed boss reachability and termination using the approved six-segment target, ten-segment hard maximum, increasing staircase pressure, and forced staircase.
 - Doors, locks, traps, keys, breaking, secret passages, stealth, alerts, torches, alternative light, arms, and hands.
@@ -277,20 +277,20 @@ flowchart TD
 
 ## 8. Product Requirements
 
-The requirements below define observable product outcomes. Detailed formulas, timing, table rows, and mechanical state transitions remain controlled by the Digital Rules Specification.
+The requirements below define observable product outcomes. Detailed formulas, timing, table rows, and mechanical state transitions remain controlled by the [Digital Rules Specification](digital-rules-specification-v0.1.md).
 
 | ID | Requirement | Priority | Acceptance signal | Linked outcome |
 |---|---|---:|---|---|
 | PR-001 | The product shall provide a complete playable loop from local save creation through adventurer creation, dungeon exploration, encounter resolution, town, boss victory or death, recovery, and later resume. | Must | All Must end-to-end scenarios pass without external bookkeeping or source-table consultation. | PO-001 |
 | PR-002 | The Core MVP shall support one local player and shall require no game master, second player, or multiplayer service. | Must | Every core workflow is completable by one player. | PO-001, PO-008 |
 | PR-003 | The product shall include all six approved Core Book dungeon types and authorised core gameplay content. | Must | Content inventory and acceptance tests confirm all approved core definitions are available. | PO-001, PO-007 |
-| PR-004 | The canonical mode shall implement approved NoteQuest rules and rulings without unsupported probabilities, balance changes, mechanics, rewards, or consequences. | Must | Every implemented mechanic traces to the Digital Rules Specification or approved decision record. | PO-001, PO-002 |
+| PR-004 | The canonical mode shall implement approved NoteQuest rules and rulings without unsupported probabilities, balance changes, mechanics, rewards, or consequences. | Must | Every implemented mechanic traces to the [Digital Rules Specification](digital-rules-specification-v0.1.md) or approved decision record. | PO-001, PO-002 |
 | PR-005 | The product shall automate dice, table lookup, calculations, triggers, and state changes while preserving natural values and making the result inspectable. | Must | Players and testers can inspect dice, table and row IDs, modifiers, costs, choices, and final outcomes. | PO-002, PO-005 |
 | PR-006 | The product shall expose only legal actions for the current state and shall show material costs, warnings, and irreversible consequences before commitment where appropriate. | Must | Invalid actions do not mutate state; last-light, breaking, discard, overwrite, reset, and import actions use clear confirmation. | PO-002, PO-003 |
 | PR-007 | The product shall maintain a persistent hybrid dungeon map showing current location, floors, connections, door states, occupancy, corpses, drops, stairs, entrance, boss room, and secret-search state. | Must | Visual and textual map paths provide equivalent navigation and action access. | PO-001, PO-004 |
 | PR-008 | Dungeon content shall be generated incrementally only after an unexplored connection is successfully opened and shall persist immediately after resolution. | Must | Unopened destinations remain unresolved; reload restores committed generated content. | PO-003, PO-005 |
 | PR-009 | Every floor shall use the approved six non-stair segment target and ten-segment hard maximum, with post-target staircase pressure and forced stairs at the maximum. | Must | At least 100,000 deterministic seeds per dungeon type yield zero non-terminating dungeons and zero unreachable boss rooms. | PO-005 |
-| PR-010 | The product shall support the approved exploration system, including door states, traps, locks, breaking, normal and master keys, secret passages, stealth, alerts, torches, alternative light, arms, and hands. | Must | All relevant Digital Rules Specification fixtures and user journeys pass. | PO-001, PO-002 |
+| PR-010 | The product shall support the approved exploration system, including door states, traps, locks, breaking, normal and master keys, secret passages, stealth, alerts, torches, alternative light, arms, and hands. | Must | All relevant [Digital Rules Specification](digital-rules-specification-v0.1.md) fixtures and user journeys pass. | PO-001, PO-002 |
 | PR-011 | The product shall support approved turn-based combat, target selection, weapon and spell resolution, monster traits, combined monster damage, armour allocation, escape restrictions, death, victory, bosses, and rewards. | Must | Deterministic combat fixtures and complete encounter journeys pass. | PO-001, PO-002, PO-006 |
 | PR-012 | The product shall support backpack capacity, equipped items, armour durability, spell charges, keys, consumables, coins, loot choices, overflow resolution, drops, sales, and item recovery without silent loss of item identity or state. | Must | Inventory remains legal and item state survives ownership and location changes. | PO-001, PO-003 |
 | PR-013 | The product shall support safe retreat, town rest, spell restoration, armour repair, torch purchase, item sale, dungeon re-entry, monster healing, and eligible room repopulation. | Must | Expedition lifecycle scenarios pass across close and reload. | PO-001, PO-003 |
@@ -314,7 +314,7 @@ The requirements below define observable product outcomes. Detailed formulas, ti
 | PR-031 | The Palace prototype shall pass all Must scenarios, at least 100,000 terminating and boss-reachable seeds, zero save-corruption failures, at least 80% unaided core-flow completion, and at least 70% acceptable-or-better ratings for combat pacing, map clarity, and overall play before a written go decision. | Must | Prototype evidence pack and written decision are approved. | PO-005, PO-006 |
 | PR-032 | Public deployment shall use protected tagged GitHub Actions, immutable versioned artifacts, a retained previous release, privacy-safe monitoring, safe update activation after a save point, and one-action rollback. | Must | Release and rollback rehearsal passes without save loss. | PO-003, PO-008 |
 | PR-033 | The product should provide fast repeat actions, optional reduced animation, and non-mechanical cosmetic variation without hiding decisions, triggers, or resource changes. | Should | At least 70% of Palace playtesters rate pacing acceptable or better. | PO-006 |
-| PR-034 | The Core MVP shall exclude every system listed under Won't Have unless the BRD, MVP Scope, PRD, and affected specifications are formally changed. | Must | Release scope audit finds no unapproved expansion behavior. | PO-007, PO-008 |
+| PR-034 | The Core MVP shall exclude every system listed under Won't Have unless the BRD, [MVP Scope](mvp-scope-v0.1.md), PRD, and affected specifications are formally changed. | Must | Release scope audit finds no unapproved expansion behavior. | PO-007, PO-008 |
 
 ## 9. Feature Requirements
 
@@ -751,12 +751,12 @@ No production analytics are enabled by default. Release evidence comes from auto
 | DEP-PRD-002 | [MVP Scope v0.1](mvp-scope-v0.1.md) | Product Owner | Priorities, exclusions, and gates | Available; approved baseline |
 | DEP-PRD-003 | Approved Digital Adaptation Decision Registers v0.1 and v0.2 | Product / Rules | Product, UX, persistence, content, and operations boundaries | Available; approved baselines |
 | DEP-PRD-004 | [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md) | Rules / Product Designer | Mechanical requirements and deterministic tests | Available baseline; Section 23 interpretive rulings require formal sign-off before affected implementation is final |
-| DEP-PRD-005 | Functional Requirements Document | Product / Technical Lead | Observable feature behavior and implementation breakdown | Pending; next downstream document |
+| DEP-PRD-005 | [Functional Requirements Document](functional-requirements-v0.1.md) | Product / Technical Lead | Observable feature behavior and implementation breakdown | Pending; next downstream document |
 | DEP-PRD-006 | Data / Domain Model Specification | Technical Lead | Persisted entities, definitions, relations, schemas, migration, and export | Pending |
 | DEP-PRD-007 | UX Flow and Wireframe Requirements | UX Lead | Navigation, responsive composition, textual map, states, and estimation | Pending |
-| DEP-PRD-008 | Non-Functional Requirements | Technical / Operations | Performance, reliability, security, browser, privacy, and operational detail | Pending |
+| DEP-PRD-008 | [Non-Functional Requirements](non-functional-requirements-v0.1.md) | Technical / Operations | Performance, reliability, security, browser, privacy, and operational detail | Pending |
 | DEP-PRD-009 | Content and Licensing Requirements plus item-level inventory | Content / Licensing Reviewer | Content implementation and public release | In progress; core permissions recorded |
-| DEP-PRD-010 | Acceptance Criteria / Test Plan | QA Lead | Palace gate and Core MVP approval | Pending |
+| DEP-PRD-010 | [Acceptance Criteria / Test Plan](acceptance-criteria-test-plan-v0.1.md) | QA Lead | Palace gate and Core MVP approval | Pending |
 | DEP-PRD-011 | Web architecture and PWA implementation plan | Technical Lead | Prototype implementation and deployment | Direction approved; detailed design pending |
 | DEP-PRD-012 | Deterministic random and automated simulation harness | Technical Lead / QA | Generation, rules, persistence, and prototype gates | Pending |
 | DEP-PRD-013 | Representative Palace playtest participants and voluntary feedback process | Product / UX | Prototype usability, pacing, and go decision | Thresholds approved; recruitment pending |
@@ -777,7 +777,7 @@ No production analytics are enabled by default. Release evidence comes from auto
 | RISK-008 | Service-worker update changes code during unsafe state | Causes inconsistent runtime or save behavior | Download in background; activate only after save point and reload; retain prior artifact | Technical Lead / Operations |
 | RISK-009 | Browser behavior differs across the approved matrix | Offline, storage, layout, or accessibility failures appear late | Architecture spikes and continuous matrix testing beginning with Palace | Technical Lead / QA |
 | RISK-010 | Free hosting and maintenance cost becomes unsustainable | Threatens availability or release cadence | Approve budget and named ownership before public gate; use static CDN-backed deployment | Product / Operations |
-| RISK-011 | Scope creep adds expansion systems before core validation | Delays delivery and reduces rules confidence | Require formal changes to BRD, MVP Scope, PRD, and affected specifications | Product Owner |
+| RISK-011 | Scope creep adds expansion systems before core validation | Delays delivery and reduces rules confidence | Require formal changes to BRD, [MVP Scope](mvp-scope-v0.1.md), PRD, and affected specifications | Product Owner |
 | RISK-012 | Overly detailed history harms storage or usability | Slows the interface and complicates saves | Apply approved retention and default-display limits; store structured records efficiently | Technical Lead / UX |
 | RISK-013 | Canonical imbalance produces uneven runs | Some combinations feel much easier or harder | Preserve source behavior, measure with simulation and playtests, and defer variants | Product / Rules |
 | RISK-014 | Final art work begins before product validation | Wastes budget if map or interaction changes | Use placeholders through Palace and approve replacement-art plan only after go decision | Product / Content / UX |
@@ -787,7 +787,7 @@ No production analytics are enabled by default. Release evidence comes from auto
 ### Delivery stages
 
 1. **Requirements foundation**
-   - Approve the PRD, Functional Requirements, Data / Domain Model, UX Flow, Non-Functional Requirements, Content and Licensing Requirements, and Acceptance Criteria / Test Plan.
+   - Approve the PRD, Functional Requirements, Data / Domain Model, UX Flow, [Non-Functional Requirements](non-functional-requirements-v0.1.md), Content and Licensing Requirements, and [Acceptance Criteria / Test Plan](acceptance-criteria-test-plan-v0.1.md).
    - Approve the DRS Section 23 interpretive rulings required by the Palace feature set.
    - Select the production-intent web/PWA architecture and deterministic test harness.
 
@@ -840,10 +840,10 @@ No production analytics are enabled by default. Release evidence comes from auto
 
 ## 15. Acceptance and Sign-Off
 
-- [ ] Product summary, users, outcomes, priorities, and exclusions match the approved BRD and MVP Scope.
+- [ ] Product summary, users, outcomes, priorities, and exclusions match the approved BRD and [MVP Scope](mvp-scope-v0.1.md).
 - [ ] Every Must product requirement has an observable acceptance signal.
 - [ ] Feature areas cover the complete core journey and relevant empty, error, confirmation, and recovery states.
-- [ ] Product requirements delegate formulas, tables, timing, and mechanical state transitions to the Digital Rules Specification.
+- [ ] Product requirements delegate formulas, tables, timing, and mechanical state transitions to the [Digital Rules Specification](digital-rules-specification-v0.1.md).
 - [ ] DRS Section 23 interpretive rulings required by the Palace prototype are approved or explicitly tracked as blockers.
 - [ ] Three-slot persistence, autosave, migrations, export/import, recovery, event retention, and safe update behavior are represented.
 - [ ] Responsive browser, viewport, keyboard, screen-reader, textual-map, reduced-motion, and WCAG expectations are testable.
@@ -853,7 +853,7 @@ No production analytics are enabled by default. Release evidence comes from auto
 - [ ] Free access and no-monetisation requirements are represented.
 - [ ] Dependencies, risks, rollout, rollback, and known limitations are reviewed by the responsible owners.
 - [ ] Product Owner approves the Core MVP product requirements.
-- [ ] Rules / Product Designer confirms consistency with the Digital Rules Specification.
+- [ ] Rules / Product Designer confirms consistency with the [Digital Rules Specification](digital-rules-specification-v0.1.md).
 - [ ] Technical Lead confirms that requirements are suitable for functional and technical decomposition.
 - [ ] UX Lead confirms that user journeys and accessibility expectations are sufficient for UX specification.
 - [ ] QA Lead confirms that Must requirements can be converted into acceptance evidence.

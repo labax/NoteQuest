@@ -69,7 +69,7 @@ This document defines **what must be represented and preserved**. It does not ma
 4. [Functional Requirements Document v0.1](functional-requirements-v0.1.md) for observable application behaviour, error handling, recovery, import/export, and traceability.
 5. [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md) for canonical calculations, timing, state transitions, persistence consequences, history, and all approved interpretive rulings.
 6. Approved Digital Adaptation Decision Registers v0.1 and v0.2 for the PWA, IndexedDB, save-slot, deterministic-randomness, event-history, privacy, accessibility, and release decisions.
-7. The Digital Adaptation Feasibility Study for implementation risks and architectural direction.
+7. The [Digital Adaptation Feasibility Study](digital-adaptation-feasibility-study.md) for implementation risks and architectural direction.
 8. Approved content definitions and the future Content and Licensing Requirements for individual content records and release eligibility.
 
 ### 2.2 Precedence
@@ -77,11 +77,11 @@ This document defines **what must be represented and preserved**. It does not ma
 When a modeling choice conflicts with a controlling source, apply this order:
 
 1. later approved decision-register ruling;
-2. approved Digital Rules Specification;
-3. approved Functional Requirements Document;
-4. approved Product Requirements Document;
-5. approved MVP Scope;
-6. approved Business Requirements Document;
+2. approved [Digital Rules Specification](digital-rules-specification-v0.1.md);
+3. approved [Functional Requirements Document](functional-requirements-v0.1.md);
+4. approved [Product Requirements Document](product-requirements-v0.1.md);
+5. approved [MVP Scope](mvp-scope-v0.1.md);
+6. approved [Business Requirements Document](business-requirements-v0.1.md);
 7. this specification's implementation recommendation.
 
 A later approved amendment may supersede this specification. Existing runtime instances retain their recorded rules and content versions unless an approved migration explicitly transforms them.
@@ -91,10 +91,10 @@ A later approved amendment may supersede this specification. Existing runtime in
 The following documents may refine implementation detail without changing this logical model unless an approved amendment is raised:
 
 - UX Flow and Wireframe Requirements;
-- Non-Functional Requirements;
+- [Non-Functional Requirements](non-functional-requirements-v0.1.md);
 - Content and Licensing Requirements and approved inventory;
 - Web Architecture and Deployment Specification; and
-- Acceptance Criteria / Test Plan.
+- [Acceptance Criteria / Test Plan](acceptance-criteria-test-plan-v0.1.md).
 
 ## 3. Modeling Context
 
@@ -1650,7 +1650,7 @@ Event types use stable namespaced values, for example:
 
 ## 19. Traceability
 
-| Entity / invariant group | Functional requirements | Digital Rules Specification | Product / business source | Downstream evidence |
+| Entity / invariant group | Functional requirements | [Digital Rules Specification](digital-rules-specification-v0.1.md) | Product / business source | Downstream evidence |
 |---|---|---|---|---|
 | Workspace, slots, snapshots | APP-001..014; SAV-001..024; ERR-001..016 | DRS-PER-024..025; DRS-VAL; DRS-HIST | PR-015..020; BR-009..011, BR-016, BR-019 | AT-APP, AT-SAV, AT-ERR |
 | Adventurer and spells | ADV-001..016; INV group | DRS-DICE, DRS-ADV, DRS-SPELL | PR-001, PR-004..006, PR-012, PR-014 | AT-ADV, AT-INV |
@@ -1695,7 +1695,7 @@ The specification may be approved when:
 - [ ] One invalid slot cannot block the other valid slots.
 - [ ] Application reset is limited to application-owned storage.
 - [ ] The model remains implementation-neutral while providing sufficient guidance for the architecture and IndexedDB schema.
-- [ ] Traceability covers the BRD, MVP Scope, PRD, FRD, DRS, future UX/NFR/content documents, and acceptance evidence.
+- [ ] Traceability covers the BRD, [MVP Scope](mvp-scope-v0.1.md), PRD, FRD, DRS, future UX/NFR/content documents, and acceptance evidence.
 - [ ] Product Owner, Technical Lead, Rules Designer, QA Reviewer, and Content/Licensing Reviewer approve their applicable sections.
 
 ## 21. Open Questions

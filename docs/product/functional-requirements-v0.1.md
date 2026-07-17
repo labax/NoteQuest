@@ -40,9 +40,9 @@
 
 This document defines the observable application behavior required to deliver the NoteQuest Palace prototype and the complete six-dungeon Core MVP. It converts the approved business, scope, product, and rules baselines into testable system behavior covering entry, adventurer creation, dungeon exploration, combat, inventory, town, persistence, death, recovery, accessibility, content controls, and release-facing application behavior.
 
-This document controls **what the application must do in response to user actions and system conditions**. The approved Digital Rules Specification controls formulas, probabilities, timing, state transitions, and canonical mechanical outcomes.
+This document controls **what the application must do in response to user actions and system conditions**. The approved [Digital Rules Specification](digital-rules-specification-v0.1.md) controls formulas, probabilities, timing, state transitions, and canonical mechanical outcomes.
 
-This document does not define final software architecture, database schemas, migration code, visual layouts, asset production, hosting-provider selection, or every executable test case. Those details belong in the Data / Domain Model, UX Flow and Wireframe Requirements, Non-Functional Requirements, Content and Licensing Requirements, architecture plan, and Acceptance Criteria / Test Plan.
+This document does not define final software architecture, database schemas, migration code, visual layouts, asset production, hosting-provider selection, or every executable test case. Those details belong in the Data / Domain Model, UX Flow and Wireframe Requirements, [Non-Functional Requirements](non-functional-requirements-v0.1.md), Content and Licensing Requirements, architecture plan, and [Acceptance Criteria / Test Plan](acceptance-criteria-test-plan-v0.1.md).
 
 ## 2. Source Basis
 
@@ -56,7 +56,7 @@ The controlling sources are:
 6. [Digital Adaptation Feasibility Study](digital-adaptation-feasibility-study.md).
 7. Approved content definitions and the item-level content and rights inventory when available.
 
-When sources conflict, the precedence rules in the Digital Rules Specification apply to mechanical behavior. Later approved product or decision-register amendments control release scope and product behavior.
+When sources conflict, the precedence rules in the [Digital Rules Specification](digital-rules-specification-v0.1.md) apply to mechanical behavior. Later approved product or decision-register amendments control release scope and product behavior.
 
 ## 3. Product Context
 
@@ -126,7 +126,7 @@ The public application has no user accounts, authentication roles, administrator
 
 | ID | Assumption |
 |---|---|
-| FA-001 | The approved Digital Rules Specification v0.1, including Section 23, is the normative source for all mechanical behavior. |
+| FA-001 | The approved [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md), including Section 23, is the normative source for all mechanical behavior. |
 | FA-002 | Exactly three named local save slots are available in the Core MVP. |
 | FA-003 | One active adventurer may exist per save at a time; dead adventurers remain in the Graveyard. |
 | FA-004 | Core gameplay data remains local to the browser profile and device unless the player explicitly exports it. |
@@ -630,7 +630,7 @@ The public application has no user accounts, authentication roles, administrator
 | CNT-010 | Production telemetry shall remain disabled unless separately approved. | Must | Release contains no analytics identifiers or requests. | PR-026 |
 | CNT-011 | A voluntary feedback link or form may be provided without automatically attaching save data. | Should | Opening feedback sends no save or private context automatically. | RD-OPS-005 |
 | CNT-012 | Expanded World, multiplayer, crafting, tactical combat, localisation, cloud accounts, generated narrative, and other Won't systems shall not be exposed. | Must | Release scope audit passes. | PR-034 |
-| CNT-013 | Placeholder art may be used through Palace validation when it is rights-safe and clearly replaceable. | Must | Prototype content inventory records placeholder status. | Decision Register v0.2 |
+| CNT-013 | Placeholder art may be used through Palace validation when it is rights-safe and clearly replaceable. | Must | Prototype content inventory records placeholder status. | [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md) |
 | CNT-014 | Final replacement-art production and inclusion shall follow Palace go approval and item-level rights review. | Must | Public release gate confirms approval and provenance. | PR-031, PR-028 |
 
 #### Functional states
@@ -769,7 +769,7 @@ Every detailed downstream requirement and acceptance test should cite the applic
 - [ ] The Palace subset covers adventurer creation, Palace generation, map, doors, traps, light, combat, inventory, retreat, town, re-entry, death, recovery, Graveyard, persistence, export/import, responsive behavior, keyboard use, and textual map.
 - [ ] The full Core MVP scope extends the shared functional behavior to all six approved dungeon types.
 - [ ] Happy paths, validation, errors, cancellation, confirmation, and recovery states are defined.
-- [ ] All mechanical behavior delegates formulas, timing, probabilities, and transitions to the approved Digital Rules Specification.
+- [ ] All mechanical behavior delegates formulas, timing, probabilities, and transitions to the approved [Digital Rules Specification](digital-rules-specification-v0.1.md).
 - [ ] All 24 approved DRS interpretive rulings are represented where they affect observable behavior.
 - [ ] Cross-feature persistence, deterministic randomness, linked-object behavior, and event history are unambiguous.
 - [ ] Three named slots, atomic autosave, last-valid snapshots, sequential migration, export/import, safe update, and rollback-facing behavior are included.
@@ -794,7 +794,7 @@ No unresolved product or rules decision blocks FRD review. The following impleme
 | OQ-FRD-004 | Which frontend, state-management, deterministic RNG, IndexedDB, and service-worker implementations satisfy the requirements? | Technical Lead | Architecture and NFR approval | Open; downstream |
 | OQ-FRD-005 | What performance, storage, reliability, security, offline, update, and monitoring thresholds apply? | Technical / Operations / QA | NFR approval | Open; downstream |
 | OQ-FRD-006 | Which exact content and artwork items are approved, replaced, or excluded in Palace and public builds? | Content / Licensing Reviewer | Content inventory gates | In progress |
-| OQ-FRD-007 | What complete test cases, fixtures, seed sets, fault injections, browser/device coverage, and evidence format approve Palace and Core MVP? | QA Lead | Acceptance Criteria / Test Plan approval | Open; downstream |
+| OQ-FRD-007 | What complete test cases, fixtures, seed sets, fault injections, browser/device coverage, and evidence format approve Palace and Core MVP? | QA Lead | [Acceptance Criteria / Test Plan](acceptance-criteria-test-plan-v0.1.md) approval | Open; downstream |
 | OQ-FRD-008 | Who participates in Palace playtests and how is voluntary feedback recorded and summarised? | Product / UX | Before Palace playtest | Open; downstream |
 | OQ-FRD-009 | Which hosting provider, budget, monitoring mechanism, maintenance owner, and operational rollback procedure are selected? | Product / Operations | Before public release gate | Direction approved; details pending |
 

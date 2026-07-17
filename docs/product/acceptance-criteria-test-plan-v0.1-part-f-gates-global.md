@@ -1,4 +1,4 @@
-# Acceptance Criteria / Test Plan v0.1 - Part F - Release Gates and Global Acceptance Criteria
+# [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md) - Part F - Release Gates and Global Acceptance Criteria
 
 This file is a normative part of [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md).
 

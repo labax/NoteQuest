@@ -10,7 +10,7 @@
 | Related documents | [Business Requirements Document v0.1](business-requirements-v0.1.md); [Digital Adaptation Decision Register](digital-adaptation-decision-register.md); [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md); [Digital Adaptation Feasibility Study](digital-adaptation-feasibility-study.md); *NoteQuest* rulebook, first edition |
 | MVP / release baseline | Faithful, free, single-player, web-first, fully responsive, offline-first adaptation of the six core NoteQuest dungeons |
 | Primary audience | Product owner, rules designer, developer, UX designer, QA/tester, content/licensing reviewer, and operations owner |
-| Status | Updated baseline incorporating approved Decision Register v0.2 rulings |
+| Status | Updated baseline incorporating approved [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md) rulings |
 | Last updated | 2026-07-16 |
 
 ---
@@ -19,7 +19,7 @@
 
 This document defines the minimum complete product that may be accepted as the NoteQuest Core MVP. It establishes the required end-to-end gameplay loop, Must/Should/Could priorities, explicit exclusions, release gates, dependencies, and measurable acceptance conditions.
 
-The document controls **what must be delivered for the MVP**. Detailed mechanical behaviour remains governed by the approved original Decision Register, the approved Decision Register v0.2, and the versioned Digital Rules Specification. Functional, data, UX, non-functional, and test specifications must remain traceable to this scope.
+The document controls **what must be delivered for the MVP**. Detailed mechanical behaviour remains governed by the approved original Decision Register, the approved [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md), and the versioned [Digital Rules Specification](digital-rules-specification-v0.1.md). Functional, data, UX, non-functional, and test specifications must remain traceable to this scope.
 
 A one-dungeon mechanical prototype is required as a pre-production validation gate. That prototype is not the public MVP: the accepted MVP includes all six approved core dungeon types and the complete core loop defined below.
 
@@ -159,7 +159,7 @@ The prototype passes only when all Must scenarios succeed, at least 100,000 dete
 
 #### Dependencies
 
-- Versioned Digital Rules Specification.
+- Versioned [Digital Rules Specification](digital-rules-specification-v0.1.md).
 - Approved character, class, spell, weapon, and ability content inventory.
 - Data / Domain Model Specification.
 
@@ -220,7 +220,7 @@ The prototype passes only when all Must scenarios succeed, at least 100,000 dete
 | EXP-001 | Resolve first door interaction as trapped, locked, or unlocked using the approved probabilities. | Must | Boundary fixtures produce the approved 1d6 outcomes. |
 | EXP-002 | Persist Unknown, Trapped, Locked, Unlocked, Open, and Broken door states. | Must | State transitions survive close and resume. |
 | EXP-003 | Support torch unlocking, normal keys, master keys, approved abilities, and door breaking. | Must | Each valid method applies its approved cost, consumption, and alert consequence. |
-| EXP-004 | Resolve traps before destination generation and apply approved cancellation, damage, limb, spawn, or alert effects. | Must | Trap fixtures follow the Digital Rules Specification timing. |
+| EXP-004 | Resolve traps before destination generation and apply approved cancellation, damage, limb, spawn, or alert effects. | Must | Trap fixtures follow the [Digital Rules Specification](digital-rules-specification-v0.1.md) timing. |
 | EXP-005 | Permit one secret-passage search per eligible segment and persist the searched state. | Must | Repeated search is unavailable after the first result. |
 | EXP-006 | Implement room-scoped Move Silently, hidden state, permitted hidden actions, noise-breaking actions, re-entry behaviour, and boss restrictions. | Must | Stealth integration scenarios pass. |
 | EXP-007 | Treat torches as abstract expedition-light units, including entry and approved action costs. | Must | Resource tests show correct expenditure and capacity. |
@@ -237,7 +237,7 @@ The prototype passes only when all Must scenarios succeed, at least 100,000 dete
 
 #### Dependencies
 
-- Digital Rules Specification for action timing and trap effects.
+- [Digital Rules Specification](digital-rules-specification-v0.1.md) for action timing and trap effects.
 - UX action-state and confirmation requirements.
 - Persistent door, segment, light-source, and alert models.
 
@@ -275,7 +275,7 @@ The prototype passes only when all Must scenarios succeed, at least 100,000 dete
 
 #### Dependencies
 
-- Complete combat and trait sections of the Digital Rules Specification.
+- Complete combat and trait sections of the [Digital Rules Specification](digital-rules-specification-v0.1.md).
 - Approved monster, boss, weapon, armour, spell, item, and reward content.
 - Deterministic test injection and event-history model.
 
@@ -388,7 +388,7 @@ The prototype passes only when all Must scenarios succeed, at least 100,000 dete
 
 - Web architecture and supported-browser decision.
 - Data / Domain Model and schema-version policy.
-- Non-Functional Requirements and fault-injection test plan.
+- [Non-Functional Requirements](non-functional-requirements-v0.1.md) and fault-injection test plan.
 
 #### Feature acceptance criteria
 
@@ -465,7 +465,7 @@ The prototype passes only when all Must scenarios succeed, at least 100,000 dete
 #### Dependencies
 
 - UX Flow and Wireframe Requirements.
-- Non-Functional Requirements and agreed accessibility target.
+- [Non-Functional Requirements](non-functional-requirements-v0.1.md) and agreed accessibility target.
 - Browser, viewport, assistive-technology, and device test matrix.
 
 #### Feature acceptance criteria
@@ -521,7 +521,7 @@ The prototype passes only when all Must scenarios succeed, at least 100,000 dete
 
 - Deliver an installable static PWA; service-worker cache the versioned application shell and approved static content; store game state in IndexedDB; require no backend for core play.
 - Provide three named save slots. Each slot stores active state, a last-known-valid recovery snapshot, schema version, rules/content version, and update timestamp.
-- Autosave after every meaningful state-changing action defined by the Functional Requirements and Digital Rules Specification.
+- Autosave after every meaningful state-changing action defined by the Functional Requirements and [Digital Rules Specification](digital-rules-specification-v0.1.md).
 - Use explicit sequential schema migrations, preserve the pre-migration recovery snapshot, reject newer unsupported schemas without modification, and report success only after validation and durable write.
 - Provide versioned save export and validated import as Must scope, with a plain warning that exported files contain private play data.
 - Use separate deterministic random streams for dungeon generation, combat, and expedition repopulation; persist committed results or stream state before presentation.
@@ -587,7 +587,7 @@ The following are not required for MVP acceptance:
 | Prototype gate | The Palace dungeon validates the core loop before full content production. | All Must scenarios pass; at least 100,000 Palace seeds and the persistence fault matrix show zero required failures; at least 80% complete unaided; and at least 70% rate pacing, map clarity, and overall play acceptable or better. |
 | Scope gate | All Must features are implemented or formally descoped through an approved scope change. | No unapproved Must gap remains and all exclusions remain outside the build. |
 | End-to-end gate | Primary user can complete all major terminal paths. | Acceptance scenarios pass for boss victory, safe retreat and re-entry, and death followed by replacement and recovery. |
-| Rules gate | Deterministic mechanics conform to the approved Digital Rules Specification. | 100% of Must deterministic fixtures and rules traceability checks pass. |
+| Rules gate | Deterministic mechanics conform to the approved [Digital Rules Specification](digital-rules-specification-v0.1.md). | 100% of Must deterministic fixtures and rules traceability checks pass. |
 | Dungeon-generation gate | Every tested dungeon follows the approved six/ten floor limits and reaches a final room. | At least 100,000 deterministic seeds per dungeon type produce zero non-terminating or unreachable-boss cases. |
 | Persistence gate | Required user data survives ordinary, migration, import/export, and fault scenarios across three named slots. | All Must IndexedDB, last-valid snapshot, sequential migration, export, validated import, interrupted-write, validation, and recovery scenarios pass. |
 | UX gate | Core actions, costs, warnings, and state are understandable. | At least 80% of representative primary users complete the agreed core flow without facilitator intervention or external bookkeeping. |
@@ -624,7 +624,7 @@ The following are not required for MVP acceptance:
 - The six core dungeons provide sufficient MVP content when supported by appropriate pacing and non-mechanical presentation variation.
 - A responsive browser interface can make the map, critical adventurer state, encounters, inventory, and actions usable across the agreed matrix.
 - The approved PWA, service-worker, IndexedDB, three-slot, migration, export/import, and deterministic-stream baseline is technically viable within the supported browser matrix.
-- Approved decision-register rulings will be converted into a versioned Digital Rules Specification before production implementation.
+- Approved decision-register rulings will be converted into a versioned [Digital Rules Specification](digital-rules-specification-v0.1.md) before production implementation.
 - Placeholder assets are sufficient through the Palace prototype; original or licensed replacement assets can be produced after the prototype passes and asset-by-asset rights review is complete.
 - CDN-backed static hosting, protected GitHub Actions deployment, immutable artifacts, rollback retention, and quarterly maintenance are acceptable to the project owner.
 - IndexedDB risks, three-slot recovery, versioned export/import, and private-data warnings can be communicated clearly enough for informed backup decisions.
@@ -633,7 +633,7 @@ The following are not required for MVP acceptance:
 
 | ID | Dependency | Status | Blocking scope |
 |---|---|---|---|
-| DEP-MVP-001 | Approved Business Requirements Document v0.1 | Available | Scope and release traceability |
+| DEP-MVP-001 | Approved [Business Requirements Document v0.1](business-requirements-v0.1.md) | Available | Scope and release traceability |
 | DEP-MVP-002 | Approved Digital Adaptation Decision Registers v0.1 and v0.2 | Available | All feature, technical, UX, content, and operations boundaries |
 | DEP-MVP-003 | [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md) | Available; approved baseline | Prototype and all mechanical Must features |
 | DEP-MVP-004 | [Product Requirements Document v0.1](product-requirements-v0.1.md) and [Functional Requirements Document v0.1](functional-requirements-v0.1.md) | Available; approved baselines | Implementation breakdown and traceability |
@@ -642,7 +642,7 @@ The following are not required for MVP acceptance:
 | DEP-MVP-007 | [Non-Functional Requirements v0.1](non-functional-requirements-v0.1.md) | Available; approved baseline | Browser, performance, reliability, privacy, accessibility, and operations |
 | DEP-MVP-008 | [Content & Licensing Requirements v0.1](content-licensing-requirements-v0.1.md) and approved baseline inventory | Available; approved requirements and baseline inventory; final item-level evidence and production assets remain release-gated | Content gate and public release |
 | DEP-MVP-009 | [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md) | Available; approved baseline | Prototype and release gates |
-| DEP-MVP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Direction approved in Decision Register v0.2; detailed architecture pending | Prototype deployment, persistence, and operational gate |
+| DEP-MVP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Direction approved in [Decision Register v0.2](digital-adaptation-decision-register-v0.2.md); detailed architecture pending | Prototype deployment, persistence, and operational gate |
 | DEP-MVP-011 | Approved visual direction and asset-production plan | Visual direction approved; asset plan and capped budget pending Palace go decision | Release presentation and content gate |
 | DEP-MVP-012 | Deterministic random and automated simulation harness | Pending | Rules, generation, persistence, and prototype gates |
 | DEP-MVP-013 | Representative playtest participants and feedback process | Thresholds and voluntary feedback channel approved; participants pending | Prototype, usability, and replayability evidence |
@@ -651,7 +651,7 @@ The following are not required for MVP acceptance:
 
 | Risk | Scope impact | Control |
 |---|---|---|
-| Incomplete rule formalisation | Rework, inconsistent gameplay, and blocked acceptance | Complete the Digital Rules Specification before production implementation; require traceability and deterministic tests. |
+| Incomplete rule formalisation | Rework, inconsistent gameplay, and blocked acceptance | Complete the [Digital Rules Specification](digital-rules-specification-v0.1.md) before production implementation; require traceability and deterministic tests. |
 | Non-terminating or unreachable dungeon | Breaks the core journey | Enforce the six-segment target and ten-segment hard maximum; validate at least 100,000 deterministic seeds per dungeon type with zero non-terminating or unreachable-boss cases. |
 | Save corruption or browser-data loss | Destroys persistent player value | Use three named IndexedDB slots, transactional/last-valid saves, explicit migrations, schema validation, fault tests, truthful status, storage notices, and required versioned export/import. |
 | Responsive interface overload | Makes mobile or tablet play impractical | Validate adaptive map/state/action layouts early in the one-dungeon prototype. |
@@ -702,7 +702,7 @@ The approved [Decision Register v0.2](digital-adaptation-decision-register-v0.2.
 ## 17. Approval
 
 - [ ] Product owner approves the bounded MVP and explicit exclusions.
-- [ ] Rules designer confirms that the scope is implementable from the decision register and planned Digital Rules Specification.
+- [ ] Rules designer confirms that the scope is implementable from the decision register and planned [Digital Rules Specification](digital-rules-specification-v0.1.md).
 - [ ] Technical lead confirms feasibility of responsive web delivery, offline-first persistence, deterministic randomness, and guaranteed dungeon termination.
 - [ ] UX lead confirms that the core flow, map, responsive strategy, and accessibility baseline are sufficient for detailed design and estimation.
 - [ ] Content/licensing reviewer confirms that the intended content boundary and free release model are understood.

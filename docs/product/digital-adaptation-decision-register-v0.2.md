@@ -1,6 +1,6 @@
-# NoteQuest Digital Adaptation Decision Register
+# NoteQuest [Digital Adaptation Decision Register](digital-adaptation-decision-register.md)
 
-## Remaining Decisions after BRD and MVP Scope Approval
+## Remaining Decisions after BRD and [MVP Scope](mvp-scope-v0.1.md) Approval
 
 *Version 0.2 | Approved Decision Baseline | Prepared for the NoteQuest Project*
 
@@ -23,7 +23,7 @@
 - Enter `no` when the recommendation is rejected; in that case, the resolution written in **Comments / alternative ruling** becomes the approved baseline.
 - Do not leave **Comments / alternative ruling** empty when **Approved** is `no`.
 - A row remains open until it contains either an approved recommendation or a complete approved alternative.
-- Approved rows must be incorporated into the relevant Digital Rules, Functional Requirements, Data Model, UX, Non-Functional Requirements, Content/Licensing, Operations, and Acceptance Criteria documents.
+- Approved rows must be incorporated into the relevant Digital Rules, Functional Requirements, Data Model, UX, [Non-Functional Requirements](non-functional-requirements-v0.1.md), Content/Licensing, Operations, and Acceptance Criteria documents.
 
 ## 2. Decisions already fixed by approved documents
 
@@ -75,7 +75,7 @@ The following matters are no longer open and should not be reconsidered without 
 
 | ID | Remaining decision | Source | Recommended ruling | Owner / decision point | Comments / alternative ruling | Approved |
 |---|---|---|---|---|---|---|
-| RD-RULE-001 | What target and hard maximum govern each generated floor? | BRD OQ-007; OQ-MVP-006 | Use a target of **six generated non-stair segments** per floor and a hard maximum of **ten**. After the target, increase the downward-stair probability by one sixth for each additional valid generated segment; at the hard maximum, force the next valid unexplored connection to become stairs. | Rules Designer — Digital Rules Specification approval |  | yes |
+| RD-RULE-001 | What target and hard maximum govern each generated floor? | BRD OQ-007; OQ-MVP-006 | Use a target of **six generated non-stair segments** per floor and a hard maximum of **ten**. After the target, increase the downward-stair probability by one sixth for each additional valid generated segment; at the hard maximum, force the next valid unexplored connection to become stairs. | Rules Designer — [Digital Rules Specification](digital-rules-specification-v0.1.md) approval |  | yes |
 | RD-RULE-002 | What simulation volume validates termination? | BR-012; MVP release gate | Test at least 100,000 deterministic seeds per dungeon type for the final generation algorithm. Acceptance requires zero non-terminating dungeons, zero unreachable boss rooms, and reproducible failure details for any rejected build. | QA / Technical Lead — Test Plan approval |  | yes |
 | RD-RULE-003 | Can generation constants change after saves exist? | Persistence and reproducibility dependency | Treat generation constants as rules-versioned content. Existing dungeons retain the version under which they were created; new constants apply only to new dungeons unless an explicit migration is approved. | Rules Designer / Technical Lead — Rules and Data Model approval |  | yes |
 
@@ -130,7 +130,7 @@ The following matters are no longer open and should not be reconsidered without 
 
 | Sequence | Decisions required | Blocks |
 |---:|---|---|
-| 1 | RD-PROD-001, RD-RULE-001, RD-RULE-003, RD-TECH-008 | Digital Rules Specification and prototype backlog |
+| 1 | RD-PROD-001, RD-RULE-001, RD-RULE-003, RD-TECH-008 | [Digital Rules Specification](digital-rules-specification-v0.1.md) and prototype backlog |
 | 2 | RD-TECH-001 through RD-TECH-007 | Architecture, Data Model, UX flows, and NFRs |
 | 3 | RD-UX-001 through RD-UX-003 | Responsive wireframes, accessibility requirements, and test plan |
 | 4 | RD-DATA-001 through RD-DATA-003 | Data Model, persistence, privacy, and observability requirements |
@@ -145,7 +145,7 @@ This register is complete when:
 
 - [x] Every row contains `yes`, or `no` with a complete controlling alternative in the comments column.
 - [x] Conflicting earlier statements have been resolved by the newer approved ruling.
-- [ ] Approved rules decisions are incorporated into the Digital Rules Specification.
+- [ ] Approved rules decisions are incorporated into the [Digital Rules Specification](digital-rules-specification-v0.1.md).
 - [ ] Approved technical and persistence decisions are incorporated into the architecture, Data Model, and NFR documents.
 - [ ] Approved UX and accessibility decisions are incorporated into UX flows, wireframes, and the test plan.
 - [ ] Approved content and rights decisions are incorporated into the Content and Licensing Requirements and content inventory.

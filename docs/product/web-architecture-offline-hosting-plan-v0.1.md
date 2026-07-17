@@ -99,13 +99,13 @@ It does not:
 When documents appear to conflict, apply this order:
 
 1. Later approved decision-register ruling.
-2. Digital Rules Specification for mechanics, timing, legal actions, random behaviour, and rule evidence.
+2. [Digital Rules Specification](digital-rules-specification-v0.1.md) for mechanics, timing, legal actions, random behaviour, and rule evidence.
 3. Functional Requirements for observable behaviour.
 4. Data Model for durable identity, ownership, relations, history, migration, import, and recovery.
 5. UX specification for navigation, focus, announcements, responsive transformation, and equivalent actions.
-6. Non-Functional Requirements for measurable quality thresholds.
-7. Content & Licensing Requirements for provenance, rights, notices, and release eligibility.
-8. Acceptance Criteria / Test Plan for evidence and gates.
+6. [Non-Functional Requirements](non-functional-requirements-v0.1.md) for measurable quality thresholds.
+7. [Content & Licensing Requirements](content-licensing-requirements-v0.1.md) for provenance, rights, notices, and release eligibility.
+8. [Acceptance Criteria / Test Plan](acceptance-criteria-test-plan-v0.1.md) for evidence and gates.
 9. This architecture for technical realisation.
 10. Source code and configuration.
 
