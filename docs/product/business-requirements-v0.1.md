@@ -293,13 +293,13 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 |---|---|---|---|---|
 | DEP-001 | Approved Digital Adaptation Decision Registers v0.1 and v0.2 | Product / rules | BRD and all downstream specifications | Approved baselines recorded |
 | DEP-002 | [Digital Rules Specification v0.1](digital-rules-specification-v0.1.md) | Product / rules | Mechanical prototype and all mechanical downstream specifications | Available; approved baseline |
-| DEP-003 | Content and licensing inventory, including permission evidence and asset-level approval | Legal / content | Any public build | In progress; core permissions recorded |
+| DEP-003 | [Content & Licensing Requirements v0.1](content-licensing-requirements-v0.1.md), approved baseline inventory, and controlled permission evidence | Legal / content | Any public build | Available; approved requirements and baseline inventory; final item-level evidence and production-asset approvals remain release-gated |
 | DEP-004 | [Product Requirements Document v0.1](product-requirements-v0.1.md) and [MVP Scope v0.1](mvp-scope-v0.1.md) | Product | Detailed planning and release governance | Available; approved baselines |
 | DEP-005 | [Functional Requirements Document v0.1](functional-requirements-v0.1.md) | Product / technical | Production implementation | Available; approved baseline |
 | DEP-006 | [Data Model / Domain Model Specification v0.1](data-domain-model-v0.1.md) | Technical | Persistence and content implementation | Available; approved baseline |
 | DEP-007 | [UX Flow / Wireframe Requirements v0.1](ux-flow-wireframe-requirements-v0.1.md) | UX | Responsive prototype and application design | Available; approved baseline |
-| DEP-008 | Non-Functional Requirements | Technical / operational | Architecture and release acceptance | Pending |
-| DEP-009 | Acceptance Criteria / Test Plan | QA | Prototype and release approval | Pending |
+| DEP-008 | [Non-Functional Requirements v0.1](non-functional-requirements-v0.1.md) | Technical / operational | Architecture and release acceptance | Available; approved baseline |
+| DEP-009 | [Acceptance Criteria / Test Plan v0.1](acceptance-criteria-test-plan-v0.1.md) | QA | Prototype and release approval | Available; approved baseline |
 | DEP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Technical / operational | Prototype deployment | Direction approved in Decision Register v0.2; detailed architecture pending |
 | DEP-011 | Approved visual direction and asset-production plan | UX / content | Release presentation | Visual direction approved; asset plan and budget pending prototype pass |
 | DEP-012 | Automated test harness and deterministic random-generation support | Technical / QA | Prototype validation | Pending |
