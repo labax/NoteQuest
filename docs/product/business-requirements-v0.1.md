@@ -296,8 +296,8 @@ Because hidden analytics are not part of the approved baseline, post-release ind
 | DEP-003 | Content and licensing inventory, including permission evidence and asset-level approval | Legal / content | Any public build | In progress; core permissions recorded |
 | DEP-004 | [Product Requirements Document v0.1](product-requirements-v0.1.md) and [MVP Scope v0.1](mvp-scope-v0.1.md) | Product | Detailed planning and release governance | Available; approved baselines |
 | DEP-005 | [Functional Requirements Document v0.1](functional-requirements-v0.1.md) | Product / technical | Production implementation | Available; approved baseline |
-| DEP-006 | Data / Domain Model Specification | Technical | Persistence and content implementation | Pending |
-| DEP-007 | UX Flow and Wireframe Requirements | UX | Responsive prototype and application design | Pending |
+| DEP-006 | [Data Model / Domain Model Specification v0.1](data-domain-model-v0.1.md) | Technical | Persistence and content implementation | Available; approved baseline |
+| DEP-007 | [UX Flow / Wireframe Requirements v0.1](ux-flow-wireframe-requirements-v0.1.md) | UX | Responsive prototype and application design | Available; approved baseline |
 | DEP-008 | Non-Functional Requirements | Technical / operational | Architecture and release acceptance | Pending |
 | DEP-009 | Acceptance Criteria / Test Plan | QA | Prototype and release approval | Pending |
 | DEP-010 | Web architecture, supported browser matrix, offline strategy, and hosting plan | Technical / operational | Prototype deployment | Direction approved in Decision Register v0.2; detailed architecture pending |
