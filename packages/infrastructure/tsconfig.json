@@ -5,8 +5,5 @@
     "composite": true
   },
   "include": ["src"],
-  "references": [
-    { "path": "../application" },
-    { "path": "../domain" }
-  ]
+  "references": [{ "path": "../application" }, { "path": "../domain" }]
 }

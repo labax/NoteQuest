@@ -2,11 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "isolatedModules": true,
@@ -19,27 +15,13 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "paths": {
-      "@notequest/application": [
-        "./packages/application/src/index.ts"
-      ],
-      "@notequest/content": [
-        "./packages/content/src/index.ts"
-      ],
-      "@notequest/domain": [
-        "./packages/domain/src/index.ts"
-      ],
-      "@notequest/infrastructure": [
-        "./packages/infrastructure/src/index.ts"
-      ],
-      "@notequest/test-support": [
-        "./packages/test-support/src/index.ts"
-      ],
-      "@notequest/ui": [
-        "./packages/ui/src/index.ts"
-      ],
-      "@notequest/web": [
-        "./apps/web/src/architecture.ts"
-      ]
+      "@notequest/application": ["./packages/application/src/index.ts"],
+      "@notequest/content": ["./packages/content/src/index.ts"],
+      "@notequest/domain": ["./packages/domain/src/index.ts"],
+      "@notequest/infrastructure": ["./packages/infrastructure/src/index.ts"],
+      "@notequest/test-support": ["./packages/test-support/src/index.ts"],
+      "@notequest/ui": ["./packages/ui/src/index.ts"],
+      "@notequest/web": ["./apps/web/src/architecture.ts"]
     },
     "allowImportingTsExtensions": true
   }
