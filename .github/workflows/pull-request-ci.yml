@@ -2,7 +2,9 @@ name: Pull Request CI
 
 on:
   pull_request:
+    # Include develop because implementation PRs currently target the integration branch.
     branches:
+      - develop
       - main
 
 permissions:
