@@ -1,0 +1,54 @@
+name: Pull Request CI
+
+on:
+  pull_request:
+    # Include develop because implementation PRs currently target the integration branch.
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pull-request-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation-checks:
+    name: Install, lint, typecheck, test, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # Actions are pinned to stable major release tags per the initial M1 CI policy;
+      # revisit with full SHA pinning if a later security gate requires it.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm run test:ci
+
+      - name: Build production app
+        run: npm run build
+
+      # Future M1+ gates can be added here without replacing the workflow shape,
+      # for example content validation or lightweight security checks once scoped.
