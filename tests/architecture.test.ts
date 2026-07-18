@@ -1,8 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, join, relative } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
+const domainSourceRoot = resolve(root, 'packages/domain/src');
 const workspacePackages = [
   '@notequest/domain',
   '@notequest/application',
@@ -63,6 +64,47 @@ const forbiddenDomainSourceFileNamePattern = /(?:^|[.-])(?:test|spec|fixture|fix
 const staticImportPattern = /import\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
 const dynamicImportPattern = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
+function isRelativeImportSpecifier(specifier: string): boolean {
+  return specifier === '..' || specifier === '.' || specifier.startsWith('../') || specifier.startsWith('./');
+}
+
+function absolutePath(path: string): string {
+  return isAbsolute(path) ? path : resolve(root, path);
+}
+
+function isPathInside(path: string, directory: string): boolean {
+  const resolvedPath = resolve(path);
+  const resolvedDirectory = resolve(directory);
+  const relativePath = relative(resolvedDirectory, resolvedPath);
+
+  return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
+}
+
+function describeForbiddenRelativeTarget(resolvedSpecifierPath: string): string {
+  const forbiddenWorkspaceTargets = [
+    'packages/application',
+    'packages/infrastructure',
+    'packages/ui',
+    'packages/content',
+    'packages/test-support',
+    'apps/web',
+  ];
+
+  for (const workspaceTarget of forbiddenWorkspaceTargets) {
+    const absoluteWorkspaceTarget = resolve(root, workspaceTarget);
+
+    if (isPathInside(resolvedSpecifierPath, absoluteWorkspaceTarget)) {
+      return workspaceTarget;
+    }
+  }
+
+  if (resolvedSpecifierPath.split(/[\\/]/).includes('composition')) {
+    return 'composition-root path outside packages/domain/src';
+  }
+
+  return 'outside packages/domain/src';
+}
+
 function walkFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const path = join(directory, entry);
@@ -72,7 +114,8 @@ function walkFiles(directory: string): string[] {
 
 function findForbiddenDomainDependencyViolations(source: string, path = 'packages/domain/src/index.ts'): string[] {
   const violations: string[] = [];
-  const fileName = basename(path);
+  const importerPath = absolutePath(path);
+  const fileName = basename(importerPath);
 
   if (forbiddenDomainSourceFileNamePattern.test(fileName)) {
     violations.push(`test-only domain source file name: ${fileName}`);
@@ -83,8 +126,20 @@ function findForbiddenDomainDependencyViolations(source: string, path = 'package
     for (const match of source.matchAll(pattern)) {
       const specifier = match[1];
 
-      if (specifier !== undefined && forbiddenImportSpecifiers.some((forbidden) => forbidden.test(specifier))) {
+      if (specifier === undefined) {
+        continue;
+      }
+
+      if (forbiddenImportSpecifiers.some((forbidden) => forbidden.test(specifier))) {
         violations.push(`forbidden import: ${specifier}`);
+      }
+
+      if (isRelativeImportSpecifier(specifier)) {
+        const resolvedSpecifierPath = resolve(dirname(importerPath), specifier);
+
+        if (!isPathInside(resolvedSpecifierPath, domainSourceRoot)) {
+          violations.push(`forbidden relative import: ${specifier} resolves to ${describeForbiddenRelativeTarget(resolvedSpecifierPath)}`);
+        }
       }
     }
   }
@@ -179,6 +234,39 @@ describe('architecture workspace scaffold', () => {
     expect(findForbiddenDomainDependencyViolations("import { value } from './value';\nexport const copy = value;")).toEqual([]);
     expect(findForbiddenDomainDependencyViolations("import type { Value } from './value';\nexport type Copy = Value;")).toEqual([]);
     expect(findForbiddenDomainDependencyViolations('export const helper = true;', 'packages/domain/src/test-helper.ts')).not.toEqual([]);
+  });
+
+  it('detects outward relative imports from domain sources into other workspaces', () => {
+    const forbiddenRelativeExamples = [
+      ['application relative import', "import { applicationLayerName } from '../../application/src/index';"],
+      ['infrastructure relative import', "import { infrastructureLayerName } from '../../infrastructure/src/index';"],
+      ['ui relative import', "import { uiLayerName } from '../../ui/src/index';"],
+      ['content relative import', "import { contentAreaName } from '../../content/src/index';"],
+      ['test-support relative import', "import { testSupportPackageName } from '../../test-support/src/index';"],
+      ['web app relative import', "import { App } from '../../../apps/web/src/App';"],
+      ['web composition relative import', "import { compositionRootName } from '../../../apps/web/src/composition';"],
+      ['dynamic application relative import', "export async function load() { return import('../../application/src/index'); }"],
+      ['dynamic web relative import', "export async function load() { return import('../../../apps/web/src/App'); }"],
+    ] as const;
+
+    for (const [label, source] of forbiddenRelativeExamples) {
+      const violations = findForbiddenDomainDependencyViolations(source, 'packages/domain/src/index.ts');
+
+      expect(violations.some((violation) => violation.includes('forbidden relative import')), label).toBe(true);
+    }
+  });
+
+  it('allows relative imports that resolve inside packages/domain/src', () => {
+    const allowedRelativeExamples = [
+      ['same-directory import', "import { value } from './value';\nexport const copy = value;", 'packages/domain/src/index.ts'],
+      ['nested import stays inside source root', "import { value } from '../shared/value';\nexport const copy = value;", 'packages/domain/src/rules/index.ts'],
+      ['type-only local import', "import type { Value } from '../shared/value';\nexport type Copy = Value;", 'packages/domain/src/rules/index.ts'],
+      ['dynamic local import', "export async function load() { return import('../shared/value'); }", 'packages/domain/src/rules/index.ts'],
+    ] as const;
+
+    for (const [label, source, path] of allowedRelativeExamples) {
+      expect(findForbiddenDomainDependencyViolations(source, path), label).toEqual([]);
+    }
   });
 
   it('keeps domain package sources free of browser, React, routing, and adapter dependencies', () => {
