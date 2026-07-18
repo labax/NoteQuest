@@ -31,9 +31,7 @@ const forbiddenImportSpecifiers = [
   /^@playwright\/test$/,
 ];
 
-const productionOnlyForbiddenImportSpecifiers = [
-  /^vitest(?:$|\/)/,
-];
+const productionOnlyForbiddenImportSpecifiers = [/^vitest(?:$|\/)/];
 
 const forbiddenGlobals = [
   'window',
@@ -57,22 +55,23 @@ const forbiddenGlobals = [
   'cancelIdleCallback',
 ];
 
-const productionOnlyForbiddenGlobals = [
-  'describe',
-  'it',
-  'test',
-  'expect',
-  'vi',
-];
+const productionOnlyForbiddenGlobals = ['describe', 'it', 'test', 'expect', 'vi'];
 
-const domainTestOrFixtureFileNamePattern = /(?:^|[.-])(?:test|spec|fixture|fixtures|testing)(?:[.-]|$)|(?:^|[.-])test-?helpers?(?:[.-]|$)/i;
+const domainTestOrFixtureFileNamePattern =
+  /(?:^|[.-])(?:test|spec|fixture|fixtures|testing)(?:[.-]|$)|(?:^|[.-])test-?helpers?(?:[.-]|$)/i;
 
 const staticImportPattern = /import\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
 const dynamicImportPattern = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-const reExportPattern = /export\s+(?:type\s+)?(?:\*\s+as\s+[\w$]+|\*|\{[^'"]*\})\s+from\s+['"]([^'"]+)['"]/g;
+const reExportPattern =
+  /export\s+(?:type\s+)?(?:\*\s+as\s+[\w$]+|\*|\{[^'"]*\})\s+from\s+['"]([^'"]+)['"]/g;
 
 function isRelativeImportSpecifier(specifier: string): boolean {
-  return specifier === '..' || specifier === '.' || specifier.startsWith('../') || specifier.startsWith('./');
+  return (
+    specifier === '..' ||
+    specifier === '.' ||
+    specifier.startsWith('../') ||
+    specifier.startsWith('./')
+  );
 }
 
 function absolutePath(path: string): string {
@@ -123,7 +122,10 @@ function walkFiles(directory: string): string[] {
   });
 }
 
-function findForbiddenDomainDependencyViolations(source: string, path = 'packages/domain/src/index.ts'): string[] {
+function findForbiddenDomainDependencyViolations(
+  source: string,
+  path = 'packages/domain/src/index.ts',
+): string[] {
   const violations: string[] = [];
   const importerPath = absolutePath(path);
   const isColocatedTestOrFixture = isDomainTestOrFixturePath(importerPath);
@@ -141,7 +143,10 @@ function findForbiddenDomainDependencyViolations(source: string, path = 'package
         violations.push(`forbidden import: ${specifier}`);
       }
 
-      if (!isColocatedTestOrFixture && productionOnlyForbiddenImportSpecifiers.some((forbidden) => forbidden.test(specifier))) {
+      if (
+        !isColocatedTestOrFixture &&
+        productionOnlyForbiddenImportSpecifiers.some((forbidden) => forbidden.test(specifier))
+      ) {
         violations.push(`production domain source must not import test-only module: ${specifier}`);
       }
 
@@ -149,7 +154,9 @@ function findForbiddenDomainDependencyViolations(source: string, path = 'package
         const resolvedSpecifierPath = resolve(dirname(importerPath), specifier);
 
         if (!isPathInside(resolvedSpecifierPath, domainSourceRoot)) {
-          violations.push(`forbidden relative import: ${specifier} resolves to ${describeForbiddenRelativeTarget(resolvedSpecifierPath)}`);
+          violations.push(
+            `forbidden relative import: ${specifier} resolves to ${describeForbiddenRelativeTarget(resolvedSpecifierPath)}`,
+          );
         }
       }
     }
@@ -183,9 +190,10 @@ describe('architecture workspace scaffold', () => {
     expect(rootPackage.workspaces).toEqual(['apps/*', 'packages/*']);
 
     for (const packageName of workspacePackages) {
-      const manifestPath = packageName === '@notequest/web'
-        ? join(root, 'apps/web/package.json')
-        : join(root, `packages/${packageName.replace('@notequest/', '')}/package.json`);
+      const manifestPath =
+        packageName === '@notequest/web'
+          ? join(root, 'apps/web/package.json')
+          : join(root, `packages/${packageName.replace('@notequest/', '')}/package.json`);
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
       expect(manifest.name).toBe(packageName);
@@ -194,7 +202,14 @@ describe('architecture workspace scaffold', () => {
   });
 
   it('keeps shared layers in packages and web composition in apps/web', () => {
-    for (const workspace of ['domain', 'application', 'infrastructure', 'content', 'ui', 'test-support']) {
+    for (const workspace of [
+      'domain',
+      'application',
+      'infrastructure',
+      'content',
+      'ui',
+      'test-support',
+    ]) {
       expect(existsSync(join(root, 'packages', workspace, 'src/index.ts'))).toBe(true);
       expect(existsSync(join(root, 'packages', workspace, 'README.md'))).toBe(true);
     }
@@ -210,13 +225,28 @@ describe('architecture workspace scaffold', () => {
 
   it('exposes workspace package entrypoints and web composition without circular inward imports', async () => {
     await expect(import('@notequest/domain')).resolves.toMatchObject({ domainLayerName: 'domain' });
-    await expect(import('@notequest/application')).resolves.toMatchObject({ applicationLayerName: 'application' });
-    await expect(import('@notequest/infrastructure')).resolves.toMatchObject({ infrastructureLayerName: 'infrastructure' });
+    await expect(import('@notequest/application')).resolves.toMatchObject({
+      applicationLayerName: 'application',
+    });
+    await expect(import('@notequest/infrastructure')).resolves.toMatchObject({
+      infrastructureLayerName: 'infrastructure',
+    });
     await expect(import('@notequest/ui')).resolves.toMatchObject({ uiLayerName: 'ui' });
-    await expect(import('@notequest/content')).resolves.toMatchObject({ contentAreaName: 'content' });
-    await expect(import('@notequest/test-support')).resolves.toMatchObject({ testSupportPackageName: 'test-support' });
+    await expect(import('@notequest/content')).resolves.toMatchObject({
+      contentAreaName: 'content',
+    });
+    await expect(import('@notequest/test-support')).resolves.toMatchObject({
+      testSupportPackageName: 'test-support',
+    });
     await expect(import('../apps/web/src/architecture')).resolves.toMatchObject({
-      architectureLayerNames: ['domain', 'application', 'infrastructure', 'ui', 'content', 'web-composition'],
+      architectureLayerNames: [
+        'domain',
+        'application',
+        'infrastructure',
+        'ui',
+        'content',
+        'web-composition',
+      ],
     });
   });
 
@@ -225,26 +255,74 @@ describe('architecture workspace scaffold', () => {
       ['React import', "import React from 'react';\nexport const value = React;"],
       ['JSX runtime import', "import { jsx } from 'react/jsx-runtime';\nexport const value = jsx;"],
       ['side-effect import', "import 'react';\nexport const value = 'bad';"],
-      ['application package import', "import { applicationLayerName } from '@notequest/application';\nexport const value = applicationLayerName;"],
-      ['infrastructure package import', "import '@notequest/infrastructure';\nexport const value = 'bad';"],
-      ['ui package import', "import type { ComponentType } from '@notequest/ui';\nexport type Value = ComponentType;"],
-      ['content package import', "import { contentAreaName } from '@notequest/content';\nexport const value = contentAreaName;"],
-      ['web package import', "import { architectureLayerNames } from '@notequest/web';\nexport const value = architectureLayerNames;"],
+      [
+        'application package import',
+        "import { applicationLayerName } from '@notequest/application';\nexport const value = applicationLayerName;",
+      ],
+      [
+        'infrastructure package import',
+        "import '@notequest/infrastructure';\nexport const value = 'bad';",
+      ],
+      [
+        'ui package import',
+        "import type { ComponentType } from '@notequest/ui';\nexport type Value = ComponentType;",
+      ],
+      [
+        'content package import',
+        "import { contentAreaName } from '@notequest/content';\nexport const value = contentAreaName;",
+      ],
+      [
+        'web package import',
+        "import { architectureLayerNames } from '@notequest/web';\nexport const value = architectureLayerNames;",
+      ],
       ['apps/web import', "import { App } from 'apps/web/src/App';\nexport const value = App;"],
-      ['composition import', "import { compositionRootName } from '../../apps/web/src/composition';\nexport const value = compositionRootName;"],
+      [
+        'composition import',
+        "import { compositionRootName } from '../../apps/web/src/composition';\nexport const value = compositionRootName;",
+      ],
       ['Dexie import', "import Dexie from 'dexie';\nexport const value = Dexie;"],
       ['Workbox import', "import 'workbox-precaching';\nexport const value = 'bad';"],
-      ['router import', "import { createBrowserRouter } from 'react-router-dom';\nexport const value = createBrowserRouter;"],
-      ['service-worker import', "import { registerSW } from 'virtual:pwa-register/service-worker';\nexport const value = registerSW;"],
-      ['browser storage adapter import', "import { openDB } from 'idb';\nexport const value = openDB;"],
-      ['dynamic forbidden import', "export async function load() { return import('@notequest/content'); }"],
-      ['browser globals', 'export const value = window.location.href + document.title + localStorage.length + sessionStorage.length + indexedDB;'],
-      ['cache and service-worker globals', 'export const value = caches && navigator.serviceWorker;'],
+      [
+        'router import',
+        "import { createBrowserRouter } from 'react-router-dom';\nexport const value = createBrowserRouter;",
+      ],
+      [
+        'service-worker import',
+        "import { registerSW } from 'virtual:pwa-register/service-worker';\nexport const value = registerSW;",
+      ],
+      [
+        'browser storage adapter import',
+        "import { openDB } from 'idb';\nexport const value = openDB;",
+      ],
+      [
+        'dynamic forbidden import',
+        "export async function load() { return import('@notequest/content'); }",
+      ],
+      [
+        'browser globals',
+        'export const value = window.location.href + document.title + localStorage.length + sessionStorage.length + indexedDB;',
+      ],
+      [
+        'cache and service-worker globals',
+        'export const value = caches && navigator.serviceWorker;',
+      ],
       ['network APIs', 'export const value = [fetch, WebSocket, EventSource, XMLHttpRequest];'],
-      ['timer APIs', 'export const value = [setTimeout, clearTimeout, setInterval, clearInterval, requestAnimationFrame, cancelAnimationFrame, requestIdleCallback, cancelIdleCallback];'],
-      ['test import', "import { describe, expect, it, vi } from 'vitest';\nexport const value = [describe, expect, it, vi];"],
-      ['Testing Library import', "import { render } from '@testing-library/react';\nexport const value = render;"],
-      ['test globals', 'describe("domain", () => { it("fails", () => expect(vi.fn()).toBeDefined()); });'],
+      [
+        'timer APIs',
+        'export const value = [setTimeout, clearTimeout, setInterval, clearInterval, requestAnimationFrame, cancelAnimationFrame, requestIdleCallback, cancelIdleCallback];',
+      ],
+      [
+        'test import',
+        "import { describe, expect, it, vi } from 'vitest';\nexport const value = [describe, expect, it, vi];",
+      ],
+      [
+        'Testing Library import',
+        "import { render } from '@testing-library/react';\nexport const value = render;",
+      ],
+      [
+        'test globals',
+        'describe("domain", () => { it("fails", () => expect(vi.fn()).toBeDefined()); });',
+      ],
     ] as const;
 
     for (const [label, source] of forbiddenExamples) {
@@ -252,18 +330,35 @@ describe('architecture workspace scaffold', () => {
     }
 
     expect(findForbiddenDomainDependencyViolations('export const value = 1 as const;')).toEqual([]);
-    expect(findForbiddenDomainDependencyViolations("import { value } from './value';\nexport const copy = value;")).toEqual([]);
-    expect(findForbiddenDomainDependencyViolations("import type { Value } from './value';\nexport type Copy = Value;")).toEqual([]);
+    expect(
+      findForbiddenDomainDependencyViolations(
+        "import { value } from './value';\nexport const copy = value;",
+      ),
+    ).toEqual([]);
+    expect(
+      findForbiddenDomainDependencyViolations(
+        "import type { Value } from './value';\nexport type Copy = Value;",
+      ),
+    ).toEqual([]);
   });
 
   it('keeps test-only APIs out of production domain source files', () => {
     const productionTestOnlyExamples = [
-      ['production vitest import', "import { describe, expect, it, vi } from 'vitest';\nexport const value = [describe, expect, it, vi];"],
-      ['production test globals', 'describe("domain", () => { it("fails", () => expect(vi.fn()).toBeDefined()); });'],
+      [
+        'production vitest import',
+        "import { describe, expect, it, vi } from 'vitest';\nexport const value = [describe, expect, it, vi];",
+      ],
+      [
+        'production test globals',
+        'describe("domain", () => { it("fails", () => expect(vi.fn()).toBeDefined()); });',
+      ],
     ] as const;
 
     for (const [label, source] of productionTestOnlyExamples) {
-      expect(findForbiddenDomainDependencyViolations(source, 'packages/domain/src/index.ts'), label).not.toEqual([]);
+      expect(
+        findForbiddenDomainDependencyViolations(source, 'packages/domain/src/index.ts'),
+        label,
+      ).not.toEqual([]);
     }
   });
 
@@ -293,19 +388,37 @@ describe('architecture workspace scaffold', () => {
 
   it('rejects colocated domain tests that import forbidden implementation layers', () => {
     const forbiddenColocatedTestExamples = [
-      ['application import from test file', "import { applicationLayerName } from '@notequest/application';"],
-      ['infrastructure import from test file', "import { infrastructureLayerName } from '@notequest/infrastructure';"],
+      [
+        'application import from test file',
+        "import { applicationLayerName } from '@notequest/application';",
+      ],
+      [
+        'infrastructure import from test file',
+        "import { infrastructureLayerName } from '@notequest/infrastructure';",
+      ],
       ['ui import from test file', "import { uiLayerName } from '@notequest/ui';"],
       ['content import from test file', "import { contentAreaName } from '@notequest/content';"],
       ['web import from test file', "import { architectureLayerNames } from '@notequest/web';"],
       ['apps/web import from test file', "import { App } from 'apps/web/src/App';"],
-      ['composition import from test file', "import { compositionRootName } from '../../../apps/web/src/composition';"],
-      ['relative application import from test file', "import { applicationLayerName } from '../../../application/src/index';"],
+      [
+        'composition import from test file',
+        "import { compositionRootName } from '../../../apps/web/src/composition';",
+      ],
+      [
+        'relative application import from test file',
+        "import { applicationLayerName } from '../../../application/src/index';",
+      ],
       ['web re-export from test file', "export { App } from '../../../../apps/web/src/App';"],
     ] as const;
 
     for (const [label, source] of forbiddenColocatedTestExamples) {
-      expect(findForbiddenDomainDependencyViolations(source, 'packages/domain/src/rules/example.test.ts'), label).not.toEqual([]);
+      expect(
+        findForbiddenDomainDependencyViolations(
+          source,
+          'packages/domain/src/rules/example.test.ts',
+        ),
+        label,
+      ).not.toEqual([]);
     }
   });
 
@@ -315,23 +428,41 @@ describe('architecture workspace scaffold', () => {
       ['type-only alias re-export', "export type { UiThing } from '@notequest/ui';"],
       ['star alias re-export', "export * from '@notequest/application';"],
       ['namespace alias re-export', "export * as application from '@notequest/application';"],
-      ['named relative re-export to application', "export { applicationLayerName } from '../../application/src/index';"],
+      [
+        'named relative re-export to application',
+        "export { applicationLayerName } from '../../application/src/index';",
+      ],
       ['type-only relative re-export to UI', "export type { UiThing } from '../../ui/src/index';"],
       ['star relative re-export to content', "export * from '../../content/src/index';"],
       ['namespace relative re-export to web', "export * as web from '../../../apps/web/src/App';"],
     ] as const;
 
     for (const [label, source] of forbiddenReExportExamples) {
-      expect(findForbiddenDomainDependencyViolations(source, 'packages/domain/src/index.ts'), label).not.toEqual([]);
+      expect(
+        findForbiddenDomainDependencyViolations(source, 'packages/domain/src/index.ts'),
+        label,
+      ).not.toEqual([]);
     }
   });
 
   it('allows local re-exports that resolve inside packages/domain/src', () => {
     const allowedReExportExamples = [
       ['local named re-export', "export { value } from './value';", 'packages/domain/src/index.ts'],
-      ['local type re-export', "export type { Value } from './value';", 'packages/domain/src/index.ts'],
-      ['local star re-export', "export * from '../shared/value';", 'packages/domain/src/rules/index.ts'],
-      ['local namespace re-export', "export * as sharedValue from '../shared/value';", 'packages/domain/src/rules/index.ts'],
+      [
+        'local type re-export',
+        "export type { Value } from './value';",
+        'packages/domain/src/index.ts',
+      ],
+      [
+        'local star re-export',
+        "export * from '../shared/value';",
+        'packages/domain/src/rules/index.ts',
+      ],
+      [
+        'local namespace re-export',
+        "export * as sharedValue from '../shared/value';",
+        'packages/domain/src/rules/index.ts',
+      ],
     ] as const;
 
     for (const [label, source, path] of allowedReExportExamples) {
@@ -341,30 +472,70 @@ describe('architecture workspace scaffold', () => {
 
   it('detects outward relative imports from domain sources into other workspaces', () => {
     const forbiddenRelativeExamples = [
-      ['application relative import', "import { applicationLayerName } from '../../application/src/index';"],
-      ['infrastructure relative import', "import { infrastructureLayerName } from '../../infrastructure/src/index';"],
+      [
+        'application relative import',
+        "import { applicationLayerName } from '../../application/src/index';",
+      ],
+      [
+        'infrastructure relative import',
+        "import { infrastructureLayerName } from '../../infrastructure/src/index';",
+      ],
       ['ui relative import', "import { uiLayerName } from '../../ui/src/index';"],
       ['content relative import', "import { contentAreaName } from '../../content/src/index';"],
-      ['test-support relative import', "import { testSupportPackageName } from '../../test-support/src/index';"],
+      [
+        'test-support relative import',
+        "import { testSupportPackageName } from '../../test-support/src/index';",
+      ],
       ['web app relative import', "import { App } from '../../../apps/web/src/App';"],
-      ['web composition relative import', "import { compositionRootName } from '../../../apps/web/src/composition';"],
-      ['dynamic application relative import', "export async function load() { return import('../../application/src/index'); }"],
-      ['dynamic web relative import', "export async function load() { return import('../../../apps/web/src/App'); }"],
+      [
+        'web composition relative import',
+        "import { compositionRootName } from '../../../apps/web/src/composition';",
+      ],
+      [
+        'dynamic application relative import',
+        "export async function load() { return import('../../application/src/index'); }",
+      ],
+      [
+        'dynamic web relative import',
+        "export async function load() { return import('../../../apps/web/src/App'); }",
+      ],
     ] as const;
 
     for (const [label, source] of forbiddenRelativeExamples) {
-      const violations = findForbiddenDomainDependencyViolations(source, 'packages/domain/src/index.ts');
+      const violations = findForbiddenDomainDependencyViolations(
+        source,
+        'packages/domain/src/index.ts',
+      );
 
-      expect(violations.some((violation) => violation.includes('forbidden relative import')), label).toBe(true);
+      expect(
+        violations.some((violation) => violation.includes('forbidden relative import')),
+        label,
+      ).toBe(true);
     }
   });
 
   it('allows relative imports that resolve inside packages/domain/src', () => {
     const allowedRelativeExamples = [
-      ['same-directory import', "import { value } from './value';\nexport const copy = value;", 'packages/domain/src/index.ts'],
-      ['nested import stays inside source root', "import { value } from '../shared/value';\nexport const copy = value;", 'packages/domain/src/rules/index.ts'],
-      ['type-only local import', "import type { Value } from '../shared/value';\nexport type Copy = Value;", 'packages/domain/src/rules/index.ts'],
-      ['dynamic local import', "export async function load() { return import('../shared/value'); }", 'packages/domain/src/rules/index.ts'],
+      [
+        'same-directory import',
+        "import { value } from './value';\nexport const copy = value;",
+        'packages/domain/src/index.ts',
+      ],
+      [
+        'nested import stays inside source root',
+        "import { value } from '../shared/value';\nexport const copy = value;",
+        'packages/domain/src/rules/index.ts',
+      ],
+      [
+        'type-only local import',
+        "import type { Value } from '../shared/value';\nexport type Copy = Value;",
+        'packages/domain/src/rules/index.ts',
+      ],
+      [
+        'dynamic local import',
+        "export async function load() { return import('../shared/value'); }",
+        'packages/domain/src/rules/index.ts',
+      ],
     ] as const;
 
     for (const [label, source, path] of allowedRelativeExamples) {
@@ -380,7 +551,10 @@ describe('architecture workspace scaffold', () => {
 
     for (const path of domainModules) {
       const source = readFileSync(path, 'utf8');
-      expect(findForbiddenDomainDependencyViolations(source, path), `${relative(root, path)} must stay pure`).toEqual([]);
+      expect(
+        findForbiddenDomainDependencyViolations(source, path),
+        `${relative(root, path)} must stay pure`,
+      ).toEqual([]);
     }
   });
 });

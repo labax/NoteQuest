@@ -6,7 +6,5 @@
     "jsx": "react-jsx"
   },
   "include": ["src"],
-  "references": [
-    { "path": "../application" }
-  ]
+  "references": [{ "path": "../application" }]
 }
