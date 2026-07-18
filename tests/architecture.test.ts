@@ -26,10 +26,13 @@ const forbiddenImportSpecifiers = [
   /(?:^|\/)(?:router|routing|routes)(?:$|\/)/,
   /(?:^|[-/])service-worker(?:$|[-/])/,
   /(?:^|\/)(?:storage|indexeddb|idb|localforage)(?:$|\/)/,
-  /^vitest(?:$|\/)/,
   /^@testing-library(?:$|\/)/,
   /^playwright(?:$|\/)/,
   /^@playwright\/test$/,
+];
+
+const productionOnlyForbiddenImportSpecifiers = [
+  /^vitest(?:$|\/)/,
 ];
 
 const forbiddenGlobals = [
@@ -52,6 +55,9 @@ const forbiddenGlobals = [
   'cancelAnimationFrame',
   'requestIdleCallback',
   'cancelIdleCallback',
+];
+
+const productionOnlyForbiddenGlobals = [
   'describe',
   'it',
   'test',
@@ -59,7 +65,7 @@ const forbiddenGlobals = [
   'vi',
 ];
 
-const forbiddenDomainSourceFileNamePattern = /(?:^|[.-])(?:test|spec|fixture|fixtures|testing)(?:[.-]|$)|(?:^|[.-])test-?helpers?(?:[.-]|$)/i;
+const domainTestOrFixtureFileNamePattern = /(?:^|[.-])(?:test|spec|fixture|fixtures|testing)(?:[.-]|$)|(?:^|[.-])test-?helpers?(?:[.-]|$)/i;
 
 const staticImportPattern = /import\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
 const dynamicImportPattern = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
@@ -71,6 +77,10 @@ function isRelativeImportSpecifier(specifier: string): boolean {
 
 function absolutePath(path: string): string {
   return isAbsolute(path) ? path : resolve(root, path);
+}
+
+function isDomainTestOrFixturePath(path: string): boolean {
+  return domainTestOrFixtureFileNamePattern.test(basename(path));
 }
 
 function isPathInside(path: string, directory: string): boolean {
@@ -116,11 +126,7 @@ function walkFiles(directory: string): string[] {
 function findForbiddenDomainDependencyViolations(source: string, path = 'packages/domain/src/index.ts'): string[] {
   const violations: string[] = [];
   const importerPath = absolutePath(path);
-  const fileName = basename(importerPath);
-
-  if (forbiddenDomainSourceFileNamePattern.test(fileName)) {
-    violations.push(`test-only domain source file name: ${fileName}`);
-  }
+  const isColocatedTestOrFixture = isDomainTestOrFixturePath(importerPath);
 
   for (const pattern of [staticImportPattern, dynamicImportPattern, reExportPattern]) {
     pattern.lastIndex = 0;
@@ -133,6 +139,10 @@ function findForbiddenDomainDependencyViolations(source: string, path = 'package
 
       if (forbiddenImportSpecifiers.some((forbidden) => forbidden.test(specifier))) {
         violations.push(`forbidden import: ${specifier}`);
+      }
+
+      if (!isColocatedTestOrFixture && productionOnlyForbiddenImportSpecifiers.some((forbidden) => forbidden.test(specifier))) {
+        violations.push(`production domain source must not import test-only module: ${specifier}`);
       }
 
       if (isRelativeImportSpecifier(specifier)) {
@@ -150,6 +160,16 @@ function findForbiddenDomainDependencyViolations(source: string, path = 'package
 
     if (globalPattern.test(source)) {
       violations.push(`forbidden global: ${globalName}`);
+    }
+  }
+
+  if (!isColocatedTestOrFixture) {
+    for (const globalName of productionOnlyForbiddenGlobals) {
+      const globalPattern = new RegExp(`(?<![\\w$.'"])${globalName}(?![\\w$])`);
+
+      if (globalPattern.test(source)) {
+        violations.push(`production domain source must not use test-only global: ${globalName}`);
+      }
     }
   }
 
@@ -234,7 +254,59 @@ describe('architecture workspace scaffold', () => {
     expect(findForbiddenDomainDependencyViolations('export const value = 1 as const;')).toEqual([]);
     expect(findForbiddenDomainDependencyViolations("import { value } from './value';\nexport const copy = value;")).toEqual([]);
     expect(findForbiddenDomainDependencyViolations("import type { Value } from './value';\nexport type Copy = Value;")).toEqual([]);
-    expect(findForbiddenDomainDependencyViolations('export const helper = true;', 'packages/domain/src/test-helper.ts')).not.toEqual([]);
+  });
+
+  it('keeps test-only APIs out of production domain source files', () => {
+    const productionTestOnlyExamples = [
+      ['production vitest import', "import { describe, expect, it, vi } from 'vitest';\nexport const value = [describe, expect, it, vi];"],
+      ['production test globals', 'describe("domain", () => { it("fails", () => expect(vi.fn()).toBeDefined()); });'],
+    ] as const;
+
+    for (const [label, source] of productionTestOnlyExamples) {
+      expect(findForbiddenDomainDependencyViolations(source, 'packages/domain/src/index.ts'), label).not.toEqual([]);
+    }
+  });
+
+  it('allows pure colocated domain tests and test helpers to use Vitest APIs', () => {
+    const allowedColocatedTestExamples = [
+      [
+        'colocated domain test imports Vitest and local domain module',
+        "import { describe, expect, it, vi } from 'vitest';\nimport { domainLayerName } from '../index';\ndescribe('domain', () => { it('stays pure', () => expect(vi.fn()).toBeDefined()); });\nexport const value = domainLayerName;",
+        'packages/domain/src/rules/example.test.ts',
+      ],
+      [
+        'colocated test helper with Vitest import',
+        "import { expect } from 'vitest';\nimport type { DomainLayerName } from '../index';\nexport function expectDomainName(value: DomainLayerName) { expect(value).toBe('domain'); }",
+        'packages/domain/src/rules/test-helper.ts',
+      ],
+      [
+        'colocated fixture filename with pure source',
+        "export const syntheticFixture = { id: 'project-original' } as const;",
+        'packages/domain/src/rules/example.fixture.ts',
+      ],
+    ] as const;
+
+    for (const [label, source, path] of allowedColocatedTestExamples) {
+      expect(findForbiddenDomainDependencyViolations(source, path), label).toEqual([]);
+    }
+  });
+
+  it('rejects colocated domain tests that import forbidden implementation layers', () => {
+    const forbiddenColocatedTestExamples = [
+      ['application import from test file', "import { applicationLayerName } from '@notequest/application';"],
+      ['infrastructure import from test file', "import { infrastructureLayerName } from '@notequest/infrastructure';"],
+      ['ui import from test file', "import { uiLayerName } from '@notequest/ui';"],
+      ['content import from test file', "import { contentAreaName } from '@notequest/content';"],
+      ['web import from test file', "import { architectureLayerNames } from '@notequest/web';"],
+      ['apps/web import from test file', "import { App } from 'apps/web/src/App';"],
+      ['composition import from test file', "import { compositionRootName } from '../../../apps/web/src/composition';"],
+      ['relative application import from test file', "import { applicationLayerName } from '../../../application/src/index';"],
+      ['web re-export from test file', "export { App } from '../../../../apps/web/src/App';"],
+    ] as const;
+
+    for (const [label, source] of forbiddenColocatedTestExamples) {
+      expect(findForbiddenDomainDependencyViolations(source, 'packages/domain/src/rules/example.test.ts'), label).not.toEqual([]);
+    }
   });
 
   it('detects forbidden alias and relative re-exports from domain sources', () => {
