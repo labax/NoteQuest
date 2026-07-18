@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
@@ -13,13 +13,91 @@ const workspacePackages = [
   '@notequest/web',
 ] as const;
 
-const forbiddenDomainDependencyPattern = /(?:from\s+['"][^'"]*(?:react|dexie|workbox|router|service-worker|infrastructure|ui|application|apps\/web)[^'"]*['"]|\b(?:window|document|localStorage|indexedDB|navigator\.serviceWorker)\b)/i;
+const forbiddenImportSpecifiers = [
+  /^react(?:$|-|\/)/,
+  /^react-dom(?:$|\/)/,
+  /^jsx-runtime$/,
+  /^@notequest\/(?:application|infrastructure|ui|content|web)(?:$|\/)/,
+  /^apps\/web(?:$|\/)/,
+  /(?:^|\/)composition(?:$|\/)/,
+  /^dexie(?:$|\/)/,
+  /^workbox(?:$|-|\/)/,
+  /(?:^|\/)(?:router|routing|routes)(?:$|\/)/,
+  /(?:^|[-/])service-worker(?:$|[-/])/,
+  /(?:^|\/)(?:storage|indexeddb|idb|localforage)(?:$|\/)/,
+  /^vitest(?:$|\/)/,
+  /^@testing-library(?:$|\/)/,
+  /^playwright(?:$|\/)/,
+  /^@playwright\/test$/,
+];
+
+const forbiddenGlobals = [
+  'window',
+  'document',
+  'localStorage',
+  'sessionStorage',
+  'indexedDB',
+  'caches',
+  'navigator',
+  'fetch',
+  'WebSocket',
+  'EventSource',
+  'XMLHttpRequest',
+  'setTimeout',
+  'clearTimeout',
+  'setInterval',
+  'clearInterval',
+  'requestAnimationFrame',
+  'cancelAnimationFrame',
+  'requestIdleCallback',
+  'cancelIdleCallback',
+  'describe',
+  'it',
+  'test',
+  'expect',
+  'vi',
+];
+
+const forbiddenDomainSourceFileNamePattern = /(?:^|[.-])(?:test|spec|fixture|fixtures|testing)(?:[.-]|$)|(?:^|[.-])test-?helpers?(?:[.-]|$)/i;
+
+const staticImportPattern = /import\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
+const dynamicImportPattern = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
 function walkFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const path = join(directory, entry);
     return statSync(path).isDirectory() ? walkFiles(path) : [path];
   });
+}
+
+function findForbiddenDomainDependencyViolations(source: string, path = 'packages/domain/src/index.ts'): string[] {
+  const violations: string[] = [];
+  const fileName = basename(path);
+
+  if (forbiddenDomainSourceFileNamePattern.test(fileName)) {
+    violations.push(`test-only domain source file name: ${fileName}`);
+  }
+
+  for (const pattern of [staticImportPattern, dynamicImportPattern]) {
+    pattern.lastIndex = 0;
+    for (const match of source.matchAll(pattern)) {
+      const specifier = match[1];
+
+      if (specifier !== undefined && forbiddenImportSpecifiers.some((forbidden) => forbidden.test(specifier))) {
+        violations.push(`forbidden import: ${specifier}`);
+      }
+    }
+  }
+
+  for (const globalName of forbiddenGlobals) {
+    const globalPattern = new RegExp(`(?<![\\w$.'"])${globalName}(?![\\w$])`);
+
+    if (globalPattern.test(source)) {
+      violations.push(`forbidden global: ${globalName}`);
+    }
+  }
+
+  return violations;
 }
 
 describe('architecture workspace scaffold', () => {
@@ -66,6 +144,43 @@ describe('architecture workspace scaffold', () => {
     });
   });
 
+  it('detects each documented forbidden domain dependency category', () => {
+    const forbiddenExamples = [
+      ['React import', "import React from 'react';\nexport const value = React;"],
+      ['JSX runtime import', "import { jsx } from 'react/jsx-runtime';\nexport const value = jsx;"],
+      ['side-effect import', "import 'react';\nexport const value = 'bad';"],
+      ['application package import', "import { applicationLayerName } from '@notequest/application';\nexport const value = applicationLayerName;"],
+      ['infrastructure package import', "import '@notequest/infrastructure';\nexport const value = 'bad';"],
+      ['ui package import', "import type { ComponentType } from '@notequest/ui';\nexport type Value = ComponentType;"],
+      ['content package import', "import { contentAreaName } from '@notequest/content';\nexport const value = contentAreaName;"],
+      ['web package import', "import { architectureLayerNames } from '@notequest/web';\nexport const value = architectureLayerNames;"],
+      ['apps/web import', "import { App } from 'apps/web/src/App';\nexport const value = App;"],
+      ['composition import', "import { compositionRootName } from '../../apps/web/src/composition';\nexport const value = compositionRootName;"],
+      ['Dexie import', "import Dexie from 'dexie';\nexport const value = Dexie;"],
+      ['Workbox import', "import 'workbox-precaching';\nexport const value = 'bad';"],
+      ['router import', "import { createBrowserRouter } from 'react-router-dom';\nexport const value = createBrowserRouter;"],
+      ['service-worker import', "import { registerSW } from 'virtual:pwa-register/service-worker';\nexport const value = registerSW;"],
+      ['browser storage adapter import', "import { openDB } from 'idb';\nexport const value = openDB;"],
+      ['dynamic forbidden import', "export async function load() { return import('@notequest/content'); }"],
+      ['browser globals', 'export const value = window.location.href + document.title + localStorage.length + sessionStorage.length + indexedDB;'],
+      ['cache and service-worker globals', 'export const value = caches && navigator.serviceWorker;'],
+      ['network APIs', 'export const value = [fetch, WebSocket, EventSource, XMLHttpRequest];'],
+      ['timer APIs', 'export const value = [setTimeout, clearTimeout, setInterval, clearInterval, requestAnimationFrame, cancelAnimationFrame, requestIdleCallback, cancelIdleCallback];'],
+      ['test import', "import { describe, expect, it, vi } from 'vitest';\nexport const value = [describe, expect, it, vi];"],
+      ['Testing Library import', "import { render } from '@testing-library/react';\nexport const value = render;"],
+      ['test globals', 'describe("domain", () => { it("fails", () => expect(vi.fn()).toBeDefined()); });'],
+    ] as const;
+
+    for (const [label, source] of forbiddenExamples) {
+      expect(findForbiddenDomainDependencyViolations(source), label).not.toEqual([]);
+    }
+
+    expect(findForbiddenDomainDependencyViolations('export const value = 1 as const;')).toEqual([]);
+    expect(findForbiddenDomainDependencyViolations("import { value } from './value';\nexport const copy = value;")).toEqual([]);
+    expect(findForbiddenDomainDependencyViolations("import type { Value } from './value';\nexport type Copy = Value;")).toEqual([]);
+    expect(findForbiddenDomainDependencyViolations('export const helper = true;', 'packages/domain/src/test-helper.ts')).not.toEqual([]);
+  });
+
   it('keeps domain package sources free of browser, React, routing, and adapter dependencies', () => {
     const domainSource = join(root, 'packages/domain/src');
     const domainModules = walkFiles(domainSource).filter((path) => /\.tsx?$/.test(path));
@@ -74,7 +189,7 @@ describe('architecture workspace scaffold', () => {
 
     for (const path of domainModules) {
       const source = readFileSync(path, 'utf8');
-      expect(source, `${relative(root, path)} must stay pure`).not.toMatch(forbiddenDomainDependencyPattern);
+      expect(findForbiddenDomainDependencyViolations(source, path), `${relative(root, path)} must stay pure`).toEqual([]);
     }
   });
 });
