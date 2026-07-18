@@ -1,0 +1,68 @@
+Repository: {{REPOSITORY_FULL_NAME}}
+Designated issue: #{{ISSUE_NUMBER}}
+Issue title: {{ISSUE_TITLE}}
+
+Do not use `gh issue view`.
+Do not fetch the GitHub issue from the API.
+Do not install GitHub CLI.
+Use the issue text provided below as the source of truth.
+
+Before making changes:
+1. Run `pwd`
+2. Run `git status`
+3. Run `git remote -v`
+4. Inspect the files/folders relevant to this issue:
+   - {{RELEVANT_FILES_OR_FOLDERS}}
+
+Repository/context checks:
+- Confirm you are working in the intended repository: {{REPOSITORY_FULL_NAME}}.
+- If `git remote -v` has no configured remotes, continue only if this Codex task is clearly attached to the repository workspace.
+- If the repository appears unrelated, empty when it should not be, or missing required dependency work, stop and report the mismatch.
+- Do not implement a different issue based on branch name, milestone, latest issue, assigned issue, cached context, or web search result.
+
+Dependency checks:
+{{DEPENDENCY_CHECKS}}
+
+If required dependencies are missing, stop and report:
+"{{MISSING_DEPENDENCY_MESSAGE}}"
+
+Issue goal:
+{{ISSUE_GOAL}}
+
+Must have:
+{{MUST_HAVE_LIST}}
+
+Should have:
+{{SHOULD_HAVE_LIST}}
+
+Could have:
+{{COULD_HAVE_LIST}}
+
+Out of scope:
+{{OUT_OF_SCOPE_LIST}}
+
+Implementation guidance:
+{{IMPLEMENTATION_GUIDANCE}}
+
+Acceptance criteria:
+{{ACCEPTANCE_CRITERIA}}
+
+Dependencies:
+{{DEPENDENCIES}}
+
+Definition of done:
+{{DEFINITION_OF_DONE}}
+
+Verification requirements:
+- Run the relevant local checks for this issue.
+- Prefer existing package scripts and documented commands.
+- Do not invent unrelated tooling unless required.
+- If a check cannot be run, explain exactly why.
+- If a script or tool is not configured yet, document it as deferred rather than forcing a failing implementation.
+
+Expected output:
+1. Implement only the scope of issue #{{ISSUE_NUMBER}}.
+2. Summarize changed files.
+3. Summarize verification commands run and their results.
+4. List any skipped/deferred checks with reasons.
+5. Call out any risks, assumptions, or follow-up issues.
