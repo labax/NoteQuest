@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.infrastructure.tsbuildinfo",
+    "composite": true
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../application" },
+    { "path": "../domain" }
+  ]
+}

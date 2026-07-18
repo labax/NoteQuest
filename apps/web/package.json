@@ -1,0 +1,24 @@
+{
+  "name": "@notequest/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/architecture.ts"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@notequest/application": "0.0.0",
+    "@notequest/content": "0.0.0",
+    "@notequest/domain": "0.0.0",
+    "@notequest/infrastructure": "0.0.0",
+    "@notequest/ui": "0.0.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {}
+}
