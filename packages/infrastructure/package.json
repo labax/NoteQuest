@@ -1,0 +1,13 @@
+{
+  "name": "@notequest/infrastructure",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@notequest/application": "0.0.0",
+    "@notequest/domain": "0.0.0"
+  }
+}

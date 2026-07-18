@@ -1,4 +1,4 @@
-import { domainLayerName } from '../domain';
+import { domainLayerName } from '@notequest/domain';
 
 export const applicationLayerName = 'application' as const;
 

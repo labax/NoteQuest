@@ -1,4 +1,4 @@
-import { applicationLayerName } from '../application';
+import { applicationLayerName } from '@notequest/application';
 
 export const uiLayerName = 'ui' as const;
 

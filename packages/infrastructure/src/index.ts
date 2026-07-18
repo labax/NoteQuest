@@ -1,5 +1,5 @@
-import { applicationLayerName } from '../application';
-import { domainLayerName } from '../domain';
+import { applicationLayerName } from '@notequest/application';
+import { domainLayerName } from '@notequest/domain';
 
 export const infrastructureLayerName = 'infrastructure' as const;
 
