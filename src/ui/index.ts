@@ -1,0 +1,5 @@
+import { applicationLayerName } from '../application';
+
+export const uiLayerName = 'ui' as const;
+
+export const uiDependsOn = [applicationLayerName] as const;
