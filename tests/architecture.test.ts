@@ -63,6 +63,7 @@ const forbiddenDomainSourceFileNamePattern = /(?:^|[.-])(?:test|spec|fixture|fix
 
 const staticImportPattern = /import\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g;
 const dynamicImportPattern = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+const reExportPattern = /export\s+(?:type\s+)?(?:\*\s+as\s+[\w$]+|\*|\{[^'"]*\})\s+from\s+['"]([^'"]+)['"]/g;
 
 function isRelativeImportSpecifier(specifier: string): boolean {
   return specifier === '..' || specifier === '.' || specifier.startsWith('../') || specifier.startsWith('./');
@@ -121,7 +122,7 @@ function findForbiddenDomainDependencyViolations(source: string, path = 'package
     violations.push(`test-only domain source file name: ${fileName}`);
   }
 
-  for (const pattern of [staticImportPattern, dynamicImportPattern]) {
+  for (const pattern of [staticImportPattern, dynamicImportPattern, reExportPattern]) {
     pattern.lastIndex = 0;
     for (const match of source.matchAll(pattern)) {
       const specifier = match[1];
@@ -234,6 +235,36 @@ describe('architecture workspace scaffold', () => {
     expect(findForbiddenDomainDependencyViolations("import { value } from './value';\nexport const copy = value;")).toEqual([]);
     expect(findForbiddenDomainDependencyViolations("import type { Value } from './value';\nexport type Copy = Value;")).toEqual([]);
     expect(findForbiddenDomainDependencyViolations('export const helper = true;', 'packages/domain/src/test-helper.ts')).not.toEqual([]);
+  });
+
+  it('detects forbidden alias and relative re-exports from domain sources', () => {
+    const forbiddenReExportExamples = [
+      ['named alias re-export', "export { applicationLayerName } from '@notequest/application';"],
+      ['type-only alias re-export', "export type { UiThing } from '@notequest/ui';"],
+      ['star alias re-export', "export * from '@notequest/application';"],
+      ['namespace alias re-export', "export * as application from '@notequest/application';"],
+      ['named relative re-export to application', "export { applicationLayerName } from '../../application/src/index';"],
+      ['type-only relative re-export to UI', "export type { UiThing } from '../../ui/src/index';"],
+      ['star relative re-export to content', "export * from '../../content/src/index';"],
+      ['namespace relative re-export to web', "export * as web from '../../../apps/web/src/App';"],
+    ] as const;
+
+    for (const [label, source] of forbiddenReExportExamples) {
+      expect(findForbiddenDomainDependencyViolations(source, 'packages/domain/src/index.ts'), label).not.toEqual([]);
+    }
+  });
+
+  it('allows local re-exports that resolve inside packages/domain/src', () => {
+    const allowedReExportExamples = [
+      ['local named re-export', "export { value } from './value';", 'packages/domain/src/index.ts'],
+      ['local type re-export', "export type { Value } from './value';", 'packages/domain/src/index.ts'],
+      ['local star re-export', "export * from '../shared/value';", 'packages/domain/src/rules/index.ts'],
+      ['local namespace re-export', "export * as sharedValue from '../shared/value';", 'packages/domain/src/rules/index.ts'],
+    ] as const;
+
+    for (const [label, source, path] of allowedReExportExamples) {
+      expect(findForbiddenDomainDependencyViolations(source, path), label).toEqual([]);
+    }
   });
 
   it('detects outward relative imports from domain sources into other workspaces', () => {
