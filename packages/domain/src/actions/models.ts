@@ -21,8 +21,15 @@ export type ContentVersion = string & { readonly __brand: 'ContentVersion' };
 export type IsoDateTimeString = string & { readonly __brand: 'IsoDateTimeString' };
 export type EventSequence = number & { readonly __brand: 'EventSequence' };
 
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | readonly JsonValue[] | JsonObject;
+export interface JsonObject {
+  readonly [key: string]: JsonValue;
+}
+export type EventStateSnapshot = JsonObject;
+
 export type ActionModule =
-  'adventurer' | 'dungeon' | 'exploration' | 'combat' | 'inventory' | 'town' | 'persistence';
+  'adventurer' | 'dungeon' | 'exploration' | 'combat' | 'inventory' | 'town';
 
 export type ActionVerb =
   | 'create_adventurer'
@@ -252,8 +259,8 @@ export interface MechanicalEventBase<TType extends string> {
   readonly summary: string;
   readonly requirementIds?: readonly string[];
   readonly rollRefs?: readonly RollReference[];
-  readonly before?: Record<string, unknown>;
-  readonly after?: Record<string, unknown>;
+  readonly before?: EventStateSnapshot;
+  readonly after?: EventStateSnapshot;
 }
 
 export interface AdventurerCreatedEvent extends MechanicalEventBase<'adventurer_created'> {
@@ -297,11 +304,6 @@ export interface TownActionResolvedEvent extends MechanicalEventBase<'town_actio
   readonly outcome: 'rested' | 'repaired' | 'resupplied' | 'sold_items' | 'retreated';
 }
 
-export interface PersistenceCommittedEvent extends MechanicalEventBase<'persistence_committed'> {
-  readonly module: 'persistence';
-  readonly commit: CommitMetadata;
-}
-
 export type MechanicalEvent =
   | AdventurerCreatedEvent
   | DungeonEnteredEvent
@@ -309,8 +311,7 @@ export type MechanicalEvent =
   | DoorResolvedEvent
   | CombatActionResolvedEvent
   | InventoryChangedEvent
-  | TownActionResolvedEvent
-  | PersistenceCommittedEvent;
+  | TownActionResolvedEvent;
 
 export function isCommandBlocked(guard: GuardEvaluation): boolean {
   return (

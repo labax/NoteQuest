@@ -9,6 +9,7 @@ import {
   type CommandId,
   type CreateAdventurerCommand,
   type EventSequence,
+  type EventStateSnapshot,
   type IsoDateTimeString,
   type RulesVersion,
   type ContentVersion,
@@ -82,6 +83,21 @@ describe('mechanical command/result/event models', () => {
 
   it('represents a successful committed event with metadata for history and persistence', () => {
     const command = createCommand();
+    const beforeSnapshot = {
+      slotState: 'empty',
+      resources: { coins: 0, torches: 10 },
+      activeEffects: ['none'],
+      latestRoll: null,
+      flags: { canonicalCreation: true },
+    } satisfies EventStateSnapshot;
+    const afterSnapshot = {
+      slotState: 'active_adventurer',
+      resources: { coins: 0, torches: 10 },
+      activeEffects: [],
+      createdEventSequence: 1,
+      flags: { canonicalCreation: true },
+    } satisfies EventStateSnapshot;
+
     const event: AdventurerCreatedEvent = {
       type: 'adventurer_created',
       module: 'adventurer',
@@ -106,8 +122,8 @@ describe('mechanical command/result/event models', () => {
         schemaVersion: 1,
       },
       rollRefs: [],
-      before: { slotState: 'empty' },
-      after: { slotState: 'active_adventurer' },
+      before: beforeSnapshot,
+      after: afterSnapshot,
     };
 
     const result = successResult(command, 1, [event]);
@@ -120,5 +136,7 @@ describe('mechanical command/result/event models', () => {
       stateRevision: 1,
       schemaVersion: 1,
     });
+    expect(result.events[0]?.before).toEqual(beforeSnapshot);
+    expect(result.events[0]?.after).toEqual(afterSnapshot);
   });
 });
