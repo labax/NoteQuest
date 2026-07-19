@@ -307,3 +307,299 @@ export const palacePlaceholderManifest = {
     },
   ],
 } as const satisfies PalaceContentManifest;
+
+export interface PalaceManifestValidationError {
+  readonly contentId: PalaceContentId | 'manifest';
+  readonly field: string;
+  readonly reason: string;
+}
+
+export interface PalaceManifestValidationResult {
+  readonly valid: boolean;
+  readonly errors: readonly PalaceManifestValidationError[];
+}
+
+const palaceRequiredProvenanceTextFields = [
+  'sourceName',
+  'sourceEditionVersion',
+  'authorRightsHolder',
+  'permissionLicenseId',
+  'rightsBasis',
+] as const;
+
+const palaceBlockedApprovalStates = ['blocked', 'unknown', 'draft', 'review-pending'] as const;
+
+function addPalaceValidationError(
+  errors: PalaceManifestValidationError[],
+  contentId: PalaceContentId | 'manifest',
+  field: string,
+  reason: string,
+): void {
+  errors.push({ contentId, field, reason });
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function validatePalaceRange(
+  entry: PalaceManifestEntry,
+  errors: PalaceManifestValidationError[],
+): void {
+  if (entry.kind === 'table-row' && entry.range === undefined) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'range',
+      'table-row entries must define a dice/result range',
+    );
+    return;
+  }
+
+  if (entry.range === undefined) {
+    return;
+  }
+
+  const { dice, from, to, rangeId } = entry.range;
+  if (!isNonEmptyString(rangeId)) {
+    addPalaceValidationError(errors, entry.id, 'range.rangeId', 'rangeId is required');
+  }
+
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from > to) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'range',
+      'range must use integer bounds with from <= to',
+    );
+    return;
+  }
+
+  if (dice === '1d6' && (from < 1 || to > 6)) {
+    addPalaceValidationError(errors, entry.id, 'range', '1d6 ranges must stay within 1-6');
+  }
+
+  if (dice === '2d6' && (from < 2 || to > 12)) {
+    addPalaceValidationError(errors, entry.id, 'range', '2d6 ranges must stay within 2-12');
+  }
+
+  if (dice === 'fixed' && from !== to) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'range',
+      'fixed ranges must have matching from and to values',
+    );
+  }
+
+  if (dice === 'other') {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'range.dice',
+      'unsupported Palace dice/result structure',
+    );
+  }
+}
+
+function validatePalaceProvenance(
+  entry: PalaceManifestEntry,
+  errors: PalaceManifestValidationError[],
+): void {
+  for (const field of palaceRequiredProvenanceTextFields) {
+    if (!isNonEmptyString(entry.provenance[field])) {
+      addPalaceValidationError(
+        errors,
+        entry.id,
+        `provenance.${field}`,
+        'required provenance field is missing',
+      );
+    }
+  }
+
+  if (entry.provenance.sourceReferences.length === 0) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'provenance.sourceReferences',
+      'at least one source reference is required',
+    );
+  }
+
+  if (!isNonEmptyString(entry.provenance.evidenceReference.publicId)) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'provenance.evidenceReference.publicId',
+      'evidence publicId is required',
+    );
+  }
+
+  if (
+    entry.provenance.sourceCategory === 'unknown' ||
+    entry.provenance.sourceCategory === 'restricted'
+  ) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'provenance.sourceCategory',
+      'unknown or restricted content is blocked',
+    );
+  }
+
+  if (
+    entry.provenance.containsExactSourceProse ||
+    entry.provenance.containsSourceArtwork ||
+    entry.provenance.containsTradeDress
+  ) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'provenance.contentSafety',
+      'source prose, artwork, and trade dress must not be bundled',
+    );
+  }
+}
+
+function validatePalaceReview(
+  entry: PalaceManifestEntry,
+  errors: PalaceManifestValidationError[],
+): void {
+  if (
+    palaceBlockedApprovalStates.includes(
+      entry.review.approvalState as (typeof palaceBlockedApprovalStates)[number],
+    )
+  ) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'review.approvalState',
+      'selected content cannot be blocked, unknown, draft, or review-pending',
+    );
+  }
+
+  if (!entry.review.publicReleaseEligible) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'review.publicReleaseEligible',
+      'selected content must be public release eligible',
+    );
+  }
+}
+
+function validatePalaceTableCoverage(
+  table: PalaceManifestEntry,
+  rows: readonly PalaceManifestEntry[],
+  errors: PalaceManifestValidationError[],
+): void {
+  if (rows.length === 0) {
+    return;
+  }
+
+  const dice = rows[0]?.range?.dice;
+  if (dice !== '1d6' && dice !== '2d6') {
+    return;
+  }
+
+  const min = dice === '1d6' ? 1 : 2;
+  const max = dice === '1d6' ? 6 : 12;
+  const covered = new Map<number, PalaceContentId>();
+
+  for (const row of rows) {
+    if (row.range?.dice !== dice) {
+      addPalaceValidationError(
+        errors,
+        row.id,
+        'range.dice',
+        `row dice must match sibling ${dice} table structure`,
+      );
+      continue;
+    }
+
+    for (let value = row.range.from; value <= row.range.to; value += 1) {
+      const prior = covered.get(value);
+      if (prior !== undefined) {
+        addPalaceValidationError(
+          errors,
+          row.id,
+          'range',
+          `range overlaps ${prior} at result ${value}`,
+        );
+      }
+      covered.set(value, row.id);
+    }
+  }
+
+  for (let value = min; value <= max; value += 1) {
+    if (!covered.has(value)) {
+      addPalaceValidationError(
+        errors,
+        table.id,
+        'entries',
+        `table is missing ${dice} result ${value}`,
+      );
+    }
+  }
+}
+
+export function validatePalaceContentManifest(
+  manifest: PalaceContentManifest,
+): PalaceManifestValidationResult {
+  const errors: PalaceManifestValidationError[] = [];
+  const entriesById = new Map<PalaceContentId, PalaceManifestEntry>();
+
+  for (const entry of manifest.entries) {
+    if (entriesById.has(entry.id)) {
+      addPalaceValidationError(errors, entry.id, 'id', 'duplicate content ID');
+    }
+    entriesById.set(entry.id, entry);
+  }
+
+  for (const entry of manifest.entries) {
+    validatePalaceRange(entry, errors);
+    validatePalaceProvenance(entry, errors);
+    validatePalaceReview(entry, errors);
+
+    if (entry.parentId !== undefined && !entriesById.has(entry.parentId)) {
+      addPalaceValidationError(
+        errors,
+        entry.id,
+        'parentId',
+        `missing referenced parent ${entry.parentId}`,
+      );
+    }
+
+    for (const referenceId of entry.references ?? []) {
+      if (!entriesById.has(referenceId)) {
+        addPalaceValidationError(
+          errors,
+          entry.id,
+          'references',
+          `missing referenced content ${referenceId}`,
+        );
+      }
+    }
+
+    for (const supersededId of entry.provenance.supersedes) {
+      if (!entriesById.has(supersededId)) {
+        addPalaceValidationError(
+          errors,
+          entry.id,
+          'provenance.supersedes',
+          `missing superseded content ${supersededId}`,
+        );
+      }
+    }
+  }
+
+  for (const table of manifest.entries.filter((entry) => entry.kind === 'table')) {
+    validatePalaceTableCoverage(
+      table,
+      manifest.entries.filter((entry) => entry.parentId === table.id && entry.kind === 'table-row'),
+      errors,
+    );
+  }
+
+  return { valid: errors.length === 0, errors };
+}

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import type { PalaceContentManifest, PalaceManifestEntry } from './palace-manifest.ts';
+
 import {
   isPalaceContentApprovalState,
   isPalacePublicReleaseEligibleReview,
@@ -7,7 +9,112 @@ import {
   palaceManifestSchemaFieldNames,
   palacePlaceholderManifest,
   palaceProvenanceFieldNames,
+  validatePalaceContentManifest,
 } from './palace-manifest.ts';
+
+const selectedReview = {
+  approvalState: 'selected',
+  publicReleaseEligible: true,
+} as const;
+
+type PalaceManifestEntryOverrides = {
+  readonly [Key in keyof PalaceManifestEntry]?: PalaceManifestEntry[Key] | undefined;
+};
+
+function makeValidEntry(
+  id: `palace.${string}`,
+  overrides: PalaceManifestEntryOverrides = {},
+): PalaceManifestEntry {
+  const entry: PalaceManifestEntry = {
+    id,
+    contentType: 'fixture' as const,
+    kind: 'table-row' as const,
+    version: '0.1.0' as const,
+    label: `Project-original ${id}`,
+    parentId: 'palace.fixture.room-table',
+    range: { dice: '1d6' as const, rangeId: `${id}.range`, from: 1, to: 1 },
+    tags: ['palace', 'fixture', 'rights-safe'],
+    structuredDefinition: { outcome: id },
+    provenance: {
+      origin: 'project-original' as const,
+      sourceCategory: 'project_original' as const,
+      sourceName: 'NoteQuest Web Application test fixture',
+      sourceLocation: 'packages/content/src/palace-manifest.test.ts',
+      sourceEditionVersion: '0.1.0',
+      sourceReferences: [
+        {
+          kind: 'project-original-placeholder' as const,
+          sourceId: 'story-m3-002',
+          citationLabel: 'Issue #59 rights-safe test fixture',
+        },
+      ],
+      authorRightsHolder: 'NoteQuest Web Application project',
+      permissionLicenseId: 'PROJECT-ORIGINAL-TEST-FIXTURE',
+      rightsBasis: 'Project-authored validation fixture only.',
+      evidenceReference: {
+        publicId: 'STORY-M3-002',
+        location: null,
+        confidentiality: 'public-safe-reference' as const,
+      },
+      permittedReleaseModes: ['public-free-core-mvp' as const],
+      restrictions: ['contains-no-official-source-expression'],
+      attributionRequired: false,
+      attributionNoticeId: null,
+      noticeLocations: [],
+      modifications: ['project-original deterministic validation fixture'],
+      compatibilityPolicy: 'compatible-within-package-version' as const,
+      contentHash: {
+        status: 'not-applicable' as const,
+        algorithm: 'not-applicable' as const,
+        canonicalization: 'not-applicable' as const,
+        value: null,
+      },
+      supersedes: [],
+      confidentialRightsEvidence: 'excluded-from-public-manifest' as const,
+      containsExactSourceProse: false,
+      containsSourceArtwork: false,
+      containsTradeDress: false,
+    },
+    review: selectedReview,
+  };
+
+  return { ...entry, ...overrides } as PalaceManifestEntry;
+}
+
+function makeValidPalaceManifest(): PalaceContentManifest {
+  const table = makeValidEntry('palace.fixture.room-table', {
+    kind: 'table',
+    parentId: undefined,
+    range: undefined,
+    references: ['palace.fixture.mechanic'],
+    structuredDefinition: { dice: '1d6', purpose: 'project-original validation table' },
+  });
+  const mechanic = makeValidEntry('palace.fixture.mechanic', {
+    kind: 'mechanic-reference',
+    parentId: undefined,
+    range: undefined,
+    structuredDefinition: { rule: 'project-original fixture mechanic' },
+  });
+  const rows = [1, 2, 3, 4, 5, 6].map((value) =>
+    makeValidEntry(`palace.fixture.room-table.row-${value}`, {
+      range: {
+        dice: '1d6',
+        rangeId: `palace.fixture.room-table.row-${value}.range`,
+        from: value,
+        to: value,
+      },
+    }),
+  );
+
+  return {
+    schemaVersion: 'palace-content-manifest.schema.v0.1',
+    packageId: 'palace',
+    contentVersion: '0.1.0',
+    rulesVersion: 'digital-rules-specification-v0.1',
+    generatedAt: '2026-07-19T00:00:00.000Z',
+    entries: [table, mechanic, ...rows],
+  };
+}
 
 describe('Palace content manifest schema', () => {
   it('defines all required approval states for content review gates', () => {
@@ -75,8 +182,8 @@ describe('Palace content manifest schema', () => {
       entries: [
         {
           id: 'palace.placeholder.room-table',
-          contentType: 'fixture',
-          version: '0.1.0',
+          contentType: 'fixture' as const,
+          version: '0.1.0' as const,
           review: { approvalState: 'draft', publicReleaseEligible: false },
           provenance: {
             sourceCategory: 'project_placeholder',
@@ -88,7 +195,7 @@ describe('Palace content manifest schema', () => {
             evidenceReference: {
               publicId: 'STORY-M3-001',
               location: null,
-              confidentiality: 'public-safe-reference',
+              confidentiality: 'public-safe-reference' as const,
             },
             permittedReleaseModes: ['internal-prototype'],
             restrictions: [
@@ -108,7 +215,7 @@ describe('Palace content manifest schema', () => {
               deferredTo: 'STORY-M3-003 / issue #60',
             },
             supersedes: [],
-            confidentialRightsEvidence: 'excluded-from-public-manifest',
+            confidentialRightsEvidence: 'excluded-from-public-manifest' as const,
             containsExactSourceProse: false,
             containsSourceArtwork: false,
             containsTradeDress: false,
@@ -131,5 +238,105 @@ describe('Palace content manifest schema', () => {
         publicReleaseEligible: true,
       }),
     ).toBe(true);
+  });
+
+  it('passes deterministic rights-safe Palace table fixtures', () => {
+    expect(validatePalaceContentManifest(makeValidPalaceManifest())).toEqual({
+      valid: true,
+      errors: [],
+    });
+  });
+
+  it('fails invalid Palace range coverage with content ID and field details', () => {
+    const manifest = makeValidPalaceManifest();
+    const invalid = {
+      ...manifest,
+      entries: manifest.entries.map((entry) =>
+        entry.id === 'palace.fixture.room-table.row-6'
+          ? {
+              ...entry,
+              range: { dice: '1d6' as const, rangeId: entry.range!.rangeId, from: 7, to: 7 },
+            }
+          : entry,
+      ),
+    };
+
+    expect(validatePalaceContentManifest(invalid).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.room-table.row-6',
+          field: 'range',
+          reason: '1d6 ranges must stay within 1-6',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.room-table',
+          field: 'entries',
+          reason: 'table is missing 1d6 result 6',
+        }),
+      ]),
+    );
+  });
+
+  it('fails missing content references and missing provenance', () => {
+    const manifest = makeValidPalaceManifest();
+    const invalid = {
+      ...manifest,
+      entries: manifest.entries.map((entry) =>
+        entry.id === 'palace.fixture.mechanic'
+          ? {
+              ...entry,
+              references: ['palace.fixture.missing' as const],
+              provenance: { ...entry.provenance, sourceReferences: [], sourceName: '' },
+            }
+          : entry,
+      ),
+    };
+
+    expect(validatePalaceContentManifest(invalid).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ contentId: 'palace.fixture.mechanic', field: 'references' }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.sourceReferences',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.sourceName',
+        }),
+      ]),
+    );
+  });
+
+  it('fails blocked or unapproved selected content independently of UI rendering', () => {
+    const manifest = makeValidPalaceManifest();
+    const invalid = {
+      ...manifest,
+      entries: manifest.entries.map((entry) =>
+        entry.id === 'palace.fixture.mechanic'
+          ? {
+              ...entry,
+              provenance: { ...entry.provenance, sourceCategory: 'restricted' as const },
+              review: { approvalState: 'blocked' as const, publicReleaseEligible: false },
+            }
+          : entry,
+      ),
+    };
+
+    expect(validatePalaceContentManifest(invalid).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.sourceCategory',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'review.approvalState',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'review.publicReleaseEligible',
+        }),
+      ]),
+    );
   });
 });
