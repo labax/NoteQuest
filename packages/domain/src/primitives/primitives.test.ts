@@ -193,6 +193,12 @@ describe('domain primitives', () => {
   it('rejects out-of-range and non-integer numeric primitives safely', () => {
     expect(createIntegerInRange(2, 'slotIndex', 1, 3)).toEqual({ ok: true, value: 2 });
     expect(createIntegerInRange(4, 'slotIndex', 1, 3)).toMatchObject({ ok: false });
+    expect(createIntegerInRange(1.5, 'slotIndex', 1, 3)).toMatchObject({ ok: false });
     expect(createPositiveInteger(0, 'nextEventSequence')).toMatchObject({ ok: false });
+    expect(createNonNegativeInteger(-1, 'eventSequence')).toMatchObject({ ok: false });
+    expect(createNonNegativeInteger(Number.MAX_SAFE_INTEGER, 'eventSequence')).toMatchObject({
+      ok: true,
+      value: Number.MAX_SAFE_INTEGER,
+    });
   });
 });
