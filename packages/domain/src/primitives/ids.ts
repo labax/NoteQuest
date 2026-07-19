@@ -22,7 +22,8 @@ export type GraveyardRecordId = Brand<string, 'GraveyardRecordId'>;
 export type RecoverableContainerId = Brand<string, 'RecoverableContainerId'>;
 export type DefinitionId = Brand<string, 'DefinitionId'>;
 
-const runtimeIdPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*_[a-zA-Z0-9_-]{8,}$/;
+// Data/domain model v0.1: runtime IDs are opaque lowercase UUID-compatible strings.
+const runtimeIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const definitionIdPattern = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*\.[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
 
 export const workspaceLocalId = 'workspace.local' as WorkspaceId;
@@ -35,7 +36,7 @@ export function createRuntimeId<T extends Brand<string, string>>(
     return invalid({
       code: 'invalid_format',
       path,
-      message: `${path} must be an opaque runtime ID with a type prefix and at least 8 token characters`,
+      message: `${path} must be an opaque lowercase UUID-compatible runtime ID`,
     });
   }
 

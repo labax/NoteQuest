@@ -9,15 +9,39 @@ import {
 } from './index.ts';
 
 describe('domain primitives', () => {
-  it('accepts stable opaque runtime IDs without depending on display names or indexes', () => {
-    const result = createRuntimeId<SaveSlotId>('slot_01HXNOTEQ', 'slotId');
+  it('accepts opaque lowercase UUID-compatible runtime IDs', () => {
+    const result = createRuntimeId<SaveSlotId>('123e4567-e89b-12d3-a456-426614174000', 'slotId');
 
-    expect(result).toEqual({ ok: true, value: 'slot_01HXNOTEQ' });
+    expect(result).toEqual({ ok: true, value: '123e4567-e89b-12d3-a456-426614174000' });
   });
 
-  it('rejects runtime IDs that look like display names or coordinates', () => {
+  it('rejects runtime IDs derived from display names, coordinates, owners, indexes, or prefixes', () => {
     expect(createRuntimeId<SaveSlotId>('Save 1', 'slotId')).toMatchObject({ ok: false });
     expect(createRuntimeId<SaveSlotId>('room-1-2', 'segmentId')).toMatchObject({ ok: false });
+    expect(createRuntimeId<SaveSlotId>('slot_01HXNOTEQ', 'slotId')).toMatchObject({ ok: false });
+    expect(
+      createRuntimeId<SaveSlotId>('slot/123e4567-e89b-12d3-a456-426614174000', 'slotId'),
+    ).toMatchObject({
+      ok: false,
+    });
+    expect(
+      createRuntimeId<SaveSlotId>('123e4567-e89b-12d3-a456-426614174000-1', 'slotId'),
+    ).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it('rejects uppercase and malformed runtime IDs', () => {
+    expect(
+      createRuntimeId<SaveSlotId>('123E4567-E89B-12D3-A456-426614174000', 'slotId'),
+    ).toMatchObject({
+      ok: false,
+    });
+    expect(createRuntimeId<SaveSlotId>('123e4567e89b12d3a456426614174000', 'slotId')).toMatchObject(
+      {
+        ok: false,
+      },
+    );
   });
 
   it('accepts approved namespaced definition IDs used by content references', () => {
