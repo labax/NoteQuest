@@ -753,9 +753,9 @@ Minimum streams:
 - `combat`;
 - `expedition-repopulation`.
 
-Additional streams require registered name, purpose, derivation version, and fixtures.
+Additional streams require registered name, purpose, derivation version, and fixtures. A new stream may be added only by updating the project-owned stream registry, documenting its mechanical purpose, adding deterministic selector/output vectors, and reviewing any moved RNG calls for regression risk. Existing stream names, purposes, derivation versions, and consumption order are persisted compatibility contracts and must not be renamed or repurposed without a migration plan.
 
-A save has one master seed. Stream derivation must not use current time, locale, device, browser, UI route, display name, or unstable collection order.
+A save has one master seed. Version 1 named stream derivation derives the PCG32 stream selector from the ASCII string `notequest-pcg32-named-stream:1:<master-seed-uint64-hex>:<stream-name>` using project-owned 64-bit FNV-1a hashing, then seeds PCG32 with the same master seed and the derived selector. Stream derivation must not use current time, locale, device, browser, UI route, display name, or unstable collection order.
 
 Before use, fixed vectors must match in Node and each supported browser family. Retry after aborted commit begins from the prior committed stream state.
 
