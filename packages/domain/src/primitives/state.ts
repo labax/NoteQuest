@@ -12,33 +12,44 @@ import type {
 } from './ids.ts';
 import type { NonNegativeInteger, PositiveInteger } from './validation.ts';
 
-export type SaveSlotStatus = 'empty' | 'playable' | 'invalid' | 'unsupported' | 'import_staging';
-export type IntegrityStatus = 'not_checked' | 'valid' | 'invalid' | 'recoverable';
+// Data/domain model v0.1 section 11 controls these enum-like primitive values.
+export type SaveSlotStatus =
+  'empty' | 'creating' | 'ready' | 'active' | 'importing' | 'migrating' | 'isolated' | 'resetting';
+export type SnapshotKind =
+  | 'current'
+  | 'last_valid'
+  | 'pre_migration'
+  | 'pre_import'
+  | 'import_staging'
+  | 'migration_staging'
+  | 'manual_backup';
+export type IntegrityStatus =
+  'not_checked' | 'valid' | 'warning' | 'invalid' | 'unsupported_newer_version';
 export type ValidationStatus = 'valid' | 'invalid' | 'pending';
-export type SnapshotKind = 'current' | 'last_valid' | 'pre_migration' | 'pre_import' | 'staging';
 export type RandomStreamKind = 'dungeon' | 'combat' | 'reward' | 'repopulation';
-export type InputMode = 'generated' | 'manual';
-export type DomainCommandType =
-  'create_adventurer' | 'enter_dungeon' | 'resolve_roll' | 'commit_action' | 'restore_snapshot';
-
-export type EventType =
+export type InputMode = 'generated' | 'manual_physical_dice';
+export type EventCategory =
+  | 'system'
   | 'creation'
-  | 'roll'
   | 'generation'
+  | 'exploration'
   | 'door'
   | 'trap'
-  | 'movement'
+  | 'stealth'
   | 'combat'
-  | 'item'
   | 'spell'
+  | 'inventory'
+  | 'reward'
   | 'town'
   | 'expedition'
   | 'death'
   | 'recovery'
-  | 'completion'
-  | 'correction'
+  | 'graveyard'
+  | 'save'
+  | 'migration'
   | 'import'
-  | 'migration';
+  | 'correction'
+  | 'completion';
 
 export interface VersionRef {
   readonly id: string;
@@ -90,7 +101,7 @@ export interface SaveSnapshotCore {
 }
 
 export interface DomainCommandCore {
-  readonly commandType: DomainCommandType;
+  readonly actionType: string;
   readonly slotId: SaveSlotId;
   readonly expectedEventSequence: PositiveInteger;
 }
@@ -109,7 +120,7 @@ export interface RandomStreamStateCore {
 export interface EventEntryCore {
   readonly eventId: EventId;
   readonly sequence: PositiveInteger;
-  readonly eventType: EventType;
+  readonly eventCategory: EventCategory;
   readonly slotId: SaveSlotId;
   readonly rulesVersion: string;
 }

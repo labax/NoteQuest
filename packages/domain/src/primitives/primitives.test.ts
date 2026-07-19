@@ -5,7 +5,10 @@ import {
   createNonEmptyText,
   createPositiveInteger,
   createRuntimeId,
+  type IntegrityStatus,
   type SaveSlotId,
+  type SaveSlotStatus,
+  type SnapshotKind,
 } from './index.ts';
 
 describe('domain primitives', () => {
@@ -42,6 +45,62 @@ describe('domain primitives', () => {
         ok: false,
       },
     );
+  });
+
+  it('exposes approved save slot, snapshot, and integrity enum values', () => {
+    const saveSlotStatuses = [
+      'empty',
+      'creating',
+      'ready',
+      'active',
+      'importing',
+      'migrating',
+      'isolated',
+      'resetting',
+    ] as const satisfies readonly SaveSlotStatus[];
+    const snapshotKinds = [
+      'current',
+      'last_valid',
+      'pre_migration',
+      'pre_import',
+      'import_staging',
+      'migration_staging',
+      'manual_backup',
+    ] as const satisfies readonly SnapshotKind[];
+    const integrityStatuses = [
+      'not_checked',
+      'valid',
+      'warning',
+      'invalid',
+      'unsupported_newer_version',
+    ] as const satisfies readonly IntegrityStatus[];
+
+    expect(saveSlotStatuses).toEqual([
+      'empty',
+      'creating',
+      'ready',
+      'active',
+      'importing',
+      'migrating',
+      'isolated',
+      'resetting',
+    ]);
+    expect(snapshotKinds).toEqual([
+      'current',
+      'last_valid',
+      'pre_migration',
+      'pre_import',
+      'import_staging',
+      'migration_staging',
+      'manual_backup',
+    ]);
+    expect(integrityStatuses).toEqual([
+      'not_checked',
+      'valid',
+      'warning',
+      'invalid',
+      'unsupported_newer_version',
+    ]);
   });
 
   it('accepts approved namespaced definition IDs used by content references', () => {
