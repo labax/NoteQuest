@@ -1,9 +1,31 @@
 const UINT64_MASK = (1n << 64n) - 1n;
 const PCG32_MULTIPLIER = 6364136223846793005n;
 const UINT32_MASK = 0xffff_ffffn;
+const FNV1A_64_OFFSET_BASIS = 0xcbf2_9ce4_8422_2325n;
+const FNV1A_64_PRIME = 0x0000_0100_0000_01b3n;
 
 export const pcg32AlgorithmId = 'pcg32' as const;
 export const pcg32AlgorithmVersion = '1' as const;
+export const randomStreamDerivationId = 'notequest-pcg32-named-stream' as const;
+export const randomStreamDerivationVersion = '1' as const;
+
+export const randomStreamPurposeRegistry = {
+  dungeonGeneration: {
+    name: 'dungeon-generation',
+    description: 'Dungeon graph, room, door, trap, and table generation outcomes.',
+  },
+  combat: {
+    name: 'combat',
+    description: 'Initiative, attacks, damage, monster actions, and combat-only dice.',
+  },
+  expeditionRepopulation: {
+    name: 'expedition-repopulation',
+    description: 'Later-expedition room repopulation and related lifecycle rolls.',
+  },
+} as const;
+
+export type RandomStreamPurpose =
+  (typeof randomStreamPurposeRegistry)[keyof typeof randomStreamPurposeRegistry]['name'];
 
 export interface Pcg32SerializedState {
   readonly algorithmId: typeof pcg32AlgorithmId;
@@ -12,9 +34,22 @@ export interface Pcg32SerializedState {
   readonly streamSelector: string;
 }
 
+export interface NamedRandomStreamState {
+  readonly purpose: RandomStreamPurpose;
+  readonly derivationId: typeof randomStreamDerivationId;
+  readonly derivationVersion: typeof randomStreamDerivationVersion;
+  readonly masterSeed: string;
+  readonly rng: Pcg32SerializedState;
+}
+
 export interface Pcg32Draw {
   readonly value: number;
   readonly state: Pcg32;
+}
+
+export interface NamedRandomStream {
+  readonly identity: Omit<NamedRandomStreamState, 'rng'>;
+  readonly rng: Pcg32;
 }
 
 /**
@@ -114,12 +149,123 @@ export class Pcg32 {
   }
 }
 
+export function createNamedRandomStream(
+  masterSeed: bigint | string,
+  purpose: RandomStreamPurpose,
+): NamedRandomStream {
+  assertRegisteredRandomStreamPurpose(purpose);
+
+  const normalizedMasterSeed = normalizeMasterSeed(masterSeed);
+  const streamSelector = deriveNamedStreamSelector(normalizedMasterSeed, purpose);
+
+  return {
+    identity: {
+      purpose,
+      derivationId: randomStreamDerivationId,
+      derivationVersion: randomStreamDerivationVersion,
+      masterSeed: formatHexUint64(normalizedMasterSeed),
+    },
+    rng: Pcg32.fromSeed(normalizedMasterSeed, streamSelector),
+  };
+}
+
+export function serializeNamedRandomStream(stream: NamedRandomStream): NamedRandomStreamState {
+  return {
+    ...stream.identity,
+    rng: stream.rng.serialize(),
+  };
+}
+
+export function deserializeNamedRandomStream(
+  serialized: NamedRandomStreamState,
+): NamedRandomStream {
+  assertRegisteredRandomStreamPurpose(serialized.purpose);
+
+  if (serialized.derivationId !== randomStreamDerivationId) {
+    throw new Error(`Unsupported random stream derivation ID: ${serialized.derivationId}`);
+  }
+
+  if (serialized.derivationVersion !== randomStreamDerivationVersion) {
+    throw new Error(
+      `Unsupported random stream derivation version: ${serialized.derivationVersion}`,
+    );
+  }
+
+  const masterSeed = normalizeMasterSeed(serialized.masterSeed);
+  const expectedSelector = formatHexUint64(
+    deriveNamedStreamSelector(masterSeed, serialized.purpose),
+  );
+
+  if (serialized.rng.streamSelector !== expectedSelector) {
+    throw new Error('Persisted stream selector does not match the named stream derivation');
+  }
+
+  return {
+    identity: {
+      purpose: serialized.purpose,
+      derivationId: serialized.derivationId,
+      derivationVersion: serialized.derivationVersion,
+      masterSeed: formatHexUint64(masterSeed),
+    },
+    rng: Pcg32.deserialize(serialized.rng),
+  };
+}
+
+export function deriveNamedStreamSelector(
+  masterSeed: bigint | string,
+  purpose: RandomStreamPurpose,
+): bigint {
+  assertRegisteredRandomStreamPurpose(purpose);
+
+  const normalizedMasterSeed = normalizeMasterSeed(masterSeed);
+  return fnv1a64(
+    `${randomStreamDerivationId}:${randomStreamDerivationVersion}:${formatHexUint64(
+      normalizedMasterSeed,
+    )}:${purpose}`,
+  );
+}
+
+export function listRandomStreamPurposes(): readonly RandomStreamPurpose[] {
+  return Object.values(randomStreamPurposeRegistry).map((entry) => entry.name);
+}
+
+export function assertRegisteredRandomStreamPurpose(
+  purpose: string,
+): asserts purpose is RandomStreamPurpose {
+  if (!listRandomStreamPurposes().includes(purpose as RandomStreamPurpose)) {
+    throw new Error(`Unsupported random stream purpose: ${purpose}`);
+  }
+}
+
 export function formatHexUint64(value: bigint): string {
   return `0x${toUint64(value).toString(16).padStart(16, '0')}`;
 }
 
 function derivePcg32Increment(streamSelector: bigint): bigint {
   return toUint64(streamSelector << 1n) | 1n;
+}
+
+function normalizeMasterSeed(masterSeed: bigint | string): bigint {
+  return typeof masterSeed === 'bigint'
+    ? toUint64(masterSeed)
+    : parseHexUint64(masterSeed, 'masterSeed');
+}
+
+function fnv1a64(input: string): bigint {
+  let hash = FNV1A_64_OFFSET_BASIS;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const codePoint = input.charCodeAt(index);
+
+    if (codePoint > 0x7f) {
+      throw new Error('Random stream derivation input must be ASCII');
+    }
+
+    hash = toUint64(hash ^ BigInt(codePoint));
+    hash = toUint64(hash * FNV1A_64_PRIME);
+  }
+
+  return hash;
 }
 
 function parseHexUint64(value: string, fieldName: string): bigint {

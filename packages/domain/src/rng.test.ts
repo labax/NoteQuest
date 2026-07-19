@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatHexUint32, Pcg32, pcg32AlgorithmId, pcg32AlgorithmVersion } from './rng.ts';
+import {
+  createNamedRandomStream,
+  deriveNamedStreamSelector,
+  deserializeNamedRandomStream,
+  formatHexUint32,
+  formatHexUint64,
+  listRandomStreamPurposes,
+  Pcg32,
+  pcg32AlgorithmId,
+  pcg32AlgorithmVersion,
+  randomStreamDerivationId,
+  randomStreamDerivationVersion,
+  serializeNamedRandomStream,
+  type RandomStreamPurpose,
+} from './rng.ts';
 
 describe('Pcg32', () => {
   it('matches fixed PCG32 reference vectors for the approved algorithm version', () => {
@@ -98,5 +112,94 @@ describe('Pcg32', () => {
     }
 
     expect(values).toEqual([6, 5, 6, 5, 3, 3, 5, 5]);
+  });
+});
+
+describe('named deterministic random streams', () => {
+  it('creates repeatable named streams from the same master save seed', () => {
+    const first = createNamedRandomStream(0x1234_5678_9abc_def0n, 'dungeon-generation');
+    const second = createNamedRandomStream('0x123456789abcdef0', 'dungeon-generation');
+
+    expect(serializeNamedRandomStream(first)).toEqual(serializeNamedRandomStream(second));
+
+    let firstRng = first.rng;
+    let secondRng = second.rng;
+    const firstValues: string[] = [];
+    const secondValues: string[] = [];
+
+    for (let index = 0; index < 5; index += 1) {
+      const firstDraw = firstRng.next();
+      const secondDraw = secondRng.next();
+      firstValues.push(formatHexUint32(firstDraw.value));
+      secondValues.push(formatHexUint32(secondDraw.value));
+      firstRng = firstDraw.state;
+      secondRng = secondDraw.state;
+    }
+
+    expect(firstValues).toEqual(secondValues);
+  });
+
+  it('derives stable independent selectors and outputs for required stream purposes', () => {
+    const masterSeed = 0x1234_5678_9abc_def0n;
+    const streams = listRandomStreamPurposes().map((purpose) =>
+      createNamedRandomStream(masterSeed, purpose),
+    );
+
+    expect(streams.map((stream) => stream.identity.purpose)).toEqual([
+      'dungeon-generation',
+      'combat',
+      'expedition-repopulation',
+    ]);
+    expect(streams.map((stream) => stream.rng.serialize().streamSelector)).toEqual([
+      '0xaf34abb34bdcb2b4',
+      '0x2ec16124cd842ccf',
+      '0x0a575e8371d2c93d',
+    ]);
+    expect(streams.map((stream) => formatHexUint32(stream.rng.next().value))).toEqual([
+      '0xde27295d',
+      '0x44c39925',
+      '0x1e4e9080',
+    ]);
+  });
+
+  it('serializes stream identity and version for persistence and restores state', () => {
+    const initial = createNamedRandomStream(0n, 'combat');
+    const advanced = initial.rng.next().state.next().state;
+    const serialized = serializeNamedRandomStream({ ...initial, rng: advanced });
+
+    expect(serialized).toEqual({
+      purpose: 'combat',
+      derivationId: randomStreamDerivationId,
+      derivationVersion: randomStreamDerivationVersion,
+      masterSeed: '0x0000000000000000',
+      rng: {
+        algorithmId: pcg32AlgorithmId,
+        algorithmVersion: pcg32AlgorithmVersion,
+        state: advanced.serialize().state,
+        streamSelector: formatHexUint64(deriveNamedStreamSelector(0n, 'combat')),
+      },
+    });
+
+    const restored = deserializeNamedRandomStream(serialized);
+
+    expect(restored.identity).toEqual(initial.identity);
+    expect(restored.rng.serialize()).toEqual(advanced.serialize());
+  });
+
+  it('rejects unregistered purposes and mismatched persisted selectors', () => {
+    expect(() => createNamedRandomStream(0n, 'reward' as RandomStreamPurpose)).toThrow(
+      'Unsupported random stream purpose',
+    );
+
+    const serialized = serializeNamedRandomStream(
+      createNamedRandomStream(0n, 'expedition-repopulation'),
+    );
+
+    expect(() =>
+      deserializeNamedRandomStream({
+        ...serialized,
+        rng: { ...serialized.rng, streamSelector: '0x0000000000000001' },
+      }),
+    ).toThrow('Persisted stream selector does not match');
   });
 });
