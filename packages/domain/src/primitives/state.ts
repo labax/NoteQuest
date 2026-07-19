@@ -1,5 +1,6 @@
 import type {
   AdventurerId,
+  DefinitionId,
   DungeonId,
   EventId,
   ExpeditionId,
@@ -120,7 +121,8 @@ export interface RandomStreamStateCore {
 export interface EventEntryCore {
   readonly eventId: EventId;
   readonly sequence: PositiveInteger;
-  readonly eventCategory: EventCategory;
+  readonly category: EventCategory;
+  readonly eventType: DefinitionId;
   readonly slotId: SaveSlotId;
   readonly rulesVersion: string;
 }
@@ -132,8 +134,8 @@ export interface RollResultCore {
   readonly streamDrawStart: NonNegativeInteger | null;
   readonly naturalDice: readonly (1 | 2 | 3 | 4 | 5 | 6)[];
   readonly inputMode: InputMode;
-  readonly tableId: string | null;
-  readonly tableRowId: string | null;
+  readonly tableId: DefinitionId | null;
+  readonly tableRowId: DefinitionId | null;
   readonly finalValue: number | null;
   readonly rulesVersion: string;
 }
