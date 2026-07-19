@@ -62,6 +62,45 @@ describe('canonical JSON serialization adapter', () => {
     );
   });
 
+  it('rejects sparse arrays with the missing element path', () => {
+    const sparse = new Array<unknown>(2);
+    sparse[1] = 'x';
+
+    expect(() => serializeCanonicalJson(sparse)).toThrow(CanonicalJsonError);
+    expect(() => serializeCanonicalJson(sparse)).toThrow('$[0]: sparse arrays are not supported');
+  });
+
+  it('rejects own symbol-keyed object properties instead of silently dropping them', () => {
+    const symbolKey = Symbol('hidden');
+    const value = { visible: true, [symbolKey]: 'unsupported' };
+
+    expect(() => serializeCanonicalJson(value)).toThrow(CanonicalJsonError);
+    expect(() => serializeCanonicalJson(value)).toThrow(
+      '$: symbol-keyed properties are not JSON-compatible values (Symbol(hidden))',
+    );
+  });
+
+  it('rejects own symbol-keyed array properties instead of silently dropping them', () => {
+    const symbolKey = Symbol('arrayHidden');
+    const value = ['visible'] as unknown[] & { [symbolKey]?: string };
+    value[symbolKey] = 'unsupported';
+
+    expect(() => serializeCanonicalJson(value)).toThrow(CanonicalJsonError);
+    expect(() => serializeCanonicalJson(value)).toThrow(
+      '$: symbol-keyed properties are not JSON-compatible values (Symbol(arrayHidden))',
+    );
+  });
+
+  it('rejects extra own array string properties that are not canonical array indexes', () => {
+    const value = ['visible'] as unknown[] & { extra?: string };
+    value.extra = 'unsupported';
+
+    expect(() => serializeCanonicalJson(value)).toThrow(CanonicalJsonError);
+    expect(() => serializeCanonicalJson(value)).toThrow(
+      '$.extra: array own property is not a canonical JSON array index: extra',
+    );
+  });
+
   it('rejects cyclic object and array graphs', () => {
     const cyclicObject: Record<string, unknown> = { id: 'cycle' };
     cyclicObject.self = cyclicObject;
