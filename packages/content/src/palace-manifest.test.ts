@@ -339,4 +339,160 @@ describe('Palace content manifest schema', () => {
       ]),
     );
   });
+
+  it('fails selected public-release content with incomplete release provenance metadata', () => {
+    const manifest = makeValidPalaceManifest();
+    const invalid = {
+      ...manifest,
+      entries: manifest.entries.map((entry) =>
+        entry.id === 'palace.fixture.mechanic'
+          ? {
+              ...entry,
+              provenance: {
+                ...entry.provenance,
+                sourceLocation: null,
+                sourceReferences: [
+                  {
+                    kind: 'project-original-placeholder' as const,
+                    sourceId: '',
+                    citationLabel: '',
+                  },
+                ],
+                evidenceReference: {
+                  ...entry.provenance.evidenceReference,
+                  publicId: '',
+                  confidentiality: 'private-controlled-record' as const,
+                },
+                permittedReleaseModes: [],
+                restrictions: [],
+                attributionRequired: true,
+                attributionNoticeId: null,
+                noticeLocations: [],
+                compatibilityPolicy: 'pending-content-hash-story' as const,
+                contentHash: {
+                  status: 'pending' as const,
+                  algorithm: 'pending' as const,
+                  canonicalization: 'pending' as const,
+                  value: null,
+                },
+              },
+            }
+          : entry,
+      ),
+    };
+
+    expect(validatePalaceContentManifest(invalid).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.sourceLocation',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.sourceReferences[0].sourceId',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.sourceReferences[0].citationLabel',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.evidenceReference.publicId',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.evidenceReference.confidentiality',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.permittedReleaseModes',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.restrictions',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.attributionNoticeId',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.noticeLocations',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.compatibilityPolicy',
+        }),
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.contentHash',
+        }),
+      ]),
+    );
+  });
+
+  it('fails Palace table topology errors for empty dice tables and orphan rows', () => {
+    const emptyTableManifest = {
+      ...makeValidPalaceManifest(),
+      entries: [
+        makeValidEntry('palace.fixture.empty-table', {
+          kind: 'table',
+          parentId: undefined,
+          range: undefined,
+          structuredDefinition: { dice: '1d6', purpose: 'project-original empty table fixture' },
+        }),
+      ],
+    };
+
+    expect(validatePalaceContentManifest(emptyTableManifest).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.empty-table',
+          field: 'entries',
+          reason: 'dice table 1d6 must include table-row entries',
+        }),
+      ]),
+    );
+
+    const orphanRowManifest = {
+      ...makeValidPalaceManifest(),
+      entries: makeValidPalaceManifest().entries.map((entry) =>
+        entry.id === 'palace.fixture.room-table.row-1'
+          ? ({ ...entry, parentId: undefined } as unknown as PalaceManifestEntry)
+          : entry,
+      ),
+    };
+
+    expect(validatePalaceContentManifest(orphanRowManifest).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.room-table.row-1',
+          field: 'parentId',
+          reason: 'table-row entries must reference a parent table',
+        }),
+      ]),
+    );
+  });
+
+  it('fails Palace table-row parents that do not point to tables', () => {
+    const manifest = makeValidPalaceManifest();
+    const invalid = {
+      ...manifest,
+      entries: manifest.entries.map((entry) =>
+        entry.id === 'palace.fixture.room-table.row-1'
+          ? { ...entry, parentId: 'palace.fixture.mechanic' as const }
+          : entry,
+      ),
+    };
+
+    expect(validatePalaceContentManifest(invalid).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.room-table.row-1',
+          field: 'parentId',
+          reason: 'table-row parent palace.fixture.mechanic must be a table',
+        }),
+      ]),
+    );
+  });
 });
