@@ -33,13 +33,14 @@ describe('Pcg32', () => {
       algorithmId: pcg32AlgorithmId,
       algorithmVersion: pcg32AlgorithmVersion,
       state: '0x70583300b019ef75',
-      streamSelector: '0x1fdb97530eca8643',
+      streamSelector: '0x0fedcba987654321',
     });
 
     const restored = Pcg32.deserialize(serialized);
     const originalContinuation = rng.next();
     const restoredContinuation = restored.next();
 
+    expect(restored.serialize()).toEqual(serialized);
     expect(restoredContinuation.value).toBe(originalContinuation.value);
     expect(restoredContinuation.state.serialize()).toEqual(originalContinuation.state.serialize());
   });
@@ -62,6 +63,28 @@ describe('Pcg32', () => {
         streamSelector: '0x0000000000000001',
       }),
     ).toThrow('state must be a lowercase 16-digit hexadecimal uint64 string');
+
+    expect(() =>
+      Pcg32.deserialize({
+        algorithmId: pcg32AlgorithmId,
+        algorithmVersion: pcg32AlgorithmVersion,
+        state: '0x0000000000000000',
+        streamSelector: '0x1',
+      }),
+    ).toThrow('streamSelector must be a lowercase 16-digit hexadecimal uint64 string');
+  });
+
+  it('treats a 2^32 bound as the full uint32 range', () => {
+    const rng = Pcg32.fromSeed(0x1234n, 0x5678n);
+
+    const unboundedDraw = rng.next();
+    const boundedDraw = rng.nextBounded(0x1_0000_0000);
+
+    expect(Number.isInteger(boundedDraw.value)).toBe(true);
+    expect(boundedDraw.value).toBeGreaterThanOrEqual(0);
+    expect(boundedDraw.value).toBeLessThan(0x1_0000_0000);
+    expect(boundedDraw.value).toBe(unboundedDraw.value);
+    expect(boundedDraw.state.serialize()).toEqual(unboundedDraw.state.serialize());
   });
 
   it('produces deterministic bounded values without Math.random', () => {

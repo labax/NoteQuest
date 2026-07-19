@@ -27,10 +27,12 @@ export interface Pcg32Draw {
 export class Pcg32 {
   readonly #state: bigint;
   readonly #streamSelector: bigint;
+  readonly #increment: bigint;
 
   private constructor(state: bigint, streamSelector: bigint) {
     this.#state = toUint64(state);
-    this.#streamSelector = toUint64(streamSelector) | 1n;
+    this.#streamSelector = toUint64(streamSelector);
+    this.#increment = derivePcg32Increment(this.#streamSelector);
   }
 
   get state(): bigint {
@@ -42,10 +44,10 @@ export class Pcg32 {
   }
 
   static fromSeed(seedState: bigint, streamSelector: bigint): Pcg32 {
-    const increment = toUint64(streamSelector << 1n) | 1n;
-    let rng = new Pcg32(0n, increment);
+    const normalizedStreamSelector = toUint64(streamSelector);
+    let rng = new Pcg32(0n, normalizedStreamSelector);
     rng = rng.next().state;
-    rng = new Pcg32(rng.#state + seedState, increment);
+    rng = new Pcg32(rng.#state + seedState, normalizedStreamSelector);
     return rng.next().state;
   }
 
@@ -70,7 +72,7 @@ export class Pcg32 {
 
   next(): Pcg32Draw {
     const oldState = this.#state;
-    const nextState = toUint64(oldState * PCG32_MULTIPLIER + this.#streamSelector);
+    const nextState = toUint64(oldState * PCG32_MULTIPLIER + this.#increment);
     const xorshifted = Number(((oldState >> 18n) ^ oldState) >> 27n) >>> 0;
     const rotation = Number(oldState >> 59n) & 31;
     const value = ((xorshifted >>> rotation) | (xorshifted << (-rotation & 31))) >>> 0;
@@ -85,6 +87,10 @@ export class Pcg32 {
       exclusiveUpperBound > 0x1_0000_0000
     ) {
       throw new RangeError('exclusiveUpperBound must be a positive safe integer at most 2^32');
+    }
+
+    if (exclusiveUpperBound === 0x1_0000_0000) {
+      return this.next();
     }
 
     const bound = exclusiveUpperBound >>> 0;
@@ -110,6 +116,10 @@ export class Pcg32 {
 
 export function formatHexUint64(value: bigint): string {
   return `0x${toUint64(value).toString(16).padStart(16, '0')}`;
+}
+
+function derivePcg32Increment(streamSelector: bigint): bigint {
+  return toUint64(streamSelector << 1n) | 1n;
 }
 
 function parseHexUint64(value: string, fieldName: string): bigint {
