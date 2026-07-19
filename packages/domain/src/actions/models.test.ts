@@ -7,12 +7,12 @@ import {
   validationErrorResult,
   type AdventurerCreatedEvent,
   type CommandId,
+  type ContentVersion,
   type CreateAdventurerCommand,
   type EventSequence,
   type EventStateSnapshot,
   type IsoDateTimeString,
   type RulesVersion,
-  type ContentVersion,
   type ValidationIssue,
 } from './models.ts';
 
@@ -55,6 +55,33 @@ describe('mechanical command/result/event models', () => {
       commandId,
       issues: [issue],
     });
+  });
+
+  it('distinguishes warning guards from blocking guards at result boundaries', () => {
+    const guard = {
+      commandId,
+      legal: true,
+      checks: [
+        {
+          code: 'low_torches_warning',
+          message: 'The adventurer is low on torches.',
+          satisfied: false,
+          severity: 'warning' as const,
+        },
+      ],
+    };
+
+    expect(isCommandBlocked(guard)).toBe(false);
+  });
+
+  it('omits optional correlation IDs from result boundaries when absent', () => {
+    const command = {
+      ...createCommand(),
+      metadata: { commandId },
+    };
+
+    expect(validationErrorResult(command, [])).not.toHaveProperty('correlationId');
+    expect(successResult(command, 2, [])).not.toHaveProperty('correlationId');
   });
 
   it('represents blocked guard outcomes for illegal mechanical actions', () => {

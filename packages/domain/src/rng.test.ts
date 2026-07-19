@@ -37,6 +37,26 @@ describe('Pcg32', () => {
     ]);
   });
 
+  it('matches the approved M2 state-after-each-draw vector', () => {
+    let rng = Pcg32.fromSeed(42n, 54n);
+    const states: string[] = [];
+
+    for (let index = 0; index < 6; index += 1) {
+      const draw = rng.next();
+      states.push(draw.state.serialize().state);
+      rng = draw.state;
+    }
+
+    expect(states).toEqual([
+      '0x2b47fed88766bb05',
+      '0x8b33296d19bf5b4e',
+      '0xf7079824c154bf23',
+      '0xebbf9e97aa16f694',
+      '0x8303569fbe80c471',
+      '0xbeb6d0b73fdb974a',
+    ]);
+  });
+
   it('serializes explicit versioned state and restores without changing the next outputs', () => {
     let rng = Pcg32.fromSeed(0x1234_5678_9abc_def0n, 0x0fed_cba9_8765_4321n);
     const first = rng.next();
@@ -160,6 +180,21 @@ describe('named deterministic random streams', () => {
       '0x44c39925',
       '0x1e4e9080',
     ]);
+  });
+
+  it('keeps named streams independent when one stream advances farther', () => {
+    const dungeon = createNamedRandomStream(0x0123_4567_89ab_cdefn, 'dungeon-generation');
+    const combat = createNamedRandomStream(0x0123_4567_89ab_cdefn, 'combat');
+
+    const combatFirst = combat.rng.next();
+    let advancedDungeon = dungeon.rng;
+    for (let index = 0; index < 4; index += 1) {
+      advancedDungeon = advancedDungeon.next().state;
+    }
+
+    expect(combat.rng.serialize().streamSelector).not.toBe(dungeon.rng.serialize().streamSelector);
+    expect(combat.rng.next().value).toBe(combatFirst.value);
+    expect(advancedDungeon.serialize()).not.toEqual(dungeon.rng.serialize());
   });
 
   it('serializes stream identity and version for persistence and restores state', () => {

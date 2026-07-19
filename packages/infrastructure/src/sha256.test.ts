@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { serializeCanonicalJson } from './canonical-json.ts';
+import { canonicalJsonFixtures } from './canonical-json-fixtures.ts';
 import { sha256CanonicalJsonFixtures } from './sha256-fixtures.ts';
 import { createSha256Hasher, SHA256_CHECKSUM_PREFIX, SHA256_HEX_LENGTH } from './sha256.ts';
 
@@ -47,6 +48,18 @@ describe('SHA-256 canonical UTF-8 hashing adapter', () => {
       expect(result.hex).toHaveLength(SHA256_HEX_LENGTH);
       expect(result.checksum).toBe(`${SHA256_CHECKSUM_PREFIX}${fixture.sha256}`);
       expect(result.checksum).toBe(fixture.checksum);
+    },
+  );
+
+  it.each(canonicalJsonFixtures)(
+    'hashes exact canonical UTF-8 fixture bytes for $name',
+    async ({ value, canonicalJson, utf8Hex }) => {
+      const serialized = serializeCanonicalJson(value);
+      const result = await createSha256Hasher().hashCanonicalUtf8(serialized);
+
+      expect(serialized).toBe(canonicalJson);
+      expect(Buffer.from(serialized, 'utf8').toString('hex')).toBe(utf8Hex);
+      expect(result.ok).toBe(true);
     },
   );
 

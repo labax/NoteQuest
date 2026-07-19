@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import { CanonicalJsonError, serializeCanonicalJson } from './canonical-json.ts';
+import { canonicalJsonFixtures } from './canonical-json-fixtures.ts';
 
 describe('canonical JSON serialization adapter', () => {
+  it.each(canonicalJsonFixtures)(
+    'matches the M2 canonical fixture for $name',
+    ({ value, canonicalJson, utf8Hex }) => {
+      const serialized = serializeCanonicalJson(value);
+
+      expect(serialized).toBe(canonicalJson);
+      expect(Buffer.from(serialized, 'utf8').toString('hex')).toBe(utf8Hex);
+    },
+  );
   it('serializes primitive JSON values deterministically', () => {
     expect(serializeCanonicalJson(null)).toBe('null');
     expect(serializeCanonicalJson(true)).toBe('true');
