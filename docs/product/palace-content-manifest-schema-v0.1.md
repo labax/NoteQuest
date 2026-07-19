@@ -38,8 +38,9 @@ Manifest entries must follow the approved content/licensing baseline:
 | Field | Type | Required | Use |
 |---|---|---:|---|
 | `id` | stable string | Yes | Deterministic content ID, using the `palace.` prefix. |
-| `kind` | enum | Yes | `table`, `table-row`, `range`, `mechanic-reference`, or `placeholder`. |
-| `version` | semantic version string | Yes | Entry-level version for deterministic fixtures and migrations. |
+| `contentType` | enum | Yes | Section 12 `contentType` equivalent: `definition`, `table`, `row`, `prose`, `visual`, `font`, `icon`, `dependency`, `notice`, `fixture`, or `documentation-asset`. |
+| `kind` | enum | Yes | Runtime entry kind: `table`, `table-row`, `range`, `mechanic-reference`, or `placeholder`. |
+| `version` | semantic version string | Yes | Section 12 `contentVersion` equivalent for deterministic fixtures and migrations. |
 | `label` | project-authored string | Yes | Internal/public-safe label; do not copy official prose. |
 | `parentId` | content ID | No | Parent table or grouping entry for rows/ranges. |
 | `range` | object | No | Future dice/range validation metadata. |
@@ -51,19 +52,37 @@ Manifest entries must follow the approved content/licensing baseline:
 
 ## 5. Provenance shape
 
-| Field | Type | Required | Use |
-|---|---|---:|---|
-| `origin` | enum | Yes | `approved-source`, `project-original`, `derived`, or `unknown`. |
-| `rightsBasis` | string | Yes | Public-safe summary of the rights basis; no private correspondence. |
-| `permissionReference` | string | Yes | Public-safe document, register, or evidence-index reference. |
-| `attributionRequired` | boolean | Yes | Whether a later public notice/credits workflow must include attribution. |
-| `confidentialRightsEvidence` | literal string | Yes | Always `excluded-from-public-manifest` in public manifest data. |
-| `sourceReferences` | array | Yes | Public-safe references such as source edition/table identifiers, decision-register IDs, or project placeholder IDs. |
-| `containsExactSourceProse` | boolean | Yes | Must remain `false` unless exact-text approval is later recorded. |
-| `containsSourceArtwork` | boolean | Yes | Must remain `false` unless artwork approval is later recorded. |
-| `containsTradeDress` | boolean | Yes | Must remain `false`; public manifests must not reproduce source layout/trade dress. |
+Each entry has an explicit `provenance` object aligned to Content & Licensing Requirements Section 12. Required values that are not yet available in STORY-M3-001 must be represented with public-safe `null`, `pending`, `not-applicable`, or deferred references rather than hidden in prose.
+
+| Field | Section 12 equivalent | Required for release content | Placeholder / blocked / unknown handling | Use |
+|---|---|---:|---|---|
+| `origin` | Supporting origin | Yes | Use `project-original`, `unknown`, or `derived` as appropriate. | Coarse runtime provenance category. |
+| `sourceCategory` | `sourceCategory` | Yes | Use `project_placeholder`, `unknown`, or `restricted` rather than selecting unreviewed source content. | Controlled category from the licensing baseline. |
+| `sourceName` | `sourceName` | Yes | Public-safe project/source label. | Human-readable source without confidential correspondence. |
+| `sourceLocation` | `sourceLocation` | Yes for source-derived content | `null` only when not applicable; project placeholders may point to the project file/story. | Public-safe page/table/record/file locator. |
+| `sourceEditionVersion` | `sourceEditionVersion` | Yes | Use package version, reviewed date, or placeholder version. | Edition, package, asset, or reviewed version. |
+| `sourceReferences` | Source references | Yes | Use placeholder or controlled evidence references. | Structured references without copied source table text. |
+| `authorRightsHolder` | `authorRightsHolder` | Yes where known | Project placeholder uses the project owner label. | Creator, rights holder, vendor, or project owner. |
+| `permissionLicenseId` | `permissionLicenseId` | Yes | Use project-original or pending/blocked IDs when not approved. | Canonical permission, licence, contract, or project-original identifier. |
+| `rightsBasis` | Rights/licence basis | Yes | Public-safe summary only. | Explains why the item can be held in this state. |
+| `evidenceReference` | `evidenceLocation` | Yes for bundled non-original content | Public ID may be present while private location is `null`; confidential details stay outside the manifest. | Non-confidential evidence ID/location metadata. |
+| `permittedReleaseModes` | `permittedReleaseModes` | Yes | Empty or internal-only for blocked/unapproved placeholders. | Internal prototype, closed playtest, public free Core MVP, or future commercial compatibility. |
+| `restrictions` | `restrictions` | Yes | Must record blockers such as not public-release eligible or replace before release. | Verbatim, visual, attribution, expiry, modification, redistribution, or other constraints. |
+| `attributionRequired` | Attribution requirement | Yes | `false` only when no notice is required. | Whether an approved notice must be displayed. |
+| `attributionNoticeId` | `attributionNoticeId` | When required | `null` when not applicable or pending. | Link to controlled notice wording. |
+| `noticeLocations` | `noticeLocations` | When required | Empty when no notice applies. | About/Credits, NOTICE, manifest, release listing, export package, or release evidence package. |
+| `modifications` | `modifications` | Should | Record placeholder/original status or pending normalisation policy. | Paraphrase, transcription, correction, normalisation, derived asset, or original implementation notes. |
+| `compatibilityPolicy` | `compatibilityPolicy` | For saved definitions | Use `not-applicable-placeholder` or `pending-content-hash-story` when not applicable yet. | Defines how prior saves/history resolve the item/version. |
+| `contentHash` | `contentHash` | Yes for release items | Use a deferred `pending` or `not-applicable` object until #60 records canonical hashes. | Future SHA-256/canonicalisation metadata. |
+| `supersedes` | `supersedes` | When applicable | Empty array when not applicable. | Prior content IDs replaced by this entry. |
+| `confidentialRightsEvidence` | Privacy-aware evidence control | Yes | Always `excluded-from-public-manifest` in public manifests. | Confirms private correspondence is not exposed. |
+| `containsExactSourceProse` | Exact prose restriction | Yes | Must remain `false` unless a later exact-text approval exists. | Safety flag. |
+| `containsSourceArtwork` | Visual restriction | Yes | Must remain `false` unless separate artwork approval exists. | Safety flag. |
+| `containsTradeDress` | Trade-dress restriction | Yes | Must remain `false`. | Safety flag. |
 
 `sourceReferences` may identify the kind of reference, source ID, public citation label, locator, source version, and notes. They should be specific enough to support later review and validation while avoiding copied table text.
+
+`contentHash` is intentionally a field shape, not an implemented hashing gate in this story. Later #60 work should populate `status: recorded`, `algorithm: SHA-256`, the canonicalisation mode, and a `sha256:<hex>` value after canonical serialisation is implemented.
 
 ## 6. Review and approval states
 
@@ -77,7 +96,7 @@ Allowed `approvalState` values are:
 | `unknown` | Provenance or approval is not established. |
 | `review-pending` | Awaiting content, rights, rules, QA, or product review. |
 
-The `review` object also records optional reviewer role, review date, public-safe decision reference, blocked reason, and `publicReleaseEligible`. Blocked, unknown, draft, and review-pending entries should set `publicReleaseEligible` to `false` until a later gate explicitly changes their status.
+The `review` object also records optional reviewer role, public-safe reviewer reference, review date, public-safe decision reference, blocked reason, and `publicReleaseEligible`. Blocked, unknown, draft, and review-pending entries are not release eligible even if malformed data sets `publicReleaseEligible` to `true`; later validation work should fail those combinations. Selected release items must also have complete provenance, notice, compatibility, and hash metadata before release gates can pass.
 
 ## 7. Example placeholder entry
 
