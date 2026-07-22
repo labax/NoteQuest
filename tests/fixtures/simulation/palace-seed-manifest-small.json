@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "notequest-seed-manifest.schema.v0.1",
+  "manifestId": "palace.qa-smoke.small.synthetic",
+  "manifestVersion": "0.1.0",
+  "runPurpose": "qa-smoke",
+  "dungeonType": "palace",
+  "seedSet": {
+    "mode": "explicit",
+    "seeds": ["0x0000000000000001", "0x0000000000000002", "0x0000000000000003"]
+  },
+  "versions": {
+    "rulesVersion": "digital-rules-specification-v0.1",
+    "contentPackageId": "palace",
+    "contentVersion": "0.1.0",
+    "rng": {
+      "algorithmId": "pcg32",
+      "algorithmVersion": "1",
+      "streamDerivationId": "notequest-pcg32-named-stream",
+      "streamDerivationVersion": "1"
+    }
+  },
+  "partitioning": {
+    "strategy": "contiguous-index-range",
+    "partitionCount": 1,
+    "partitionIndex": 0,
+    "aggregateInvariant": "sort-by-seed-before-reduction"
+  },
+  "privacy": {
+    "containsRealUserData": false,
+    "fixtureDataClassification": "synthetic-public-safe"
+  },
+  "notes": "Project-original synthetic Palace smoke fixture; contains no player save or private data."
+}
