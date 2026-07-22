@@ -616,7 +616,9 @@ function makeInvariantFailure(
 ): SimulationInvariantFailure {
   const reproduction: ReproductionData = {
     manifestPath: '<manifest-path>',
-    expectedFirstSeed: options.expectFirstSeed,
+    ...(options.expectFirstSeed !== undefined
+      ? { expectedFirstSeed: options.expectFirstSeed }
+      : {}),
     observedFirstSeed: result.seed,
     dungeon: manifest.dungeonType,
     runs: seedIndex + 1,
