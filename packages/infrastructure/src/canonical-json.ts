@@ -5,12 +5,12 @@ export type CanonicalJsonValue =
   | { readonly [key: string]: CanonicalJsonValue };
 
 export class CanonicalJsonError extends TypeError {
-  constructor(
-    message: string,
-    readonly path: string,
-  ) {
+  readonly path: string;
+
+  constructor(message: string, path: string) {
     super(`${path}: ${message}`);
     this.name = 'CanonicalJsonError';
+    this.path = path;
   }
 }
 

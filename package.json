@@ -22,7 +22,9 @@
     "lint": "eslint . --max-warnings=0",
     "static-check": "npm run lint",
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
-    "test:ci": "vitest run"
+    "test:ci": "vitest run",
+    "simulation:cli": "node --experimental-strip-types packages/simulation/src/cli.ts",
+    "simulation:palace-smoke": "npm run simulation:cli -- --dungeon palace --runs 2 --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --rules-version digital-rules-specification-v0.1 --content-version 0.1.0 --rng-version 1 --workers 1 --json-output .tmp/simulation-palace-smoke.json --markdown-output .tmp/simulation-palace-smoke.md"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
