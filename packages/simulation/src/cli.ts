@@ -37,8 +37,8 @@ Options:
   --content-version <semver> Expected content manifest version in the seed manifest.
   --rng-version <value>    Expected production RNG algorithm version.
   --workers <count>        Worker count metadata for future partitioned execution; current shell runs serially.
-  --json-output <path>     JSON report output path. Omit report paths to write JSON to stdout.
-  --markdown-output <path> Concise Markdown summary output path.
+  --json-output <path>     JSON report output path. Omit to write JSON to stdout.
+  --markdown-output <path> Concise Markdown summary output path; JSON still writes to stdout when no JSON path is set.
   --output <path>          Backward-compatible alias for --json-output.
   --dry-run                Validate arguments and seed/content manifests without executing seed smoke draws.
   --help                   Show this help text.
@@ -228,11 +228,11 @@ export async function runSimulationCli(argv: readonly string[]): Promise<Simulat
     writes.push(`Markdown report: ${options.markdownOutputPath}`);
   }
 
-  if (writes.length > 0) {
-    return { exitCode: 0, stdout: `Wrote simulation reports\n${writes.join('\n')}\n`, stderr: '' };
+  if (options.jsonOutputPath === undefined) {
+    return { exitCode: 0, stdout: jsonReport, stderr: '' };
   }
 
-  return { exitCode: 0, stdout: jsonReport, stderr: '' };
+  return { exitCode: 0, stdout: `Wrote simulation reports\n${writes.join('\n')}\n`, stderr: '' };
 }
 
 function parseCliOptions(
@@ -524,7 +524,20 @@ function renderMarkdownReport(report: SimulationReport): string {
     `- Duration: ${report.duration.milliseconds} ms (runtime metadata)`,
     `- Environment: Node ${report.environment.nodeVersion} on ${report.environment.platform}/${report.environment.arch}; workers=${report.environment.workers}; dryRun=${report.environment.dryRun}`,
     '',
+    '## Selected content hash evidence',
+    '',
+    '| Content ID | Algorithm | Canonicalization | Hash input kind | Checksum |',
+    '|---|---|---|---|---|',
+    ...report.versions.contentManifest.entries.map(
+      (entry) =>
+        `| ${escapeMarkdownTableCell(entry.contentId)} | ${entry.algorithm} | ${entry.canonicalization} | ${entry.hashInputKind} | ${entry.checksum} |`,
+    ),
+    '',
   ].join('\n');
+}
+
+function escapeMarkdownTableCell(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('|', '&#124;');
 }
 
 function writeTextFile(path: string, contents: string): void {

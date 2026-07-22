@@ -203,7 +203,10 @@ describe('simulation CLI shell', () => {
       const report = JSON.parse(readFileSync(jsonOutputPath, 'utf8')) as {
         readonly versions: {
           readonly rulesVersion: string;
-          readonly contentManifest: { readonly contentVersion: string };
+          readonly contentManifest: {
+            readonly contentVersion: string;
+            readonly entries: readonly { readonly contentId: string; readonly checksum: string }[];
+          };
           readonly rng: { readonly algorithmId: string; readonly algorithmVersion: string };
           readonly build: {
             readonly packageName: string;
@@ -244,6 +247,41 @@ describe('simulation CLI shell', () => {
       expect(markdown).toContain('# NoteQuest Simulation Report');
       expect(markdown).toContain('- Status: placeholder-smoke-complete');
       expect(markdown).toContain('- Invariant failures: 0');
+      expect(markdown).toContain('## Selected content hash evidence');
+      expect(markdown).toContain('palace.fixture.room-table');
+      expect(markdown).toContain(report.versions.contentManifest.entries[0]?.checksum);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('writes Markdown-only output while keeping parseable JSON on stdout', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'notequest-simulation-cli-markdown-only-'));
+    const markdownOutputPath = join(directory, 'report.md');
+
+    try {
+      const result = await runSimulationCli([
+        ...validArgs,
+        '--markdown-output',
+        markdownOutputPath,
+      ]);
+      const stdoutReport = JSON.parse(result.stdout) as {
+        readonly reportKind: string;
+        readonly versions: {
+          readonly contentManifest: {
+            readonly entries: readonly { readonly contentId: string; readonly checksum: string }[];
+          };
+        };
+      };
+      const markdown = readFileSync(markdownOutputPath, 'utf8');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(stdoutReport.reportKind).toBe('notequest-simulation-report.v0.1');
+      expect(stdoutReport.versions.contentManifest.entries.length).toBeGreaterThan(0);
+      expect(markdown).toContain('## Selected content hash evidence');
+      expect(markdown).toContain(stdoutReport.versions.contentManifest.entries[0]?.contentId);
+      expect(markdown).toContain(stdoutReport.versions.contentManifest.entries[0]?.checksum);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
