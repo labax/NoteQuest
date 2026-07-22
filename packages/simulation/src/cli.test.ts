@@ -87,6 +87,78 @@ describe('simulation CLI shell', () => {
     }
   });
 
+  it('reports reproducible seed diagnostics and exits non-zero for smoke invariant failures', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'notequest-simulation-cli-failure-'));
+    const jsonOutputPath = join(directory, 'failure.json');
+    const markdownOutputPath = join(directory, 'failure.md');
+
+    try {
+      const result = await runSimulationCli([
+        ...validArgs,
+        '--expect-first-seed',
+        '0x0000000000000002',
+        '--json-output',
+        jsonOutputPath,
+        '--markdown-output',
+        markdownOutputPath,
+      ]);
+      const report = JSON.parse(readFileSync(jsonOutputPath, 'utf8')) as {
+        readonly counts: { readonly invariantFailureCount: number };
+        readonly invariantFailures: readonly {
+          readonly invariantId: string;
+          readonly seed: string;
+          readonly seedReference: { readonly manifestId: string; readonly manifestHash: string };
+          readonly reproduction: {
+            readonly expectedFirstSeed: string;
+            readonly observedFirstSeed: string;
+            readonly workers: number;
+          };
+          readonly rerun: string;
+          readonly actionTrace: readonly unknown[];
+        }[];
+      };
+      const markdown = readFileSync(markdownOutputPath, 'utf8');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Smallest reproducible seed: 0x0000000000000001');
+      expect(result.stderr).toContain(`Report output: JSON report: ${jsonOutputPath}`);
+      expect(report.counts.invariantFailureCount).toBe(1);
+      expect(report.invariantFailures[0]).toMatchObject({
+        invariantId: 'SMOKE-FIRST-SEED',
+        seed: '0x0000000000000001',
+        seedReference: { manifestId: 'palace.qa-smoke.small.synthetic' },
+      });
+      expect(report.invariantFailures[0]?.seedReference.manifestHash).toMatch(
+        /^sha256:[a-f0-9]{64}$/,
+      );
+      expect(report.invariantFailures[0]?.reproduction).toMatchObject({
+        expectedFirstSeed: '0x0000000000000002',
+        observedFirstSeed: '0x0000000000000001',
+        workers: 1,
+      });
+      expect(report.invariantFailures[0]?.rerun).toContain('npm run simulation:cli');
+      expect(report.invariantFailures[0]?.rerun).toContain(
+        '--expect-first-seed 0x0000000000000002',
+      );
+      expect(report.invariantFailures[0]?.rerun).toContain('--workers 1');
+      expect(report.invariantFailures[0]?.actionTrace.length).toBeGreaterThan(0);
+      expect(markdown).toContain('- Invariant failures: 1');
+      expect(markdown).toContain('## Invariant failure details');
+      expect(markdown).toContain('### 1. SMOKE-FIRST-SEED');
+      expect(markdown).toContain('- Failure seed: 0x0000000000000001');
+      expect(markdown).toContain(
+        '- Seed reference: palace.qa-smoke.small.synthetic@0.1.0; hash=sha256:',
+      );
+      expect(markdown).toContain('index=0');
+      expect(markdown).toContain('--expect-first-seed 0x0000000000000002');
+      expect(markdown).toContain(
+        '| 1 | derive dungeon generation RNG stream | dungeon-generation | stream ready |',
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('rejects a partial Palace content hash set even when supplied checksums are correct', async () => {
     const manifest = readValidManifest();
     const partialManifest = {
