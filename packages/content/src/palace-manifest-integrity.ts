@@ -1,5 +1,3 @@
-import { type Sha256Hasher, serializeCanonicalJson, sha256Hasher } from '@notequest/infrastructure';
-
 import type {
   PalaceContentId,
   PalaceContentManifest,
@@ -22,6 +20,30 @@ export interface PalaceManifestIntegrityResult {
   readonly errors: readonly PalaceManifestValidationError[];
 }
 
+export interface PalaceCanonicalJsonSerializer {
+  serializeCanonicalJson(value: unknown): string;
+}
+
+export type PalaceManifestHashResult =
+  | {
+      readonly ok: true;
+      readonly algorithm: 'SHA-256';
+      readonly checksum: string;
+    }
+  | {
+      readonly ok: false;
+      readonly error: { readonly message: string };
+    };
+
+export interface PalaceSha256Hasher {
+  hashCanonicalUtf8(canonicalValue: string): Promise<PalaceManifestHashResult>;
+}
+
+export interface PalaceManifestIntegrityAdapters {
+  readonly canonicalJson: PalaceCanonicalJsonSerializer;
+  readonly sha256: PalaceSha256Hasher;
+}
+
 export function createPalaceManifestEntryIntegrityPayload(entry: PalaceManifestEntry) {
   return {
     contentType: entry.contentType,
@@ -39,10 +61,12 @@ export function createPalaceManifestEntryIntegrityPayload(entry: PalaceManifestE
 
 export async function hashPalaceManifestEntry(
   entry: PalaceManifestEntry,
-  hasher: Sha256Hasher = sha256Hasher,
+  adapters: PalaceManifestIntegrityAdapters,
 ): Promise<PalaceManifestHashEvidence> {
-  const canonicalJson = serializeCanonicalJson(createPalaceManifestEntryIntegrityPayload(entry));
-  const hashResult = await hasher.hashCanonicalUtf8(canonicalJson);
+  const canonicalJson = adapters.canonicalJson.serializeCanonicalJson(
+    createPalaceManifestEntryIntegrityPayload(entry),
+  );
+  const hashResult = await adapters.sha256.hashCanonicalUtf8(canonicalJson);
 
   if (!hashResult.ok) {
     throw new Error(hashResult.error.message);
@@ -60,20 +84,31 @@ export async function hashPalaceManifestEntry(
 
 export async function validatePalaceManifestIntegrity(
   manifest: PalaceContentManifest,
-  hasher: Sha256Hasher = sha256Hasher,
+  adapters: PalaceManifestIntegrityAdapters,
 ): Promise<PalaceManifestIntegrityResult> {
   const evidence: PalaceManifestHashEvidence[] = [];
   const errors: PalaceManifestValidationError[] = [];
 
   for (const entry of manifest.entries) {
-    if (entry.provenance.contentHash.status !== 'recorded') {
+    const expected = entry.provenance.contentHash;
+    const requiresRecordedHash =
+      entry.review.approvalState === 'selected' && entry.review.publicReleaseEligible;
+
+    if (expected.status !== 'recorded') {
+      if (requiresRecordedHash) {
+        errors.push({
+          contentId: entry.id,
+          field: 'provenance.contentHash.status',
+          reason:
+            'selected public-release Palace content must record canonical JSON SHA-256 integrity evidence',
+        });
+      }
       continue;
     }
 
-    const actual = await hashPalaceManifestEntry(entry, hasher);
+    const actual = await hashPalaceManifestEntry(entry, adapters);
     evidence.push(actual);
 
-    const expected = entry.provenance.contentHash;
     if (expected.algorithm !== 'SHA-256' || expected.canonicalization !== 'RFC-8785') {
       errors.push({
         contentId: entry.id,

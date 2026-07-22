@@ -402,6 +402,16 @@ function validatePalaceContentHash(
   errors: PalaceManifestValidationError[],
 ): void {
   const { contentHash } = entry.provenance;
+  const requiresRecordedHash = isSelectedPublicReleaseEntry(entry);
+
+  if (contentHash.status !== 'recorded' && requiresRecordedHash) {
+    addPalaceValidationError(
+      errors,
+      entry.id,
+      'provenance.contentHash.status',
+      'selected public-release content must record canonical JSON SHA-256 integrity evidence',
+    );
+  }
 
   if (contentHash.status === 'pending') {
     if (

@@ -12,15 +12,51 @@ import {
   validatePalaceContentManifest,
 } from './palace-manifest.ts';
 import { palaceManifestExpectedHashFixtures } from './palace-manifest-integrity-fixtures.ts';
-import {
-  hashPalaceManifestEntry,
-  validatePalaceManifestIntegrity,
-} from './palace-manifest-integrity.ts';
+import type { PalaceManifestIntegrityAdapters } from './palace-manifest-integrity.ts';
+import { validatePalaceManifestIntegrity } from './palace-manifest-integrity.ts';
 
 const selectedReview = {
   approvalState: 'selected',
   publicReleaseEligible: true,
 } as const;
+
+const matchingIntegrityAdapters: PalaceManifestIntegrityAdapters = {
+  canonicalJson: {
+    serializeCanonicalJson(value: unknown): string {
+      return JSON.stringify(value);
+    },
+  },
+  sha256: {
+    async hashCanonicalUtf8(): Promise<{
+      readonly ok: true;
+      readonly algorithm: 'SHA-256';
+      readonly checksum: `sha256:${string}`;
+    }> {
+      return {
+        ok: true,
+        algorithm: 'SHA-256',
+        checksum: palaceManifestExpectedHashFixtures[0].checksum,
+      };
+    },
+  },
+};
+
+const mismatchingIntegrityAdapters: PalaceManifestIntegrityAdapters = {
+  ...matchingIntegrityAdapters,
+  sha256: {
+    async hashCanonicalUtf8(): Promise<{
+      readonly ok: true;
+      readonly algorithm: 'SHA-256';
+      readonly checksum: `sha256:${string}`;
+    }> {
+      return {
+        ok: true,
+        algorithm: 'SHA-256',
+        checksum: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      };
+    },
+  },
+};
 
 type PalaceManifestEntryOverrides = {
   readonly [Key in keyof PalaceManifestEntry]?: PalaceManifestEntry[Key] | undefined;
@@ -121,8 +157,7 @@ function makeValidPalaceManifest(): PalaceContentManifest {
   };
 }
 
-function makeManifestWithRecordedHashes(): PalaceContentManifest {
-  const manifest = makeValidPalaceManifest();
+function withRecordedFixtureHashes(manifest: PalaceContentManifest): PalaceContentManifest {
   const hashesByContentId: ReadonlyMap<
     string,
     (typeof palaceManifestExpectedHashFixtures)[number]
@@ -151,6 +186,10 @@ function makeManifestWithRecordedHashes(): PalaceContentManifest {
       };
     }),
   };
+}
+
+function makeManifestWithRecordedHashes(): PalaceContentManifest {
+  return withRecordedFixtureHashes(makeValidPalaceManifest());
 }
 
 describe('Palace content manifest schema', () => {
@@ -278,10 +317,74 @@ describe('Palace content manifest schema', () => {
   });
 
   it('passes deterministic rights-safe Palace table fixtures', () => {
-    expect(validatePalaceContentManifest(makeValidPalaceManifest())).toEqual({
+    expect(validatePalaceContentManifest(makeManifestWithRecordedHashes())).toEqual({
       valid: true,
       errors: [],
     });
+  });
+
+  it('fails selected public-release Palace fixtures with pending or not-applicable hashes', () => {
+    const pendingManifest = makeValidPalaceManifest();
+    const notApplicableManifest = {
+      ...makeValidPalaceManifest(),
+      entries: makeValidPalaceManifest().entries.map((entry) => ({
+        ...entry,
+        provenance: {
+          ...entry.provenance,
+          contentHash: {
+            status: 'not-applicable' as const,
+            algorithm: 'not-applicable' as const,
+            canonicalization: 'not-applicable' as const,
+            value: null,
+          },
+        },
+      })),
+    };
+
+    expect(validatePalaceContentManifest(pendingManifest).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.room-table',
+          field: 'provenance.contentHash.status',
+        }),
+      ]),
+    );
+    expect(validatePalaceContentManifest(notApplicableManifest).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.room-table',
+          field: 'provenance.contentHash.status',
+        }),
+      ]),
+    );
+  });
+
+  it('allows draft internal-only Palace entries to defer hashes explicitly', () => {
+    const manifest = {
+      ...makeValidPalaceManifest(),
+      entries: makeValidPalaceManifest().entries.map((entry) => ({
+        ...entry,
+        review: { approvalState: 'draft' as const, publicReleaseEligible: false },
+        provenance: {
+          ...entry.provenance,
+          permittedReleaseModes: ['internal-prototype' as const],
+          compatibilityPolicy: 'not-applicable-placeholder' as const,
+          contentHash: {
+            status: 'pending' as const,
+            algorithm: 'pending' as const,
+            canonicalization: 'pending' as const,
+            value: null,
+            deferredTo: 'internal draft content hash review',
+          },
+        },
+      })),
+    };
+
+    expect(validatePalaceContentManifest(manifest).errors).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ field: 'provenance.contentHash.status' }),
+      ]),
+    );
   });
 
   it('fails invalid Palace range coverage with content ID and field details', () => {
@@ -533,38 +636,43 @@ describe('Palace content manifest schema', () => {
     );
   });
 
-  it('records reproducible SHA-256 hashes for selected Palace manifest fixtures', async () => {
-    const manifest = makeManifestWithRecordedHashes();
+  it('fails the Palace manifest integrity check when selected content has no recorded hash', async () => {
+    const result = await validatePalaceManifestIntegrity(
+      {
+        ...makeValidPalaceManifest(),
+        entries: [makeValidPalaceManifest().entries[0]!],
+      },
+      matchingIntegrityAdapters,
+    );
 
-    for (const fixture of palaceManifestExpectedHashFixtures) {
-      const entry = manifest.entries.find((candidate) => candidate.id === fixture.contentId);
-      expect(entry).toBeDefined();
-      if (entry === undefined) {
-        throw new Error(`missing Palace manifest hash fixture ${fixture.contentId}`);
-      }
-
-      const evidence = await hashPalaceManifestEntry(entry);
-
-      expect(evidence).toMatchObject({
-        contentId: fixture.contentId,
-        algorithm: 'SHA-256',
-        canonicalization: 'RFC-8785',
-        hashInputKind: 'palace-manifest-entry-integrity-payload.v0.1',
-        checksum: fixture.checksum,
-      });
-    }
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.room-table',
+          field: 'provenance.contentHash.status',
+        }),
+      ]),
+    );
   });
 
   it('passes the Palace manifest integrity check when recorded hashes match', async () => {
     await expect(
-      validatePalaceManifestIntegrity(makeManifestWithRecordedHashes()),
+      validatePalaceManifestIntegrity(
+        {
+          ...makeManifestWithRecordedHashes(),
+          entries: [makeManifestWithRecordedHashes().entries[0]!],
+        },
+        matchingIntegrityAdapters,
+      ),
     ).resolves.toEqual({
       valid: true,
-      evidence: expect.arrayContaining(
-        palaceManifestExpectedHashFixtures.map((fixture) =>
-          expect.objectContaining({ contentId: fixture.contentId, checksum: fixture.checksum }),
-        ),
-      ),
+      evidence: [
+        expect.objectContaining({
+          contentId: palaceManifestExpectedHashFixtures[0].contentId,
+          checksum: palaceManifestExpectedHashFixtures[0].checksum,
+        }),
+      ],
       errors: [],
     });
   });
@@ -583,7 +691,7 @@ describe('Palace content manifest schema', () => {
       ),
     };
 
-    const result = await validatePalaceManifestIntegrity(invalid);
+    const result = await validatePalaceManifestIntegrity(invalid, mismatchingIntegrityAdapters);
 
     expect(result.valid).toBe(false);
     expect(result.errors).toEqual(

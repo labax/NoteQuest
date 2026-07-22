@@ -82,7 +82,7 @@ Each entry has an explicit `provenance` object aligned to Content & Licensing Re
 
 `sourceReferences` may identify the kind of reference, source ID, public citation label, locator, source version, and notes. They should be specific enough to support later review and validation while avoiding copied table text.
 
-`contentHash` records the integrity state for each manifest entry. Recorded hashes use `status: recorded`, `algorithm: SHA-256`, `canonicalization: RFC-8785`, and a `sha256:<hex>` value generated from the project canonical JSON payload.
+`contentHash` records the integrity state for each manifest entry. Selected public-release Palace entries must use `status: recorded`, `algorithm: SHA-256`, `canonicalization: RFC-8785`, and a `sha256:<hex>` value generated from the project canonical JSON payload. Draft, rejected, or internal-only entries may defer hashes only when their review and release-mode metadata make the non-release state explicit.
 
 ## 6. Review and approval states
 
@@ -106,8 +106,8 @@ Future M3 stories should replace or extend placeholder entries only with approve
 
 ## Content hash review workflow
 
-Palace manifest entries that carry a recorded integrity hash use the project canonical JSON serializer over the `palace-manifest-entry-integrity-payload.v0.1` payload and hash the resulting UTF-8 bytes with SHA-256. The stored value is formatted as `sha256:<64 lowercase hexadecimal characters>` and is intended as deterministic integrity evidence for validation, simulation, and release reporting.
+Palace manifest entries that carry a recorded integrity hash use the project canonical JSON serializer over the `palace-manifest-entry-integrity-payload.v0.1` payload and hash the resulting UTF-8 bytes with SHA-256. The content package defines the integrity payload, validation types, and dependency-injected serializer/hasher interfaces; infrastructure or composition code supplies the canonical JSON and SHA-256 adapters. The stored value is formatted as `sha256:<64 lowercase hexadecimal characters>` and is intended as deterministic integrity evidence for validation, simulation, and release reporting.
 
-Hash updates must be reviewed with the content change that caused them. Reviewers should confirm that the changed fixture or manifest entry remains rights-safe, contains no unapproved official prose, table text, artwork, screenshots, layout, trade dress, or confidential permission evidence, and that the new checksum was generated from canonical JSON rather than ad hoc file bytes. A checksum change without a corresponding approved content change should be treated as an integrity failure rather than a routine update.
+Hash updates are required for selected public-release Palace content and must be reviewed with the content change that caused them. Reviewers should confirm that the changed fixture or manifest entry remains rights-safe, contains no unapproved official prose, table text, artwork, screenshots, layout, trade dress, or confidential permission evidence, and that the new checksum was generated from canonical JSON rather than ad hoc file bytes. A checksum change without a corresponding approved content change should be treated as an integrity failure rather than a routine update.
 
 These hashes detect accidental or unauthorized manifest drift. They are not encryption, signatures, permission evidence, or release artifact signing.
