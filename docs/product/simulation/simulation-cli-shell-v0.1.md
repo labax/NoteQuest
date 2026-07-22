@@ -34,7 +34,7 @@ The CLI emits `notequest-simulation-report.v0.1` JSON for machine checks and an 
 
 ## Rerunning failed smoke seeds
 
-Smoke reports record each invariant failure with the selected seed, manifest ID and version, manifest hash, seed index, a rerun command template, and a compact action trace of deterministic smoke decisions. Use the referenced manifest path from the failing job with the recorded `rerun` command, then compare the JSON report's `invariantFailures[].actionTrace` entries with the original failure report.
+Smoke reports record each invariant failure with the selected seed, manifest ID and version, manifest hash, seed index, structured reproduction inputs, a rerun command template, and a compact action trace of deterministic smoke decisions. JSON and Markdown reports both include the failure seed, seed reference, rerun command, and action trace so reviewers can reproduce a failure without parsing stderr. Use the referenced manifest path from the failing job with the recorded `rerun` command, then compare the report's action-trace entries with the original failure report.
 
 For PR-level validation, run the intentionally small Palace smoke script:
 

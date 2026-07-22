@@ -108,6 +108,11 @@ describe('simulation CLI shell', () => {
           readonly invariantId: string;
           readonly seed: string;
           readonly seedReference: { readonly manifestId: string; readonly manifestHash: string };
+          readonly reproduction: {
+            readonly expectedFirstSeed: string;
+            readonly observedFirstSeed: string;
+            readonly workers: number;
+          };
           readonly rerun: string;
           readonly actionTrace: readonly unknown[];
         }[];
@@ -126,9 +131,29 @@ describe('simulation CLI shell', () => {
       expect(report.invariantFailures[0]?.seedReference.manifestHash).toMatch(
         /^sha256:[a-f0-9]{64}$/,
       );
+      expect(report.invariantFailures[0]?.reproduction).toMatchObject({
+        expectedFirstSeed: '0x0000000000000002',
+        observedFirstSeed: '0x0000000000000001',
+        workers: 1,
+      });
       expect(report.invariantFailures[0]?.rerun).toContain('npm run simulation:cli');
+      expect(report.invariantFailures[0]?.rerun).toContain(
+        '--expect-first-seed 0x0000000000000002',
+      );
+      expect(report.invariantFailures[0]?.rerun).toContain('--workers 1');
       expect(report.invariantFailures[0]?.actionTrace.length).toBeGreaterThan(0);
       expect(markdown).toContain('- Invariant failures: 1');
+      expect(markdown).toContain('## Invariant failure details');
+      expect(markdown).toContain('### 1. SMOKE-FIRST-SEED');
+      expect(markdown).toContain('- Failure seed: 0x0000000000000001');
+      expect(markdown).toContain(
+        '- Seed reference: palace.qa-smoke.small.synthetic@0.1.0; hash=sha256:',
+      );
+      expect(markdown).toContain('index=0');
+      expect(markdown).toContain('--expect-first-seed 0x0000000000000002');
+      expect(markdown).toContain(
+        '| 1 | derive dungeon generation RNG stream | dungeon-generation | stream ready |',
+      );
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

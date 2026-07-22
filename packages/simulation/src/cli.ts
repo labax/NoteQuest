@@ -110,8 +110,21 @@ interface SimulationInvariantFailure {
     readonly manifestHash: string | null;
     readonly seedIndex: number;
   };
+  readonly reproduction: ReproductionData;
   readonly rerun: string;
   readonly actionTrace: readonly SmokeTraceEvent[];
+}
+
+interface ReproductionData {
+  readonly manifestPath: '<manifest-path>';
+  readonly expectedFirstSeed?: string;
+  readonly observedFirstSeed?: string;
+  readonly dungeon: string;
+  readonly runs: number;
+  readonly rulesVersion: string;
+  readonly contentVersion: string;
+  readonly rngVersion: string;
+  readonly workers: number;
 }
 
 interface BuildMetadata {
@@ -288,6 +301,7 @@ function parseCliOptions(
     markdownOutputPath?: string;
     dryRun: boolean;
     help: boolean;
+    expectFirstSeed?: string;
   } = {
     workers: 1,
     dryRun: false,
@@ -584,6 +598,7 @@ function collectInvariantFailures(
         0,
         manifest,
         seedManifestIdentity,
+        options,
       ),
     );
   }
@@ -597,7 +612,19 @@ function makeInvariantFailure(
   seedIndex: number,
   manifest: SeedManifest,
   seedManifestIdentity: SeedManifestIdentity,
+  options: CliOptions,
 ): SimulationInvariantFailure {
+  const reproduction: ReproductionData = {
+    manifestPath: '<manifest-path>',
+    expectedFirstSeed: options.expectFirstSeed,
+    observedFirstSeed: result.seed,
+    dungeon: manifest.dungeonType,
+    runs: seedIndex + 1,
+    rulesVersion: manifest.versions.rulesVersion,
+    contentVersion: manifest.versions.contentManifest.contentVersion,
+    rngVersion: manifest.versions.rng.algorithmVersion,
+    workers: options.workers,
+  };
   return {
     invariantId,
     message,
@@ -608,9 +635,44 @@ function makeInvariantFailure(
       manifestHash: seedManifestIdentity.hash,
       seedIndex,
     },
-    rerun: `npm run simulation:cli -- --dungeon ${manifest.dungeonType} --runs ${seedIndex + 1} --seed-manifest <manifest-path> --rules-version ${manifest.versions.rulesVersion} --content-version ${manifest.versions.contentManifest.contentVersion} --rng-version ${manifest.versions.rng.algorithmVersion}`,
+    reproduction,
+    rerun: buildRerunCommand(reproduction),
     actionTrace: result.actionTrace,
   };
+}
+
+function buildRerunCommand(reproduction: ReproductionData): string {
+  const parts = [
+    'npm',
+    'run',
+    'simulation:cli',
+    '--',
+    '--dungeon',
+    reproduction.dungeon,
+    '--runs',
+    String(reproduction.runs),
+    '--seed-manifest',
+    reproduction.manifestPath,
+    '--rules-version',
+    reproduction.rulesVersion,
+    '--content-version',
+    reproduction.contentVersion,
+    '--rng-version',
+    reproduction.rngVersion,
+    '--workers',
+    String(reproduction.workers),
+  ];
+
+  if (reproduction.expectedFirstSeed !== undefined) {
+    parts.push('--expect-first-seed', reproduction.expectedFirstSeed);
+  }
+
+  return parts.map(shellQuote).join(' ');
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:=@+-]+$/.test(value)) return value;
+  return `'${value.replaceAll("'", "'\''")}'`;
 }
 
 async function buildSeedManifestIdentity(manifest: SeedManifest): Promise<SeedManifestIdentity> {
@@ -652,7 +714,35 @@ function renderMarkdownReport(report: SimulationReport): string {
         `| ${escapeMarkdownTableCell(entry.contentId)} | ${entry.algorithm} | ${entry.canonicalization} | ${entry.hashInputKind} | ${entry.checksum} |`,
     ),
     '',
+    ...renderMarkdownInvariantFailures(report.invariantFailures),
   ].join('\n');
+}
+
+function renderMarkdownInvariantFailures(
+  failures: readonly SimulationInvariantFailure[],
+): readonly string[] {
+  if (failures.length === 0) return [];
+
+  return [
+    '## Invariant failure details',
+    '',
+    ...failures.flatMap((failure, index) => [
+      `### ${index + 1}. ${failure.invariantId}`,
+      '',
+      `- Message: ${failure.message}`,
+      `- Failure seed: ${failure.seed}`,
+      `- Seed reference: ${failure.seedReference.manifestId}@${failure.seedReference.manifestVersion}; hash=${failure.seedReference.manifestHash ?? 'unavailable'}; index=${failure.seedReference.seedIndex}`,
+      `- Rerun: \`${failure.rerun}\``,
+      '',
+      '| Step | Decision | Stream | Outcome |',
+      '|---:|---|---|---|',
+      ...failure.actionTrace.map(
+        (entry) =>
+          `| ${entry.step} | ${escapeMarkdownTableCell(entry.decision)} | ${escapeMarkdownTableCell(entry.stream)} | ${escapeMarkdownTableCell(entry.outcome)} |`,
+      ),
+      '',
+    ]),
+  ];
 }
 
 function escapeMarkdownTableCell(value: string): string {
