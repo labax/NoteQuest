@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +16,7 @@ import {
 } from '@notequest/domain';
 import {
   getContiguousIndexPartitionSlice,
+  makeSeedManifestHashPayload,
   supportedSimulationDungeonTypes,
   type SeedManifest,
   validateSeedManifest,
@@ -34,7 +36,8 @@ Options:
   --content-version <semver> Expected content manifest version in the seed manifest.
   --rng-version <value>    Expected production RNG algorithm version.
   --workers <count>        Worker count metadata for future partitioned execution; current shell runs serially.
-  --output <path>          JSON report output path. Omit to write the report to stdout.
+  --output <path>          JSON report output path. Omit to write the JSON report to stdout.
+  --markdown-output <path> Markdown summary report output path.
   --dry-run                Validate arguments and seed/content manifests without executing seed smoke draws.
   --help                   Show this help text.
 `;
@@ -54,6 +57,7 @@ interface CliOptions {
   readonly rngVersion?: string;
   readonly workers: number;
   readonly outputPath?: string;
+  readonly markdownOutputPath?: string;
   readonly dryRun: boolean;
   readonly help: boolean;
 }
@@ -68,6 +72,81 @@ interface SmokeSeedResult {
 interface SeedWindow {
   readonly partitionStartInclusive: number;
   readonly partitionEndExclusive: number;
+}
+
+interface SimulationReport {
+  readonly reportKind: 'notequest-simulation-report.v0.1';
+  readonly status: 'validated' | 'placeholder-smoke-complete';
+  readonly boundary: string;
+  readonly build: {
+    readonly packageName: 'notequest';
+    readonly packageVersion: '0.0.0';
+    readonly applicationLayer: typeof applicationLayerName;
+  };
+  readonly versions: {
+    readonly rulesVersion: string;
+    readonly content: {
+      readonly schemaVersion: string;
+      readonly packageId: string;
+      readonly contentVersion: string;
+      readonly rulesVersion: string;
+      readonly status: typeof bundledContentStatus;
+    };
+    readonly rng: SeedManifest['versions']['rng'];
+  };
+  readonly seedManifest: {
+    readonly manifestId: string;
+    readonly manifestVersion: string;
+    readonly schemaVersion: string;
+    readonly hash: {
+      readonly algorithm: 'SHA-256';
+      readonly canonicalization: 'RFC-8785';
+      readonly hashInputKind: string;
+      readonly checksum: string;
+    };
+  };
+  readonly run: {
+    readonly dungeonType: string;
+    readonly runPurpose: string;
+    readonly requestedRuns: number;
+    readonly executedRuns: number;
+    readonly workers: number;
+    readonly dryRun: boolean;
+    readonly partition: SeedManifest['partitioning'];
+  };
+  readonly counts: {
+    readonly manifestSeedCount: number;
+    readonly partitionSeedCount: number;
+    readonly selectedSeedCount: number;
+    readonly resultCount: number;
+    readonly invariantFailureCount: number;
+  };
+  readonly invariantFailures: readonly string[];
+  readonly termination: {
+    readonly status: 'not-executed' | 'placeholder-not-implemented';
+    readonly reachedTerminalStateCount: number;
+    readonly maxStepLimitHitCount: number;
+  };
+  readonly reachability: {
+    readonly status: 'placeholder-not-measured';
+    readonly unreachableRequiredNodeCount: number;
+  };
+  readonly duration: {
+    readonly milliseconds: number;
+    readonly runtimeMetadata: true;
+  };
+  readonly environment: {
+    readonly runtimeMetadata: true;
+    readonly nodeVersion: string;
+    readonly platform: NodeJS.Platform;
+    readonly arch: string;
+    readonly ci: boolean;
+  };
+  readonly distributionSummary: {
+    readonly status: 'placeholder-not-measured';
+    readonly sections: readonly unknown[];
+  };
+  readonly results: readonly SmokeSeedResult[];
 }
 
 const UINT64_MAX = 0xffff_ffff_ffff_ffffn;
@@ -94,37 +173,96 @@ export async function runSimulationCli(argv: readonly string[]): Promise<Simulat
   const invariantErrors = validateManifestInvariants(manifest, options);
   if (invariantErrors.length > 0) return failure(invariantErrors);
 
+  const startedAt = performance.now();
   const seeds = options.dryRun ? [] : selectManifestSeeds(manifest, options.runs ?? 0);
-  const report = {
-    reportKind: 'notequest-simulation-cli-smoke.v0.1',
+  const results = options.dryRun ? [] : seeds.map(runSmokeSeed);
+  const durationMs = Math.max(0, Math.round((performance.now() - startedAt) * 1000) / 1000);
+  const report: SimulationReport = {
+    reportKind: 'notequest-simulation-report.v0.1',
     status: options.dryRun ? 'validated' : 'placeholder-smoke-complete',
     boundary:
       'Palace generation is not implemented in this milestone; this CLI validates manifests and exercises production RNG streams only.',
-    applicationLayer: applicationLayerName,
-    contentStatus: bundledContentStatus,
-    dungeonType: manifest.dungeonType,
-    manifestId: manifest.manifestId,
-    manifestVersion: manifest.manifestVersion,
-    requestedRuns: options.runs,
-    executedRuns: options.dryRun ? 0 : seeds.length,
-    workers: options.workers,
-    dryRun: options.dryRun,
-    versions: manifest.versions,
-    results: options.dryRun ? [] : seeds.map(runSmokeSeed),
+    build: {
+      packageName: 'notequest',
+      packageVersion: '0.0.0',
+      applicationLayer: applicationLayerName,
+    },
+    versions: {
+      rulesVersion: manifest.versions.rulesVersion,
+      content: {
+        schemaVersion: manifest.versions.contentManifest.schemaVersion,
+        packageId: manifest.versions.contentManifest.packageId,
+        contentVersion: manifest.versions.contentManifest.contentVersion,
+        rulesVersion: manifest.versions.contentManifest.rulesVersion,
+        status: bundledContentStatus,
+      },
+      rng: manifest.versions.rng,
+    },
+    seedManifest: {
+      manifestId: manifest.manifestId,
+      manifestVersion: manifest.manifestVersion,
+      schemaVersion: manifest.schemaVersion,
+      hash: hashSeedManifest(manifest),
+    },
+    run: {
+      dungeonType: manifest.dungeonType,
+      runPurpose: manifest.runPurpose,
+      requestedRuns: options.runs ?? 0,
+      executedRuns: results.length,
+      workers: options.workers,
+      dryRun: options.dryRun,
+      partition: manifest.partitioning,
+    },
+    counts: {
+      manifestSeedCount: getSeedSetCount(manifest),
+      partitionSeedCount: getPartitionSeedCount(manifest),
+      selectedSeedCount: seeds.length,
+      resultCount: results.length,
+      invariantFailureCount: 0,
+    },
+    invariantFailures: [],
+    termination: {
+      status: options.dryRun ? 'not-executed' : 'placeholder-not-implemented',
+      reachedTerminalStateCount: 0,
+      maxStepLimitHitCount: 0,
+    },
+    reachability: {
+      status: 'placeholder-not-measured',
+      unreachableRequiredNodeCount: 0,
+    },
+    duration: {
+      milliseconds: durationMs,
+      runtimeMetadata: true,
+    },
+    environment: getEnvironmentMetadata(),
+    distributionSummary: {
+      status: 'placeholder-not-measured',
+      sections: [],
+    },
+    results,
   };
 
-  const stdout = JSON.stringify(report, null, 2) + '\n';
+  const jsonOutput = JSON.stringify(report, null, 2) + '\n';
+  const writtenPaths: string[] = [];
   if (options.outputPath !== undefined) {
-    mkdirSync(dirname(options.outputPath), { recursive: true });
-    writeFileSync(options.outputPath, stdout, 'utf8');
+    writeTextFile(options.outputPath, jsonOutput);
+    writtenPaths.push(`JSON report to ${options.outputPath}`);
+  }
+
+  if (options.markdownOutputPath !== undefined) {
+    writeTextFile(options.markdownOutputPath, renderMarkdownReport(report));
+    writtenPaths.push(`Markdown report to ${options.markdownOutputPath}`);
+  }
+
+  if (writtenPaths.length > 0) {
     return {
       exitCode: 0,
-      stdout: `Wrote simulation report to ${options.outputPath}\n`,
+      stdout: `Wrote simulation ${writtenPaths.join(' and ')}\n`,
       stderr: '',
     };
   }
 
-  return { exitCode: 0, stdout, stderr: '' };
+  return { exitCode: 0, stdout: jsonOutput, stderr: '' };
 }
 
 function parseCliOptions(
@@ -141,6 +279,7 @@ function parseCliOptions(
     rngVersion?: string;
     workers: number;
     outputPath?: string;
+    markdownOutputPath?: string;
     dryRun: boolean;
     help: boolean;
   } = {
@@ -191,6 +330,10 @@ function parseCliOptions(
         break;
       case '--output':
         assignStringOption(mutable, 'outputPath', readOptionValue(arg, value, errors));
+        index += 1;
+        break;
+      case '--markdown-output':
+        assignStringOption(mutable, 'markdownOutputPath', readOptionValue(arg, value, errors));
         index += 1;
         break;
       default:
@@ -342,6 +485,81 @@ function getSeedSetCount(manifest: SeedManifest): number {
   return manifest.seedSet.mode === 'explicit'
     ? manifest.seedSet.seeds.length
     : manifest.seedSet.count;
+}
+
+function serializeCanonicalJson(value: unknown): string {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return JSON.stringify(value);
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError('Cannot canonicalize non-finite numbers');
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) return `[${value.map(serializeCanonicalJson).join(',')}]`;
+
+  if (typeof value === 'object' && value !== null) {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${serializeCanonicalJson(record[key])}`)
+      .join(',')}}`;
+  }
+
+  throw new TypeError(`Cannot canonicalize ${typeof value} values`);
+}
+
+function getPartitionSeedCount(manifest: SeedManifest): number {
+  const seedWindow = getSeedWindow(manifest);
+  return seedWindow.partitionEndExclusive - seedWindow.partitionStartInclusive;
+}
+
+function hashSeedManifest(manifest: SeedManifest): SimulationReport['seedManifest']['hash'] {
+  const payload = makeSeedManifestHashPayload(manifest);
+  const hex = createHash('sha256').update(serializeCanonicalJson(payload), 'utf8').digest('hex');
+  return {
+    algorithm: 'SHA-256',
+    canonicalization: 'RFC-8785',
+    hashInputKind: String(payload['hashInputKind']),
+    checksum: `sha256:${hex}`,
+  };
+}
+
+function getEnvironmentMetadata(): SimulationReport['environment'] {
+  return {
+    runtimeMetadata: true,
+    nodeVersion: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    ci: process.env['CI'] === 'true',
+  };
+}
+
+function renderMarkdownReport(report: SimulationReport): string {
+  return [
+    '# NoteQuest Simulation Summary',
+    '',
+    `- Status: ${report.status}`,
+    `- Dungeon: ${report.run.dungeonType}`,
+    `- Seed manifest: ${report.seedManifest.manifestId}@${report.seedManifest.manifestVersion}`,
+    `- Seed manifest hash: ${report.seedManifest.hash.checksum}`,
+    `- Rules version: ${report.versions.rulesVersion}`,
+    `- Content version: ${report.versions.content.contentVersion}`,
+    `- RNG: ${report.versions.rng.algorithmId}@${report.versions.rng.algorithmVersion}`,
+    `- Runs: ${report.run.executedRuns}/${report.run.requestedRuns}`,
+    `- Invariant failures: ${report.counts.invariantFailureCount}`,
+    `- Termination: ${report.termination.status}`,
+    `- Reachability: ${report.reachability.status}`,
+    `- Duration: ${report.duration.milliseconds} ms (runtime metadata)`,
+    `- Environment: Node ${report.environment.nodeVersion} on ${report.environment.platform}/${report.environment.arch} (runtime metadata)`,
+    '',
+  ].join('\n');
+}
+
+function writeTextFile(path: string, contents: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, contents, 'utf8');
 }
 
 function selectManifestSeeds(manifest: SeedManifest, requestedRuns: number): readonly string[] {
