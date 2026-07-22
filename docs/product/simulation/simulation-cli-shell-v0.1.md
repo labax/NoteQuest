@@ -12,10 +12,10 @@ Validate a seed/content manifest without executing seed smoke draws:
 npm run simulation:cli -- --dry-run --dungeon palace --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --rules-version digital-rules-specification-v0.1 --content-version 0.1.0 --rng-version 1
 ```
 
-Run a two-seed deterministic smoke path and write a JSON report:
+Run a two-seed deterministic smoke path and write JSON plus Markdown reports:
 
 ```sh
-npm run simulation:cli -- --dungeon palace --runs 2 --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --rules-version digital-rules-specification-v0.1 --content-version 0.1.0 --rng-version 1 --workers 1 --output .tmp/simulation-palace-smoke.json
+npm run simulation:cli -- --dungeon palace --runs 2 --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --rules-version digital-rules-specification-v0.1 --content-version 0.1.0 --rng-version 1 --workers 1 --json-output .tmp/simulation-palace-smoke.json --markdown-output .tmp/simulation-palace-smoke.md
 ```
 
 Show help:
@@ -27,3 +27,7 @@ npm run simulation:cli -- --help
 ## Current placeholder boundary
 
 The current report status is `placeholder-smoke-complete` for execution mode because Palace generation is not implemented in this milestone. The CLI does not claim Palace invariant gate evidence; it only validates manifests and proves that the executable shell can call production domain/content/RNG code deterministically.
+
+## Report outputs
+
+The CLI emits `notequest-simulation-report.v0.1` JSON for machine checks and an optional concise Markdown summary for PR smoke review. Reports include build, rules, content, RNG, seed-manifest identity/hash, counts, invariant-failure count/list, termination and reachability placeholders, duration marked as runtime metadata, environment metadata, and deterministic smoke results. Omit report paths to print JSON to stdout; use `--json-output` and `--markdown-output` to configure file paths. The legacy `--output` flag remains an alias for JSON output.

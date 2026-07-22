@@ -57,18 +57,30 @@ describe('simulation CLI shell', () => {
     try {
       const result = await runSimulationCli([...validArgs, '--output', outputPath]);
       const report = JSON.parse(readFileSync(outputPath, 'utf8')) as {
+        readonly reportKind: string;
         readonly status: string;
-        readonly executedRuns: number;
+        readonly counts: { readonly executedRuns: number };
+        readonly seedManifest: { readonly hash: string };
+        readonly duration: { readonly milliseconds: number; readonly runtimeMetadata: boolean };
+        readonly environment: { readonly runtimeMetadata: boolean; readonly nodeVersion: string };
         readonly results: readonly unknown[];
       };
 
       expect(result).toEqual({
         exitCode: 0,
-        stdout: `Wrote simulation report to ${outputPath}\n`,
+        stdout: `Wrote simulation reports\nJSON report: ${outputPath}\n`,
         stderr: '',
       });
+      expect(report.reportKind).toBe('notequest-simulation-report.v0.1');
       expect(report.status).toBe('placeholder-smoke-complete');
-      expect(report.executedRuns).toBe(2);
+      expect(report.counts.executedRuns).toBe(2);
+      expect(report.seedManifest.hash).toMatch(/^sha256:[a-f0-9]{64}$/);
+      expect(report.duration).toMatchObject({ runtimeMetadata: true });
+      expect(report.duration.milliseconds).toBeGreaterThanOrEqual(0);
+      expect(report.environment).toMatchObject({
+        runtimeMetadata: true,
+        nodeVersion: process.versions.node,
+      });
       expect(report.results).toHaveLength(2);
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -175,6 +187,68 @@ describe('simulation CLI shell', () => {
     }
   });
 
+  it('writes configured JSON and Markdown reports with required report fields', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'notequest-simulation-cli-reports-'));
+    const jsonOutputPath = join(directory, 'report.json');
+    const markdownOutputPath = join(directory, 'report.md');
+
+    try {
+      const result = await runSimulationCli([
+        ...validArgs,
+        '--json-output',
+        jsonOutputPath,
+        '--markdown-output',
+        markdownOutputPath,
+      ]);
+      const report = JSON.parse(readFileSync(jsonOutputPath, 'utf8')) as {
+        readonly versions: {
+          readonly rulesVersion: string;
+          readonly contentManifest: { readonly contentVersion: string };
+          readonly rng: { readonly algorithmId: string; readonly algorithmVersion: string };
+          readonly build: {
+            readonly packageName: string;
+            readonly simulationReportSchemaVersion: string;
+          };
+        };
+        readonly seedManifest: { readonly manifestId: string; readonly hash: string };
+        readonly counts: {
+          readonly requestedRuns: number;
+          readonly executedRuns: number;
+          readonly invariantFailureCount: number;
+        };
+        readonly invariantFailures: readonly string[];
+        readonly termination: { readonly status: string };
+        readonly reachability: { readonly status: string };
+        readonly environment: { readonly dryRun: boolean };
+      };
+      const markdown = readFileSync(markdownOutputPath, 'utf8');
+
+      expect(result.exitCode).toBe(0);
+      expect(report.versions).toMatchObject({
+        rulesVersion: 'digital-rules-specification-v0.1',
+        contentManifest: { contentVersion: '0.1.0' },
+        rng: { algorithmId: 'pcg32', algorithmVersion: '1' },
+        build: { packageName: 'notequest', simulationReportSchemaVersion: '0.1.0' },
+      });
+      expect(report.seedManifest).toMatchObject({ manifestId: 'palace.qa-smoke.small.synthetic' });
+      expect(report.seedManifest.hash).toMatch(/^sha256:[a-f0-9]{64}$/);
+      expect(report.counts).toMatchObject({
+        requestedRuns: 2,
+        executedRuns: 2,
+        invariantFailureCount: 0,
+      });
+      expect(report.invariantFailures).toEqual([]);
+      expect(report.termination.status).toBe('not-evaluated');
+      expect(report.reachability.status).toBe('not-evaluated');
+      expect(report.environment.dryRun).toBe(false);
+      expect(markdown).toContain('# NoteQuest Simulation Report');
+      expect(markdown).toContain('- Status: placeholder-smoke-complete');
+      expect(markdown).toContain('- Invariant failures: 0');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('selects only requested seeds from a large range for small smoke runs', async () => {
     const manifest = {
       ...readValidManifest(),
@@ -185,12 +259,12 @@ describe('simulation CLI shell', () => {
     try {
       const result = await runSimulationCli([...validArgs, '--seed-manifest', path]);
       const report = JSON.parse(result.stdout) as {
-        readonly executedRuns: number;
+        readonly counts: { readonly executedRuns: number };
         readonly results: readonly { readonly seed: string }[];
       };
 
       expect(result.exitCode).toBe(0);
-      expect(report.executedRuns).toBe(2);
+      expect(report.counts.executedRuns).toBe(2);
       expect(report.results.map((entry) => entry.seed)).toEqual([
         '0x0000000000000000',
         '0x0000000000000001',
@@ -222,12 +296,12 @@ describe('simulation CLI shell', () => {
         '1',
       ]);
       const report = JSON.parse(result.stdout) as {
-        readonly executedRuns: number;
+        readonly counts: { readonly executedRuns: number };
         readonly results: readonly unknown[];
       };
 
       expect(result.exitCode).toBe(0);
-      expect(report.executedRuns).toBe(0);
+      expect(report.counts.executedRuns).toBe(0);
       expect(report.results).toEqual([]);
     } finally {
       rmSync(dirnameFromFilePath(path), { recursive: true, force: true });
@@ -250,12 +324,12 @@ describe('simulation CLI shell', () => {
     ]);
     const report = JSON.parse(result.stdout) as {
       readonly status: string;
-      readonly executedRuns: number;
+      readonly counts: { readonly executedRuns: number };
     };
 
     expect(result.exitCode).toBe(0);
     expect(report.status).toBe('validated');
-    expect(report.executedRuns).toBe(0);
+    expect(report.counts.executedRuns).toBe(0);
   });
 });
 

@@ -13,8 +13,11 @@ import {
   randomStreamDerivationVersion,
   randomStreamPurposeRegistry,
 } from '@notequest/domain';
+import { serializeCanonicalJson, sha256Hasher } from '@notequest/infrastructure';
 import {
   getContiguousIndexPartitionSlice,
+  makeSeedManifestHashPayload,
+  seedManifestHashInputKind,
   supportedSimulationDungeonTypes,
   type SeedManifest,
   validateSeedManifest,
@@ -34,7 +37,9 @@ Options:
   --content-version <semver> Expected content manifest version in the seed manifest.
   --rng-version <value>    Expected production RNG algorithm version.
   --workers <count>        Worker count metadata for future partitioned execution; current shell runs serially.
-  --output <path>          JSON report output path. Omit to write the report to stdout.
+  --json-output <path>     JSON report output path. Omit report paths to write JSON to stdout.
+  --markdown-output <path> Concise Markdown summary output path.
+  --output <path>          Backward-compatible alias for --json-output.
   --dry-run                Validate arguments and seed/content manifests without executing seed smoke draws.
   --help                   Show this help text.
 `;
@@ -53,7 +58,8 @@ interface CliOptions {
   readonly contentVersion?: string;
   readonly rngVersion?: string;
   readonly workers: number;
-  readonly outputPath?: string;
+  readonly jsonOutputPath?: string;
+  readonly markdownOutputPath?: string;
   readonly dryRun: boolean;
   readonly help: boolean;
 }
@@ -63,6 +69,67 @@ interface SmokeSeedResult {
   readonly dungeonGenerationDraw: number;
   readonly combatDraw: number;
   readonly expeditionRepopulationDraw: number;
+}
+
+interface SimulationReport {
+  readonly reportKind: 'notequest-simulation-report.v0.1';
+  readonly status: 'validated' | 'placeholder-smoke-complete';
+  readonly boundary: string;
+  readonly applicationLayer: typeof applicationLayerName;
+  readonly contentStatus: typeof bundledContentStatus;
+  readonly dungeonType: string;
+  readonly versions: SeedManifest['versions'] & { readonly build: BuildMetadata };
+  readonly seedManifest: SeedManifestIdentity;
+  readonly counts: ReportCounts;
+  readonly invariantFailures: readonly string[];
+  readonly termination: ReportStatusPlaceholder;
+  readonly reachability: ReportStatusPlaceholder;
+  readonly duration: DurationMetadata;
+  readonly environment: EnvironmentMetadata;
+  readonly distributionSummary: Record<string, never>;
+  readonly results: readonly SmokeSeedResult[];
+}
+
+interface BuildMetadata {
+  readonly packageName: 'notequest';
+  readonly packageVersion: string;
+  readonly simulationReportSchemaVersion: '0.1.0';
+}
+
+interface SeedManifestIdentity {
+  readonly manifestId: string;
+  readonly manifestVersion: string;
+  readonly hash: string | null;
+  readonly hashAlgorithm: 'SHA-256' | null;
+  readonly hashCanonicalization: 'RFC-8785';
+  readonly hashInputKind: string;
+}
+
+interface ReportCounts {
+  readonly requestedRuns: number | null;
+  readonly selectedManifestPartitionSeedCount: number;
+  readonly executedRuns: number;
+  readonly resultRows: number;
+  readonly invariantFailureCount: number;
+}
+
+interface ReportStatusPlaceholder {
+  readonly status: 'not-evaluated';
+  readonly reason: string;
+}
+
+interface DurationMetadata {
+  readonly milliseconds: number;
+  readonly runtimeMetadata: true;
+}
+
+interface EnvironmentMetadata {
+  readonly runtimeMetadata: true;
+  readonly nodeVersion: string;
+  readonly platform: NodeJS.Platform;
+  readonly arch: string;
+  readonly workers: number;
+  readonly dryRun: boolean;
 }
 
 interface SeedWindow {
@@ -94,37 +161,78 @@ export async function runSimulationCli(argv: readonly string[]): Promise<Simulat
   const invariantErrors = validateManifestInvariants(manifest, options);
   if (invariantErrors.length > 0) return failure(invariantErrors);
 
+  const startTime = performance.now();
   const seeds = options.dryRun ? [] : selectManifestSeeds(manifest, options.runs ?? 0);
-  const report = {
-    reportKind: 'notequest-simulation-cli-smoke.v0.1',
+  const results = options.dryRun ? [] : seeds.map(runSmokeSeed);
+  const durationMs = Math.max(0, Math.round((performance.now() - startTime) * 1000) / 1000);
+  const seedManifestIdentity = await buildSeedManifestIdentity(manifest);
+  const report: SimulationReport = {
+    reportKind: 'notequest-simulation-report.v0.1',
     status: options.dryRun ? 'validated' : 'placeholder-smoke-complete',
     boundary:
       'Palace generation is not implemented in this milestone; this CLI validates manifests and exercises production RNG streams only.',
     applicationLayer: applicationLayerName,
     contentStatus: bundledContentStatus,
     dungeonType: manifest.dungeonType,
-    manifestId: manifest.manifestId,
-    manifestVersion: manifest.manifestVersion,
-    requestedRuns: options.runs,
-    executedRuns: options.dryRun ? 0 : seeds.length,
-    workers: options.workers,
-    dryRun: options.dryRun,
-    versions: manifest.versions,
-    results: options.dryRun ? [] : seeds.map(runSmokeSeed),
+    versions: {
+      ...manifest.versions,
+      build: {
+        packageName: 'notequest',
+        packageVersion: readPackageVersion(),
+        simulationReportSchemaVersion: '0.1.0',
+      },
+    },
+    seedManifest: seedManifestIdentity,
+    counts: {
+      requestedRuns: options.runs ?? null,
+      selectedManifestPartitionSeedCount:
+        getSeedWindow(manifest).partitionEndExclusive -
+        getSeedWindow(manifest).partitionStartInclusive,
+      executedRuns: results.length,
+      resultRows: results.length,
+      invariantFailureCount: 0,
+    },
+    invariantFailures: [],
+    termination: {
+      status: 'not-evaluated',
+      reason:
+        'Full Palace simulation termination checks are deferred until Palace generation is implemented.',
+    },
+    reachability: {
+      status: 'not-evaluated',
+      reason:
+        'Full Palace reachability checks are deferred until Palace generation is implemented.',
+    },
+    duration: { milliseconds: durationMs, runtimeMetadata: true },
+    environment: {
+      runtimeMetadata: true,
+      nodeVersion: process.versions.node,
+      platform: process.platform,
+      arch: process.arch,
+      workers: options.workers,
+      dryRun: options.dryRun,
+    },
+    distributionSummary: {},
+    results,
   };
 
-  const stdout = JSON.stringify(report, null, 2) + '\n';
-  if (options.outputPath !== undefined) {
-    mkdirSync(dirname(options.outputPath), { recursive: true });
-    writeFileSync(options.outputPath, stdout, 'utf8');
-    return {
-      exitCode: 0,
-      stdout: `Wrote simulation report to ${options.outputPath}\n`,
-      stderr: '',
-    };
+  const jsonReport = JSON.stringify(report, null, 2) + '\n';
+  const markdownReport = renderMarkdownReport(report);
+  const writes: string[] = [];
+  if (options.jsonOutputPath !== undefined) {
+    writeTextFile(options.jsonOutputPath, jsonReport);
+    writes.push(`JSON report: ${options.jsonOutputPath}`);
+  }
+  if (options.markdownOutputPath !== undefined) {
+    writeTextFile(options.markdownOutputPath, markdownReport);
+    writes.push(`Markdown report: ${options.markdownOutputPath}`);
   }
 
-  return { exitCode: 0, stdout, stderr: '' };
+  if (writes.length > 0) {
+    return { exitCode: 0, stdout: `Wrote simulation reports\n${writes.join('\n')}\n`, stderr: '' };
+  }
+
+  return { exitCode: 0, stdout: jsonReport, stderr: '' };
 }
 
 function parseCliOptions(
@@ -140,7 +248,8 @@ function parseCliOptions(
     contentVersion?: string;
     rngVersion?: string;
     workers: number;
-    outputPath?: string;
+    jsonOutputPath?: string;
+    markdownOutputPath?: string;
     dryRun: boolean;
     help: boolean;
   } = {
@@ -190,7 +299,12 @@ function parseCliOptions(
         index += 1;
         break;
       case '--output':
-        assignStringOption(mutable, 'outputPath', readOptionValue(arg, value, errors));
+      case '--json-output':
+        assignStringOption(mutable, 'jsonOutputPath', readOptionValue(arg, value, errors));
+        index += 1;
+        break;
+      case '--markdown-output':
+        assignStringOption(mutable, 'markdownOutputPath', readOptionValue(arg, value, errors));
         index += 1;
         break;
       default:
@@ -378,6 +492,51 @@ function runSmokeSeed(seed: string): SmokeSeedResult {
     combatDraw: combat.rng.nextBounded(6).value + 1,
     expeditionRepopulationDraw: repopulation.rng.nextBounded(6).value + 1,
   };
+}
+
+async function buildSeedManifestIdentity(manifest: SeedManifest): Promise<SeedManifestIdentity> {
+  const hash = await sha256Hasher.hashCanonicalUtf8(
+    serializeCanonicalJson(makeSeedManifestHashPayload(manifest)),
+  );
+  return {
+    manifestId: manifest.manifestId,
+    manifestVersion: manifest.manifestVersion,
+    hash: hash.ok ? hash.checksum : null,
+    hashAlgorithm: hash.ok ? hash.algorithm : null,
+    hashCanonicalization: 'RFC-8785',
+    hashInputKind: seedManifestHashInputKind,
+  };
+}
+
+function renderMarkdownReport(report: SimulationReport): string {
+  return [
+    '# NoteQuest Simulation Report',
+    '',
+    `- Status: ${report.status}`,
+    `- Dungeon: ${report.dungeonType}`,
+    `- Seed manifest: ${report.seedManifest.manifestId}@${report.seedManifest.manifestVersion}`,
+    `- Seed manifest hash: ${report.seedManifest.hash ?? 'unavailable'}`,
+    `- Rules/content/RNG: ${report.versions.rulesVersion} / ${report.versions.contentManifest.contentVersion} / ${report.versions.rng.algorithmId}@${report.versions.rng.algorithmVersion}`,
+    `- Runs: ${report.counts.executedRuns} executed of ${report.counts.requestedRuns ?? 0} requested`,
+    `- Invariant failures: ${report.counts.invariantFailureCount}`,
+    `- Termination: ${report.termination.status}`,
+    `- Reachability: ${report.reachability.status}`,
+    `- Duration: ${report.duration.milliseconds} ms (runtime metadata)`,
+    `- Environment: Node ${report.environment.nodeVersion} on ${report.environment.platform}/${report.environment.arch}; workers=${report.environment.workers}; dryRun=${report.environment.dryRun}`,
+    '',
+  ].join('\n');
+}
+
+function writeTextFile(path: string, contents: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, contents, 'utf8');
+}
+
+function readPackageVersion(): string {
+  const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
+    readonly version?: string;
+  };
+  return packageJson.version ?? '0.0.0';
 }
 
 function readJsonFile(
