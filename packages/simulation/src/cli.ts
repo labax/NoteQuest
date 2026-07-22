@@ -41,6 +41,7 @@ Options:
   --markdown-output <path> Concise Markdown summary output path; JSON still writes to stdout when no JSON path is set.
   --output <path>          Backward-compatible alias for --json-output.
   --dry-run                Validate arguments and seed/content manifests without executing seed smoke draws.
+  --expect-first-seed <seed> Diagnostic smoke assertion for local/CI reproducibility; fails non-zero when the first executed seed differs.
   --help                   Show this help text.
 `;
 
@@ -62,6 +63,7 @@ interface CliOptions {
   readonly markdownOutputPath?: string;
   readonly dryRun: boolean;
   readonly help: boolean;
+  readonly expectFirstSeed?: string;
 }
 
 interface SmokeSeedResult {
@@ -69,6 +71,14 @@ interface SmokeSeedResult {
   readonly dungeonGenerationDraw: number;
   readonly combatDraw: number;
   readonly expeditionRepopulationDraw: number;
+  readonly actionTrace: readonly SmokeTraceEvent[];
+}
+
+interface SmokeTraceEvent {
+  readonly step: number;
+  readonly decision: string;
+  readonly stream: string;
+  readonly outcome: string;
 }
 
 interface SimulationReport {
@@ -81,13 +91,27 @@ interface SimulationReport {
   readonly versions: SeedManifest['versions'] & { readonly build: BuildMetadata };
   readonly seedManifest: SeedManifestIdentity;
   readonly counts: ReportCounts;
-  readonly invariantFailures: readonly string[];
+  readonly invariantFailures: readonly SimulationInvariantFailure[];
   readonly termination: ReportStatusPlaceholder;
   readonly reachability: ReportStatusPlaceholder;
   readonly duration: DurationMetadata;
   readonly environment: EnvironmentMetadata;
   readonly distributionSummary: Record<string, never>;
   readonly results: readonly SmokeSeedResult[];
+}
+
+interface SimulationInvariantFailure {
+  readonly invariantId: string;
+  readonly message: string;
+  readonly seed: string;
+  readonly seedReference: {
+    readonly manifestId: string;
+    readonly manifestVersion: string;
+    readonly manifestHash: string | null;
+    readonly seedIndex: number;
+  };
+  readonly rerun: string;
+  readonly actionTrace: readonly SmokeTraceEvent[];
 }
 
 interface BuildMetadata {
@@ -164,8 +188,14 @@ export async function runSimulationCli(argv: readonly string[]): Promise<Simulat
   const startTime = performance.now();
   const seeds = options.dryRun ? [] : selectManifestSeeds(manifest, options.runs ?? 0);
   const results = options.dryRun ? [] : seeds.map(runSmokeSeed);
-  const durationMs = Math.max(0, Math.round((performance.now() - startTime) * 1000) / 1000);
   const seedManifestIdentity = await buildSeedManifestIdentity(manifest);
+  const invariantFailures = collectInvariantFailures(
+    results,
+    options,
+    manifest,
+    seedManifestIdentity,
+  );
+  const durationMs = Math.max(0, Math.round((performance.now() - startTime) * 1000) / 1000);
   const report: SimulationReport = {
     reportKind: 'notequest-simulation-report.v0.1',
     status: options.dryRun ? 'validated' : 'placeholder-smoke-complete',
@@ -190,9 +220,9 @@ export async function runSimulationCli(argv: readonly string[]): Promise<Simulat
         getSeedWindow(manifest).partitionStartInclusive,
       executedRuns: results.length,
       resultRows: results.length,
-      invariantFailureCount: 0,
+      invariantFailureCount: invariantFailures.length,
     },
-    invariantFailures: [],
+    invariantFailures,
     termination: {
       status: 'not-evaluated',
       reason:
@@ -228,11 +258,17 @@ export async function runSimulationCli(argv: readonly string[]): Promise<Simulat
     writes.push(`Markdown report: ${options.markdownOutputPath}`);
   }
 
+  const exitCode = invariantFailures.length > 0 ? 1 : 0;
+  const diagnostic = renderFailureDiagnostics(invariantFailures, writes);
   if (options.jsonOutputPath === undefined) {
-    return { exitCode: 0, stdout: jsonReport, stderr: '' };
+    return { exitCode, stdout: jsonReport, stderr: diagnostic };
   }
 
-  return { exitCode: 0, stdout: `Wrote simulation reports\n${writes.join('\n')}\n`, stderr: '' };
+  return {
+    exitCode,
+    stdout: `Wrote simulation reports\n${writes.join('\n')}\n`,
+    stderr: diagnostic,
+  };
 }
 
 function parseCliOptions(
@@ -269,6 +305,10 @@ function parseCliOptions(
         break;
       case '--dry-run':
         mutable.dryRun = true;
+        break;
+      case '--expect-first-seed':
+        assignStringOption(mutable, 'expectFirstSeed', readOptionValue(arg, value, errors));
+        index += 1;
         break;
       case '--dungeon':
         assignStringOption(mutable, 'dungeon', readOptionValue(arg, value, errors));
@@ -486,11 +526,90 @@ function runSmokeSeed(seed: string): SmokeSeedResult {
     seed,
     randomStreamPurposeRegistry.expeditionRepopulation.name,
   );
+  const dungeonGenerationDraw = dungeon.rng.nextBounded(6).value + 1;
+  const combatDraw = combat.rng.nextBounded(6).value + 1;
+  const expeditionRepopulationDraw = repopulation.rng.nextBounded(6).value + 1;
   return {
     seed,
-    dungeonGenerationDraw: dungeon.rng.nextBounded(6).value + 1,
-    combatDraw: combat.rng.nextBounded(6).value + 1,
-    expeditionRepopulationDraw: repopulation.rng.nextBounded(6).value + 1,
+    dungeonGenerationDraw,
+    combatDraw,
+    expeditionRepopulationDraw,
+    actionTrace: [
+      {
+        step: 1,
+        decision: 'derive dungeon generation RNG stream',
+        stream: randomStreamPurposeRegistry.dungeonGeneration.name,
+        outcome: 'stream ready',
+      },
+      {
+        step: 2,
+        decision: 'draw dungeon-generation smoke d6',
+        stream: randomStreamPurposeRegistry.dungeonGeneration.name,
+        outcome: `d6=${dungeonGenerationDraw}`,
+      },
+      {
+        step: 3,
+        decision: 'draw combat smoke d6',
+        stream: randomStreamPurposeRegistry.combat.name,
+        outcome: `d6=${combatDraw}`,
+      },
+      {
+        step: 4,
+        decision: 'draw expedition-repopulation smoke d6',
+        stream: randomStreamPurposeRegistry.expeditionRepopulation.name,
+        outcome: `d6=${expeditionRepopulationDraw}`,
+      },
+    ],
+  };
+}
+
+function collectInvariantFailures(
+  results: readonly SmokeSeedResult[],
+  options: CliOptions,
+  manifest: SeedManifest,
+  seedManifestIdentity: SeedManifestIdentity,
+): readonly SimulationInvariantFailure[] {
+  const failures: SimulationInvariantFailure[] = [];
+  const first = results[0];
+  if (
+    options.expectFirstSeed !== undefined &&
+    first !== undefined &&
+    first.seed !== options.expectFirstSeed
+  ) {
+    failures.push(
+      makeInvariantFailure(
+        'SMOKE-FIRST-SEED',
+        `expected first smoke seed ${options.expectFirstSeed} but selected ${first.seed}`,
+        first,
+        0,
+        manifest,
+        seedManifestIdentity,
+      ),
+    );
+  }
+  return failures;
+}
+
+function makeInvariantFailure(
+  invariantId: string,
+  message: string,
+  result: SmokeSeedResult,
+  seedIndex: number,
+  manifest: SeedManifest,
+  seedManifestIdentity: SeedManifestIdentity,
+): SimulationInvariantFailure {
+  return {
+    invariantId,
+    message,
+    seed: result.seed,
+    seedReference: {
+      manifestId: manifest.manifestId,
+      manifestVersion: manifest.manifestVersion,
+      manifestHash: seedManifestIdentity.hash,
+      seedIndex,
+    },
+    rerun: `npm run simulation:cli -- --dungeon ${manifest.dungeonType} --runs ${seedIndex + 1} --seed-manifest <manifest-path> --rules-version ${manifest.versions.rulesVersion} --content-version ${manifest.versions.contentManifest.contentVersion} --rng-version ${manifest.versions.rng.algorithmVersion}`,
+    actionTrace: result.actionTrace,
   };
 }
 
@@ -591,6 +710,23 @@ function readPositiveInteger(
 
 function formatSeed(value: bigint): `0x${string}` {
   return `0x${value.toString(16).padStart(16, '0')}`;
+}
+
+function renderFailureDiagnostics(
+  failures: readonly SimulationInvariantFailure[],
+  reportPaths: readonly string[],
+): string {
+  if (failures.length === 0) return '';
+  const [smallest] = failures;
+  if (smallest === undefined) return '';
+  return [
+    `Simulation invariant failure count: ${failures.length}`,
+    `Smallest reproducible seed: ${smallest.seed}`,
+    `Seed reference: ${smallest.seedReference.manifestId}@${smallest.seedReference.manifestVersion} index ${smallest.seedReference.seedIndex} hash ${smallest.seedReference.manifestHash ?? 'unavailable'}`,
+    `Rerun: ${smallest.rerun}`,
+    ...reportPaths.map((path) => `Report output: ${path}`),
+    '',
+  ].join('\n');
 }
 
 function failure(errors: readonly string[]): SimulationCliResult {
