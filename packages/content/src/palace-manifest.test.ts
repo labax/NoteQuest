@@ -11,6 +11,11 @@ import {
   palaceProvenanceFieldNames,
   validatePalaceContentManifest,
 } from './palace-manifest.ts';
+import { palaceManifestExpectedHashFixtures } from './palace-manifest-integrity-fixtures.ts';
+import {
+  hashPalaceManifestEntry,
+  validatePalaceManifestIntegrity,
+} from './palace-manifest-integrity.ts';
 
 const selectedReview = {
   approvalState: 'selected',
@@ -113,6 +118,38 @@ function makeValidPalaceManifest(): PalaceContentManifest {
     rulesVersion: 'digital-rules-specification-v0.1',
     generatedAt: '2026-07-19T00:00:00.000Z',
     entries: [table, mechanic, ...rows],
+  };
+}
+
+function makeManifestWithRecordedHashes(): PalaceContentManifest {
+  const manifest = makeValidPalaceManifest();
+  const hashesByContentId: ReadonlyMap<
+    string,
+    (typeof palaceManifestExpectedHashFixtures)[number]
+  > = new Map(palaceManifestExpectedHashFixtures.map((fixture) => [fixture.contentId, fixture]));
+
+  return {
+    ...manifest,
+    entries: manifest.entries.map((entry) => {
+      const fixture = hashesByContentId.get(entry.id);
+
+      if (fixture === undefined) {
+        return entry;
+      }
+
+      return {
+        ...entry,
+        provenance: {
+          ...entry.provenance,
+          contentHash: {
+            status: 'recorded' as const,
+            algorithm: fixture.algorithm,
+            canonicalization: fixture.canonicalization,
+            value: fixture.checksum,
+          },
+        },
+      };
+    }),
   };
 }
 
@@ -491,6 +528,69 @@ describe('Palace content manifest schema', () => {
           contentId: 'palace.fixture.room-table.row-1',
           field: 'parentId',
           reason: 'table-row parent palace.fixture.mechanic must be a table',
+        }),
+      ]),
+    );
+  });
+
+  it('records reproducible SHA-256 hashes for selected Palace manifest fixtures', async () => {
+    const manifest = makeManifestWithRecordedHashes();
+
+    for (const fixture of palaceManifestExpectedHashFixtures) {
+      const entry = manifest.entries.find((candidate) => candidate.id === fixture.contentId);
+      expect(entry).toBeDefined();
+      if (entry === undefined) {
+        throw new Error(`missing Palace manifest hash fixture ${fixture.contentId}`);
+      }
+
+      const evidence = await hashPalaceManifestEntry(entry);
+
+      expect(evidence).toMatchObject({
+        contentId: fixture.contentId,
+        algorithm: 'SHA-256',
+        canonicalization: 'RFC-8785',
+        hashInputKind: 'palace-manifest-entry-integrity-payload.v0.1',
+        checksum: fixture.checksum,
+      });
+    }
+  });
+
+  it('passes the Palace manifest integrity check when recorded hashes match', async () => {
+    await expect(
+      validatePalaceManifestIntegrity(makeManifestWithRecordedHashes()),
+    ).resolves.toEqual({
+      valid: true,
+      evidence: expect.arrayContaining(
+        palaceManifestExpectedHashFixtures.map((fixture) =>
+          expect.objectContaining({ contentId: fixture.contentId, checksum: fixture.checksum }),
+        ),
+      ),
+      errors: [],
+    });
+  });
+
+  it('fails the Palace manifest integrity check when selected content changes without a hash update', async () => {
+    const manifest = makeManifestWithRecordedHashes();
+    const invalid = {
+      ...manifest,
+      entries: manifest.entries.map((entry) =>
+        entry.id === 'palace.fixture.mechanic'
+          ? {
+              ...entry,
+              structuredDefinition: { rule: 'project-original changed fixture mechanic' },
+            }
+          : entry,
+      ),
+    };
+
+    const result = await validatePalaceManifestIntegrity(invalid);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contentId: 'palace.fixture.mechanic',
+          field: 'provenance.contentHash.value',
         }),
       ]),
     );

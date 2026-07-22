@@ -111,7 +111,7 @@ export interface PalaceSourceReference {
 export interface PalaceContentHashReference {
   readonly status: PalaceContentHashStatus;
   readonly algorithm: 'SHA-256' | 'not-applicable' | 'pending';
-  readonly canonicalization: 'RFC-8785' | 'file-bytes' | 'not-applicable' | 'pending';
+  readonly canonicalization: 'RFC-8785' | 'not-applicable' | 'pending';
   readonly value: `sha256:${string}` | null;
   readonly deferredTo?: string;
 }
@@ -438,8 +438,7 @@ function validatePalaceContentHash(
 
   if (
     contentHash.algorithm !== 'SHA-256' ||
-    (contentHash.canonicalization !== 'RFC-8785' &&
-      contentHash.canonicalization !== 'file-bytes') ||
+    contentHash.canonicalization !== 'RFC-8785' ||
     contentHash.value === null ||
     !/^sha256:[a-f0-9]{64}$/.test(contentHash.value)
   ) {
@@ -447,7 +446,7 @@ function validatePalaceContentHash(
       errors,
       entry.id,
       'provenance.contentHash',
-      'recorded content hash metadata must include SHA-256 algorithm, canonicalization, and sha256:<64 lowercase hex> value',
+      'recorded content hash metadata must include SHA-256 algorithm, RFC-8785 canonicalization, and sha256:<64 lowercase hex> value',
     );
   }
 }
@@ -652,7 +651,7 @@ function validatePalaceProvenance(
       errors,
       entry.id,
       'provenance.compatibilityPolicy',
-      'selected public-release content must use a release-compatible saved-definition policy; hash recording remains deferred to #60',
+      'selected public-release content must use a release-compatible saved-definition policy; hashes must remain reproducible for release evidence',
     );
   }
 
