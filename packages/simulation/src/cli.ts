@@ -24,7 +24,7 @@ const usageText = `NoteQuest simulation CLI
 
 Usage:
   npm run simulation:cli -- --dungeon palace --runs 3 --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --rules-version digital-rules-specification-v0.1 --content-version 0.1.0 --rng-version 1 --output .tmp/simulation-smoke.json
-  npm run simulation:cli -- --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --dry-run
+  npm run simulation:cli -- --dry-run --dungeon palace --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --rules-version digital-rules-specification-v0.1 --content-version 0.1.0 --rng-version 1
 
 Options:
   --dungeon <type>          Dungeon type to simulate. Supported: palace.
@@ -65,6 +65,13 @@ interface SmokeSeedResult {
   readonly expeditionRepopulationDraw: number;
 }
 
+interface SeedWindow {
+  readonly partitionStartInclusive: number;
+  readonly partitionEndExclusive: number;
+}
+
+const UINT64_MAX = 0xffff_ffff_ffff_ffffn;
+
 export async function runSimulationCli(argv: readonly string[]): Promise<SimulationCliResult> {
   const parsed = parseCliOptions(argv);
   if (!parsed.ok) return failure(parsed.errors);
@@ -87,7 +94,7 @@ export async function runSimulationCli(argv: readonly string[]): Promise<Simulat
   const invariantErrors = validateManifestInvariants(manifest, options);
   if (invariantErrors.length > 0) return failure(invariantErrors);
 
-  const seeds = expandManifestSeeds(manifest).slice(0, options.runs);
+  const seeds = options.dryRun ? [] : selectManifestSeeds(manifest, options.runs ?? 0);
   const report = {
     reportKind: 'notequest-simulation-cli-smoke.v0.1',
     status: options.dryRun ? 'validated' : 'placeholder-smoke-complete',
@@ -253,45 +260,108 @@ function validateManifestInvariants(
   if (manifest.versions.rng.streamDerivationVersion !== randomStreamDerivationVersion)
     errors.push('unsupported production RNG stream derivation version');
 
+  errors.push(...validateExpectedPalaceContentHashSet(manifest));
+  errors.push(...validateSeedRangeBounds(manifest));
+
+  const seedWindow = getSeedWindow(manifest);
+  const partitionSeedCount = seedWindow.partitionEndExclusive - seedWindow.partitionStartInclusive;
+  if ((options.runs ?? 0) > partitionSeedCount)
+    errors.push('--runs cannot exceed the selected manifest partition seed count');
+  return errors;
+}
+
+function validateExpectedPalaceContentHashSet(manifest: SeedManifest): readonly string[] {
+  const errors: string[] = [];
   const expectedChecksums = new Map(
     palaceManifestExpectedHashFixtures.map((entry): [string, string] => [
       entry.contentId,
       entry.checksum,
     ]),
   );
-  for (const entry of manifest.versions.contentManifest.entries) {
+  const seen = new Set<string>();
+
+  for (const [index, entry] of manifest.versions.contentManifest.entries.entries()) {
+    const field = `versions.contentManifest.entries[${index}].contentId`;
+    if (!expectedChecksums.has(entry.contentId)) {
+      errors.push(`${field}: unknown Palace content hash entry ${entry.contentId}`);
+      continue;
+    }
+
+    if (seen.has(entry.contentId)) {
+      errors.push(`${field}: duplicate Palace content hash entry ${entry.contentId}`);
+      continue;
+    }
+
+    seen.add(entry.contentId);
     if (expectedChecksums.get(entry.contentId) !== entry.checksum) {
-      errors.push(`content manifest checksum mismatch for ${entry.contentId}`);
+      errors.push(
+        `versions.contentManifest.entries[${index}].checksum: checksum mismatch for ${entry.contentId}`,
+      );
     }
   }
 
-  const seedCount = expandManifestSeeds(manifest).length;
-  const slice = getContiguousIndexPartitionSlice(
-    seedCount,
-    manifest.partitioning.partitionCount,
-    manifest.partitioning.partitionIndex,
-  );
-  if ((options.runs ?? 0) > slice.endExclusive - slice.startInclusive)
-    errors.push('--runs cannot exceed the selected manifest partition seed count');
+  for (const contentId of expectedChecksums.keys()) {
+    if (!seen.has(contentId)) {
+      errors.push(
+        `versions.contentManifest.entries: missing Palace content hash entry ${contentId}`,
+      );
+    }
+  }
+
   return errors;
 }
 
-function expandManifestSeeds(manifest: SeedManifest): readonly string[] {
-  const allSeeds = expandSeedSet(manifest);
+function validateSeedRangeBounds(manifest: SeedManifest): readonly string[] {
+  if (manifest.seedSet.mode === 'explicit') return [];
+
+  const start = BigInt(manifest.seedSet.start);
+  const finalSeed = start + BigInt(manifest.seedSet.count) - 1n;
+  if (finalSeed > UINT64_MAX) {
+    return [
+      'seedSet.range: range exceeds the 64-bit RNG seed domain; start + count - 1 must be at most 0xffffffffffffffff',
+    ];
+  }
+
+  return [];
+}
+
+function getSeedWindow(manifest: SeedManifest): SeedWindow {
+  const totalCount = getSeedSetCount(manifest);
   const slice = getContiguousIndexPartitionSlice(
-    allSeeds.length,
+    totalCount,
     manifest.partitioning.partitionCount,
     manifest.partitioning.partitionIndex,
   );
-  return allSeeds.slice(slice.startInclusive, slice.endExclusive);
+  return {
+    partitionStartInclusive: slice.startInclusive,
+    partitionEndExclusive: slice.endExclusive,
+  };
 }
 
-function expandSeedSet(manifest: SeedManifest): readonly string[] {
-  const seedSet = manifest.seedSet;
-  if (seedSet.mode === 'explicit') return seedSet.seeds;
+function getSeedSetCount(manifest: SeedManifest): number {
+  return manifest.seedSet.mode === 'explicit'
+    ? manifest.seedSet.seeds.length
+    : manifest.seedSet.count;
+}
 
-  return Array.from({ length: seedSet.count }, (_, index) =>
-    formatSeed(BigInt(seedSet.start) + BigInt(index)),
+function selectManifestSeeds(manifest: SeedManifest, requestedRuns: number): readonly string[] {
+  const seedWindow = getSeedWindow(manifest);
+  const selectedCount = Math.min(
+    requestedRuns,
+    seedWindow.partitionEndExclusive - seedWindow.partitionStartInclusive,
+  );
+
+  if (manifest.seedSet.mode === 'explicit') {
+    return manifest.seedSet.seeds.slice(
+      seedWindow.partitionStartInclusive,
+      seedWindow.partitionStartInclusive + selectedCount,
+    );
+  }
+
+  const start = BigInt(manifest.seedSet.start);
+  const firstSelectedSeed = start + BigInt(seedWindow.partitionStartInclusive);
+  return Array.from({ length: selectedCount }, (_, index) =>
+    formatSeed(firstSelectedSeed + BigInt(index)),
   );
 }
 
