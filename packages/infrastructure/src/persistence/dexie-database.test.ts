@@ -1,7 +1,10 @@
+import 'fake-indexeddb/auto';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   applyNoteQuestSchema,
+  createNoteQuestDatabase,
   createNoteQuestDatabaseWithDexie,
   type DexieSchemaBuilder,
 } from './dexie-database';
@@ -13,6 +16,7 @@ import {
   NOTEQUEST_SCHEMA_VERSION,
   NOTEQUEST_SCHEMA_MIGRATION_PLACEHOLDERS,
   NOTEQUEST_STORE_DEFINITIONS,
+  createNoteQuestTestDatabaseName,
   NOTEQUEST_STORE_NAMES,
 } from './schema';
 
@@ -25,6 +29,14 @@ const expectedStores = [
   'contentPackages',
   'staging',
 ] as const;
+
+function readObjectStoreNames(database: IDBDatabase): string[] {
+  return Array.from(database.objectStoreNames).sort();
+}
+
+function createUniqueSchemaOpenDatabaseName(): string {
+  return createNoteQuestTestDatabaseName(`schema-open-smoke-${Date.now()}-${process.pid}`);
+}
 
 class RecordingDexieDatabase {
   static databaseNames: string[] = [];
@@ -129,6 +141,20 @@ describe('NoteQuest Dexie schema', () => {
 
     expect(database.schemaVersion).toBe(NOTEQUEST_SCHEMA_VERSION);
     expect(database.schema).toEqual(NOTEQUEST_INITIAL_SCHEMA);
+  });
+
+  it('opens the initial schema in a clean IndexedDB test database', async () => {
+    const testDatabaseName = createUniqueSchemaOpenDatabaseName();
+    const database = await createNoteQuestDatabase(testDatabaseName);
+
+    try {
+      await database.open();
+
+      expect(readObjectStoreNames(database.backendDB())).toEqual([...expectedStores].sort());
+    } finally {
+      database.close();
+      await database.delete();
+    }
   });
 
   it('constructs the default application database name through the Dexie boundary', () => {

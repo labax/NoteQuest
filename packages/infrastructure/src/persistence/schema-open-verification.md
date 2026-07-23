@@ -23,19 +23,13 @@ Expected open sequence:
 
 ## Current repository verification
 
-The committed unit tests currently verify the versioned schema descriptor, every store name, every primary key, every required index, the migration placeholder, Dexie schema string derivation, and schema application through a Dexie-compatible host.
+The committed unit tests verify the versioned schema descriptor, every store name, every primary key, every required index, the migration placeholder, Dexie schema string derivation, and schema application through a Dexie-compatible host.
 
-A true open against a clean IndexedDB database is deferred in this container because dependency installation is blocked by the npm registry. The attempted command was:
-
-```sh
-npm install dexie fake-indexeddb --workspace @notequest/infrastructure
-```
-
-The registry returned `403 Forbidden` for `https://registry.npmjs.org/dexie`, so the real Dexie clean-open smoke cannot be completed here without changing dependency availability.
+The test suite also includes a real clean-open smoke test using `dexie` and `fake-indexeddb/auto`. The smoke test opens a unique database through `createNoteQuestDatabase`, verifies the exact seven object stores, closes the database, and deletes it during cleanup.
 
 ## Follow-up trigger
 
-When dependency installation is available, add a real smoke test that imports `fake-indexeddb/auto`, opens a unique test database through `createNoteQuestDatabase`, verifies the seven object stores, and deletes the database during cleanup.
+When later persistence repositories are added, keep this clean-open smoke test focused on schema initialization and add separate repository/transaction tests for data writes.
 
 ## Subtask 6 local verification record
 
@@ -46,10 +40,12 @@ The subtask 6 verification pass ran the relevant local commands for this schema 
 - `npm test -- --run packages/infrastructure/src/persistence/dexie-database.test.ts` — passed.
 - `npx prettier --check packages/infrastructure/src/index.ts packages/infrastructure/src/persistence/dexie-database.test.ts packages/infrastructure/src/persistence/dexie-database.ts packages/infrastructure/src/persistence/schema.ts packages/infrastructure/src/persistence/schema-open-verification.md` — passed.
 - `npm run build` — passed.
-- `rg -n "Dexie|indexedDB|IndexedDB|dexie" packages/domain packages/application || true` — found only package README boundary documentation, not domain/application source dependencies.
+- `npm run test:ci` — passed.
+- `npm test` — passed.
+- `npm ci` — passed after `dexie` and `fake-indexeddb` were added through npm.
+- `rg -n "from 'dexie'|from \"dexie\"|indexedDB|IndexedDB" packages/domain packages/application` — found only package README boundary documentation, not domain/application source dependencies.
 
 Unavailable or warning-only checks:
 
-- `npm test` — all non-web suites and persistence tests passed, but `apps/web/src/App.test.tsx` failed in this local checkout because installed `react` and `react-dom` package versions differ.
-- `npm run format:check` — reports pre-existing formatting warnings in `docs/process/**` files outside the persistence schema change.
-- `npm install dexie fake-indexeddb --workspace @notequest/infrastructure` — unavailable in this container because the npm registry returned `403 Forbidden` for `dexie`.
+- Historical local `npm test` failures from mismatched installed React packages were resolved after `npm ci` refreshed dependencies.
+- `docs/process/**` is excluded from Prettier checks so unrelated process-document formatting does not block mixed code/docs persistence PRs.

@@ -87,15 +87,23 @@ export interface DexieConstructor<TDatabase extends DexieSchemaHost = DexieSchem
   new (databaseName: string): TDatabase;
 }
 
-export type NoteQuestDexieDatabase = DexieSchemaHost & {
-  workspace: NoteQuestTable<WorkspaceRow, 'key'>;
-  slots: NoteQuestTable<SlotRow, 'slotId'>;
-  records: NoteQuestTable<RecordRow, '[slotId+recordType+recordId]'>;
-  events: NoteQuestTable<EventRow, '[slotId+sequence]'>;
-  snapshots: NoteQuestTable<SnapshotRow, '[slotId+snapshotClass]'>;
-  contentPackages: NoteQuestTable<ContentPackageRow, '[packageId+version]'>;
-  staging: NoteQuestTable<StagingRow, 'stageId'>;
+export type NoteQuestDexieLifecycle = {
+  open(): Promise<unknown>;
+  close(): void;
+  delete(): Promise<void>;
+  backendDB(): IDBDatabase;
 };
+
+export type NoteQuestDexieDatabase = DexieSchemaHost &
+  NoteQuestDexieLifecycle & {
+    workspace: NoteQuestTable<WorkspaceRow, 'key'>;
+    slots: NoteQuestTable<SlotRow, 'slotId'>;
+    records: NoteQuestTable<RecordRow, '[slotId+recordType+recordId]'>;
+    events: NoteQuestTable<EventRow, '[slotId+sequence]'>;
+    snapshots: NoteQuestTable<SnapshotRow, '[slotId+snapshotClass]'>;
+    contentPackages: NoteQuestTable<ContentPackageRow, '[packageId+version]'>;
+    staging: NoteQuestTable<StagingRow, 'stageId'>;
+  };
 
 export function applyNoteQuestSchema(database: DexieSchemaHost): void {
   database.version(NOTEQUEST_SCHEMA_VERSION).stores(NOTEQUEST_INITIAL_SCHEMA);
