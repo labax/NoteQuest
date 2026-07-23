@@ -12,12 +12,12 @@ Issue #67 subtask 6 records the local verification pass for the action-level tra
 
 The following commands passed locally for this subtask:
 
-- `npm run typecheck` — strict TypeScript completed successfully.
+- `npm run format:check` — Prettier format check passed.
 - `npm run lint` — ESLint completed with zero warnings.
+- `npm run typecheck` — strict TypeScript completed successfully.
 - `npm test -- --run packages/infrastructure/src/persistence/dexie-action-transaction-coordinator.test.ts tests/action-transaction-coordinator.integration.test.ts` — focused transaction unit and integration tests passed.
 - `npm test` — full Vitest suite passed.
 - `npm run build` — root build completed, including typecheck and Vite web build.
-- `npm run format:check` — Prettier format check passed.
 - `rg -n "from 'dexie'|from \"dexie\"|indexedDB|IndexedDB|Table<" packages/domain packages/application` — matched only README boundary guidance, not domain or application source imports.
 
 ## Gaps and deferred scope

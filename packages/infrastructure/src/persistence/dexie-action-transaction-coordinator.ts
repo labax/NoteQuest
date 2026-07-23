@@ -1,11 +1,13 @@
 import {
   actionCommitDuplicate,
   actionCommitRevisionConflict,
+  actionCommitSequenceConflict,
   actionCommitSuccess,
   actionCommitValidationFailure,
   countActionCommitWrites,
   validateActionCommitEnvelope,
   type ActionCommitEnvelope,
+  type ActionCommitValidationError,
   type ActionCommitError,
   type ActionCommitResult,
   type ActionTransactionCoordinator,
@@ -20,6 +22,11 @@ import {
   toSlotRow,
   toSnapshotRow,
   toWorkspaceRow,
+  validateEventRecord,
+  validatePersistedRecord,
+  validateSlotRecord,
+  validateSnapshotRecord,
+  validateWorkspaceEntry,
 } from './dexie-repositories';
 
 interface IdempotencyMarkerValue {
@@ -87,6 +94,120 @@ function maxEventRevision(events: readonly EventRow[]): number {
   return events.reduce((maxSequence, event) => Math.max(maxSequence, event.sequence), 0);
 }
 
+function idempotencyWorkspaceEntry(
+  envelope: ActionCommitEnvelope & { readonly idempotencyKey: IdempotencyKey },
+  stateRevision: number,
+): WorkspaceRow {
+  return {
+    key: actionCommitIdempotencyWorkspaceKey(envelope.slotId, envelope.idempotencyKey),
+    value: { actionId: envelope.actionId, stateRevision },
+  };
+}
+
+function toActionCommitValidationError(
+  path: string,
+  error: { readonly message: string },
+): ActionCommitValidationError {
+  return {
+    code: 'invalid_required_write',
+    path,
+    message: error.message,
+  };
+}
+
+function validateRequiredWrites(
+  envelope: ActionCommitEnvelope,
+): readonly ActionCommitValidationError[] {
+  const errors: ActionCommitValidationError[] = [];
+
+  for (const [index, record] of envelope.stateRecords.entries()) {
+    const error = validatePersistedRecord(record);
+    if (error !== null) {
+      errors.push(toActionCommitValidationError(`stateRecords.${index}`, error));
+    }
+  }
+
+  for (const [index, record] of (envelope.randomStreamRecords ?? []).entries()) {
+    const error = validatePersistedRecord(record);
+    if (error !== null) {
+      errors.push(toActionCommitValidationError(`randomStreamRecords.${index}`, error));
+    }
+  }
+
+  for (const [index, record] of (envelope.randomResultRecords ?? []).entries()) {
+    const error = validatePersistedRecord(record);
+    if (error !== null) {
+      errors.push(toActionCommitValidationError(`randomResultRecords.${index}`, error));
+    }
+  }
+
+  for (const [index, event] of envelope.events.entries()) {
+    const error = validateEventRecord(event);
+    if (error !== null) {
+      errors.push(toActionCommitValidationError(`events.${index}`, error));
+    }
+  }
+
+  if (envelope.slotMetadata !== undefined) {
+    const error = validateSlotRecord(envelope.slotMetadata);
+    if (error !== null) {
+      errors.push(toActionCommitValidationError('slotMetadata', error));
+    }
+  }
+
+  for (const [index, snapshot] of (envelope.recoveryPointers?.snapshots ?? []).entries()) {
+    const error = validateSnapshotRecord(snapshot);
+    if (error !== null) {
+      errors.push(toActionCommitValidationError(`recoveryPointers.snapshots.${index}`, error));
+    }
+  }
+
+  for (const [index, entry] of (envelope.recoveryPointers?.workspaceEntries ?? []).entries()) {
+    const error = validateWorkspaceEntry(entry);
+    if (error !== null) {
+      errors.push(
+        toActionCommitValidationError(`recoveryPointers.workspaceEntries.${index}`, error),
+      );
+    }
+  }
+
+  if (isIdempotentEnvelope(envelope)) {
+    const error = validateWorkspaceEntry(idempotencyWorkspaceEntry(envelope, 0));
+    if (error !== null) {
+      errors.push(toActionCommitValidationError('idempotencyMarker', error));
+    }
+  }
+
+  return errors;
+}
+
+function expectedContiguousSequences(
+  currentRevision: number,
+  eventCount: number,
+): readonly number[] {
+  return Array.from({ length: eventCount }, (_value, index) => currentRevision + index + 1);
+}
+
+function validateContiguousEventSequences(
+  currentRevision: number,
+  envelope: ActionCommitEnvelope,
+): ActionCommitResult | null {
+  const submittedSequences = envelope.events.map((event) => event.sequence);
+  const expectedSequences = expectedContiguousSequences(currentRevision, envelope.events.length);
+  const contiguous = expectedSequences.every(
+    (expectedSequence, index) => submittedSequences[index] === expectedSequence,
+  );
+
+  return contiguous
+    ? null
+    : actionCommitSequenceConflict(
+        envelope,
+        currentRevision,
+        expectedSequences,
+        submittedSequences,
+      );
+}
+
 export class DexieActionTransactionCoordinator implements ActionTransactionCoordinator {
   constructor(
     private readonly database: NoteQuestDexieDatabase,
@@ -94,7 +215,10 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
   ) {}
 
   async commit(envelope: ActionCommitEnvelope): Promise<ActionCommitResult> {
-    const validationErrors = validateActionCommitEnvelope(envelope);
+    const validationErrors = [
+      ...validateActionCommitEnvelope(envelope),
+      ...validateRequiredWrites(envelope),
+    ];
 
     if (validationErrors.length > 0) {
       return actionCommitValidationFailure(envelope, validationErrors);
@@ -129,6 +253,11 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             return actionCommitRevisionConflict(envelope, currentRevision);
           }
 
+          const sequenceConflict = validateContiguousEventSequences(currentRevision, envelope);
+          if (sequenceConflict !== null) {
+            return sequenceConflict;
+          }
+
           const stateRows = [
             ...envelope.stateRecords,
             ...(envelope.randomStreamRecords ?? []),
@@ -157,13 +286,9 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             await this.database.workspace.bulkPut(workspaceEntries.map(toWorkspaceRow));
           }
 
-          const stateRevision = Math.max(currentRevision, maxEventRevision(envelope.events));
+          const stateRevision = currentRevision + envelope.events.length;
           if (isIdempotentEnvelope(envelope)) {
-            const marker: WorkspaceRow = {
-              key: actionCommitIdempotencyWorkspaceKey(envelope.slotId, envelope.idempotencyKey),
-              value: { actionId: envelope.actionId, stateRevision },
-            };
-            await this.database.workspace.put(marker);
+            await this.database.workspace.put(idempotencyWorkspaceEntry(envelope, stateRevision));
           }
 
           return actionCommitSuccess(envelope, stateRevision);

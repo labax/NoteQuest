@@ -31,7 +31,8 @@ export type ActionCommitValidationErrorCode =
   | 'slot_mismatch'
   | 'missing_required_write'
   | 'invalid_sequence'
-  | 'invalid_expected_revision';
+  | 'invalid_expected_revision'
+  | 'invalid_required_write';
 
 export interface ActionCommitValidationError {
   readonly code: ActionCommitValidationErrorCode;
@@ -40,7 +41,11 @@ export interface ActionCommitValidationError {
 }
 
 export type ActionCommitErrorCode =
-  ActionCommitValidationErrorCode | 'revision_conflict' | 'write_failed' | 'transaction_failed';
+  | ActionCommitValidationErrorCode
+  | 'revision_conflict'
+  | 'sequence_conflict'
+  | 'write_failed'
+  | 'transaction_failed';
 
 export interface ActionCommitError {
   readonly code: ActionCommitErrorCode;
@@ -50,6 +55,8 @@ export interface ActionCommitError {
   readonly cause?: unknown;
   readonly currentRevision?: number;
   readonly expectedRevision?: number;
+  readonly expectedSequences?: readonly number[];
+  readonly submittedSequences?: readonly number[];
 }
 
 export interface ActionCommitWriteCounts {
@@ -265,6 +272,29 @@ export function actionCommitRevisionConflict(
       ...(envelope.expectedRevision === undefined
         ? {}
         : { expectedRevision: envelope.expectedRevision }),
+    },
+  };
+}
+
+export function actionCommitSequenceConflict(
+  envelope: ActionCommitEnvelope,
+  currentRevision: number,
+  expectedSequences: readonly number[],
+  submittedSequences: readonly number[],
+): ActionCommitResult {
+  return {
+    ok: false,
+    actionId: envelope.actionId,
+    ...(envelope.idempotencyKey === undefined ? {} : { idempotencyKey: envelope.idempotencyKey }),
+    committed: false,
+    duplicate: false,
+    error: {
+      code: 'sequence_conflict',
+      message:
+        'Action commit event sequences must be contiguous from the current durable revision.',
+      currentRevision,
+      expectedSequences,
+      submittedSequences,
     },
   };
 }

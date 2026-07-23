@@ -132,6 +132,10 @@ describe('Dexie action transaction coordinator', () => {
           ok: true,
           value: repositoryEventFixture,
         });
+        await expect(repositories.events.get(repositoryFixtureSlotId, 2)).resolves.toMatchObject({
+          ok: false,
+          error: { code: 'missing_record' },
+        });
         await expect(
           repositories.snapshots.get(repositoryFixtureSlotId, 'last-valid'),
         ).resolves.toEqual({ ok: true, value: repositorySnapshotFixture });
@@ -211,10 +215,17 @@ describe('Dexie action transaction coordinator', () => {
         const result = await coordinator.commit(
           createEnvelope({
             slotMetadata: repositorySlotFixture,
+            stateRecords: [
+              {
+                ...repositoryRecordFixture,
+                body: { unsupported: () => 'not cloneable' },
+              },
+            ],
             events: [
               {
                 ...repositoryEventFixture,
-                body: { summary: 'duplicate primary key forces transaction abort' },
+                sequence: 2,
+                body: { summary: 'valid next event never reaches durable storage' },
               },
             ],
           }),
@@ -255,6 +266,10 @@ describe('Dexie action transaction coordinator', () => {
           ok: true,
           value: repositoryEventFixture,
         });
+        await expect(repositories.events.get(repositoryFixtureSlotId, 2)).resolves.toMatchObject({
+          ok: false,
+          error: { code: 'missing_record' },
+        });
       },
       {
         transactionStarted: () => {
@@ -273,6 +288,190 @@ describe('Dexie action transaction coordinator', () => {
     );
 
     expect(diagnosticEvents).toEqual(['started', 'aborted:transaction_failed']);
+  });
+
+  it('rejects invalid required writes before durable mutation or idempotency markers', async () => {
+    const diagnosticEvents: string[] = [];
+
+    await withCoordinator(
+      async ({ coordinator, repositories }) => {
+        const result = await coordinator.commit(
+          createEnvelope({
+            idempotencyKey: fixtureIdempotencyKey,
+            stateRecords: [{ ...repositoryRecordFixture, recordId: '   ' }],
+          }),
+        );
+
+        expect(result).toMatchObject({
+          ok: false,
+          actionId: 'action.fixture.commit',
+          idempotencyKey: fixtureIdempotencyKey,
+          committed: false,
+          duplicate: false,
+          error: {
+            code: 'invalid_required_write',
+            validationErrors: [
+              {
+                code: 'invalid_required_write',
+                path: 'stateRecords.0',
+                message: 'recordId is required.',
+              },
+            ],
+          },
+        });
+        await expect(
+          repositories.records.get(repositoryFixtureSlotId, 'adventurer', '   '),
+        ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+        await expect(
+          repositories.workspace.get(
+            actionCommitIdempotencyWorkspaceKey(repositoryFixtureSlotId, fixtureIdempotencyKey),
+          ),
+        ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+      },
+      {
+        transactionStarted: () => {
+          diagnosticEvents.push('started');
+        },
+        transactionCommitted: () => {
+          diagnosticEvents.push('committed');
+        },
+        transactionDuplicate: () => {
+          diagnosticEvents.push('duplicate');
+        },
+        transactionAborted: () => {
+          diagnosticEvents.push('aborted');
+        },
+      },
+    );
+
+    expect(diagnosticEvents).toEqual([]);
+  });
+
+  it('rejects invalid recovery pointers before durable mutation or idempotency markers', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      const invalidSnapshotResult = await coordinator.commit(
+        createEnvelope({
+          idempotencyKey: fixtureIdempotencyKey,
+          recoveryPointers: {
+            snapshots: [{ ...repositorySnapshotFixture, sourceRevision: -1 }],
+            workspaceEntries: [],
+          },
+        }),
+      );
+
+      expect(invalidSnapshotResult).toMatchObject({
+        ok: false,
+        committed: false,
+        duplicate: false,
+        error: {
+          code: 'invalid_required_write',
+          validationErrors: [
+            {
+              code: 'invalid_required_write',
+              path: 'recoveryPointers.snapshots.0',
+              message: 'sourceRevision cannot be negative.',
+            },
+          ],
+        },
+      });
+
+      const invalidWorkspaceResult = await coordinator.commit(
+        createEnvelope({
+          idempotencyKey: fixtureIdempotencyKey,
+          recoveryPointers: {
+            snapshots: [],
+            workspaceEntries: [{ ...repositoryWorkspaceFixture, key: '   ' }],
+          },
+        }),
+      );
+
+      expect(invalidWorkspaceResult).toMatchObject({
+        ok: false,
+        committed: false,
+        duplicate: false,
+        error: {
+          code: 'invalid_required_write',
+          validationErrors: [
+            {
+              code: 'invalid_required_write',
+              path: 'recoveryPointers.workspaceEntries.0',
+              message: 'key is required.',
+            },
+          ],
+        },
+      });
+
+      await expect(
+        repositories.records.get(repositoryFixtureSlotId, 'adventurer', 'adventurer.fixture'),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+      await expect(
+        repositories.workspace.get(
+          actionCommitIdempotencyWorkspaceKey(repositoryFixtureSlotId, fixtureIdempotencyKey),
+        ),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+    });
+  });
+
+  it('rejects event sequence gaps before durable mutation or idempotency markers', async () => {
+    const diagnosticEvents: string[] = [];
+
+    await withCoordinator(
+      async ({ coordinator, repositories }) => {
+        await expect(repositories.events.append(repositoryEventFixture)).resolves.toMatchObject({
+          ok: true,
+        });
+
+        const result = await coordinator.commit(
+          createEnvelope({
+            idempotencyKey: fixtureIdempotencyKey,
+            expectedRevision: 1,
+            events: [{ ...repositoryEventFixture, sequence: 3 }],
+          }),
+        );
+
+        expect(result).toMatchObject({
+          ok: false,
+          actionId: 'action.fixture.commit',
+          idempotencyKey: fixtureIdempotencyKey,
+          committed: false,
+          duplicate: false,
+          error: {
+            code: 'sequence_conflict',
+            currentRevision: 1,
+            expectedSequences: [2],
+            submittedSequences: [3],
+          },
+        });
+        await expect(
+          repositories.records.get(repositoryFixtureSlotId, 'adventurer', 'adventurer.fixture'),
+        ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+        await expect(repositories.events.get(repositoryFixtureSlotId, 3)).resolves.toMatchObject({
+          ok: false,
+          error: { code: 'missing_record' },
+        });
+        await expect(
+          repositories.workspace.get(
+            actionCommitIdempotencyWorkspaceKey(repositoryFixtureSlotId, fixtureIdempotencyKey),
+          ),
+        ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+      },
+      {
+        transactionStarted: () => {
+          diagnosticEvents.push('started');
+        },
+        transactionCommitted: () => {
+          diagnosticEvents.push('committed');
+        },
+        transactionDuplicate: () => {
+          diagnosticEvents.push('duplicate');
+        },
+        transactionAborted: (_envelope, error) => {
+          diagnosticEvents.push(`aborted:${error.code}`);
+        },
+      },
+    );
+
+    expect(diagnosticEvents).toEqual(['started', 'aborted:sequence_conflict']);
   });
 
   it('uses idempotency and expected revisions to avoid duplicate mutations', async () => {
