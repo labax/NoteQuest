@@ -8,3 +8,4 @@ export const infrastructureDependsOn = [applicationLayerName, domainLayerName] a
 export * from './canonical-json.ts';
 export * from './sha256.ts';
 export * from './sha256-fixtures.ts';
+export * from './persistence/schema';
