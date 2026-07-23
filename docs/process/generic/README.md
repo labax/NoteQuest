@@ -8,6 +8,7 @@ This directory contains reusable process documents for adapting tabletop, solo, 
 
 | Order | Document | Use when |
 |---:|---|---|
+| 0 | `process-adoption-checklist-v0.1.md` | You are starting a new adaptation or checking whether an existing project is ready to use the generic process pack |
 | 1 | `product-agnostic-game-adaptation-process-v0.1.md` | You need the overall reusable lifecycle for source intake, planning, backlog generation, implementation, review, and release |
 | 2 | `product-profile-template-v0.1.md` | You are starting or configuring a specific adaptation project |
 | 3 | `source-material-intake-and-rights-matrix-v0.1.md` | You need to classify source material and define allowed use before implementation |
@@ -25,14 +26,23 @@ Case studies live outside this directory, under `docs/process/case-studies/`. A 
 
 ## Recommended Paths
 
+### Adopting the Process
+
+1. Start with `process-adoption-checklist-v0.1.md`.
+2. Choose an adoption mode: new project, existing migration, second-product reuse, prototype rescue, or public-release hardening.
+3. Confirm owners for product, rights, technical, QA, UX, and release concerns.
+4. Record the adoption decision before generating product-specific issues or prompts.
+5. Use the scorecard to decide whether the project is discovery ready, backlog ready, implementation ready, or blocked.
+
 ### Starting a New Adaptation
 
-1. Create a Product Profile from `product-profile-template-v0.1.md`.
-2. Inventory source material with `source-material-intake-and-rights-matrix-v0.1.md`.
-3. Create an initial glossary with `game-adaptation-glossary-template-v0.1.md`.
-4. Extract rules domains with `rules-extraction-taxonomy-v0.1.md`.
-5. Record major choices with `decision-register-template-v0.1.md`.
-6. Open initial risks with `risk-register-template-v0.1.md`.
+1. Run `process-adoption-checklist-v0.1.md` to confirm adoption mode, owners, and blockers.
+2. Create a Product Profile from `product-profile-template-v0.1.md`.
+3. Inventory source material with `source-material-intake-and-rights-matrix-v0.1.md`.
+4. Create an initial glossary with `game-adaptation-glossary-template-v0.1.md`.
+5. Extract rules domains with `rules-extraction-taxonomy-v0.1.md`.
+6. Record major choices with `decision-register-template-v0.1.md`.
+7. Open initial risks with `risk-register-template-v0.1.md`.
 
 ### Creating the Backlog
 
