@@ -6,6 +6,10 @@ on:
     branches:
       - develop
       - main
+    # Skip CI when a pull request only changes documentation. Mixed code/docs changes still run.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
 
 permissions:
   contents: read
