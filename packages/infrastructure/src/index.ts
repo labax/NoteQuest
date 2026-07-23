@@ -9,3 +9,5 @@ export * from './canonical-json.ts';
 export * from './sha256.ts';
 export * from './sha256-fixtures.ts';
 export * from './persistence/schema';
+export * from './persistence/dexie-database';
+export * from './persistence/dexie-repositories';

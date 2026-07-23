@@ -1,3 +1,5 @@
+import type { Table } from 'dexie';
+
 import {
   NOTEQUEST_DATABASE_NAME,
   NOTEQUEST_INITIAL_SCHEMA,
@@ -70,10 +72,7 @@ export interface StagingRow {
   body: unknown;
 }
 
-export type NoteQuestTable<TEntity, TKey extends string> = {
-  readonly __entity?: TEntity;
-  readonly __keyPath?: TKey;
-};
+export type NoteQuestTable<TEntity, TKey> = Table<TEntity, TKey>;
 
 export interface DexieSchemaBuilder {
   stores(schema: Record<string, string>): unknown;
@@ -96,13 +95,13 @@ export type NoteQuestDexieLifecycle = {
 
 export type NoteQuestDexieDatabase = DexieSchemaHost &
   NoteQuestDexieLifecycle & {
-    workspace: NoteQuestTable<WorkspaceRow, 'key'>;
-    slots: NoteQuestTable<SlotRow, 'slotId'>;
-    records: NoteQuestTable<RecordRow, '[slotId+recordType+recordId]'>;
-    events: NoteQuestTable<EventRow, '[slotId+sequence]'>;
-    snapshots: NoteQuestTable<SnapshotRow, '[slotId+snapshotClass]'>;
-    contentPackages: NoteQuestTable<ContentPackageRow, '[packageId+version]'>;
-    staging: NoteQuestTable<StagingRow, 'stageId'>;
+    workspace: NoteQuestTable<WorkspaceRow, string>;
+    slots: NoteQuestTable<SlotRow, string>;
+    records: NoteQuestTable<RecordRow, [string, string, string]>;
+    events: NoteQuestTable<EventRow, [string, number]>;
+    snapshots: NoteQuestTable<SnapshotRow, [string, SnapshotRow['snapshotClass']]>;
+    contentPackages: NoteQuestTable<ContentPackageRow, [string, string]>;
+    staging: NoteQuestTable<StagingRow, string>;
   };
 
 export function applyNoteQuestSchema(database: DexieSchemaHost): void {
