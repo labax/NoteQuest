@@ -67,6 +67,18 @@ describe('NoteQuest Dexie schema', () => {
     expect(Object.keys(NOTEQUEST_SCHEMA_OWNERSHIP)).toEqual(expectedStores);
   });
 
+  it('exports store ownership values separately from purpose text', () => {
+    expect(NOTEQUEST_SCHEMA_OWNERSHIP).toEqual({
+      workspace: 'application',
+      slots: 'application',
+      records: 'slot',
+      events: 'slot',
+      snapshots: 'slot',
+      contentPackages: 'content',
+      staging: 'staging',
+    });
+  });
+
   it('reserves the first sequential schema migration placeholder', () => {
     expect(NOTEQUEST_INITIAL_MIGRATION_PLACEHOLDER).toEqual({
       fromVersion: 1,

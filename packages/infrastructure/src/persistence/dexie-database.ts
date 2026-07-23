@@ -121,7 +121,6 @@ export function createNoteQuestDatabaseWithDexie<TDatabase extends DexieSchemaHo
 export async function createNoteQuestDatabase(
   databaseName = NOTEQUEST_DATABASE_NAME,
 ): Promise<NoteQuestDexieDatabase> {
-  const dexieModuleName = 'dexie';
-  const DexieDatabase = (await import(dexieModuleName)).default as DexieConstructor;
+  const DexieDatabase = (await import('dexie')).default as DexieConstructor;
   return createNoteQuestDatabaseWithDexie(DexieDatabase, databaseName);
 }

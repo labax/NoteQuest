@@ -34,10 +34,12 @@ export const NOTEQUEST_STORE_NAMES = [
 
 export type NoteQuestStoreName = (typeof NOTEQUEST_STORE_NAMES)[number];
 
+export type NoteQuestStoreOwner = 'application' | 'slot' | 'content' | 'staging';
+
 export type NoteQuestStoreDefinition = {
   readonly primaryKey: string;
   readonly indexes: readonly string[];
-  readonly owner: 'application' | 'slot' | 'content' | 'staging';
+  readonly owner: NoteQuestStoreOwner;
   readonly purpose: string;
 };
 
@@ -114,9 +116,9 @@ export const NOTEQUEST_INITIAL_SCHEMA = Object.fromEntries(
 export const NOTEQUEST_SCHEMA_OWNERSHIP = Object.fromEntries(
   NOTEQUEST_STORE_NAMES.map((storeName) => [
     storeName,
-    NOTEQUEST_STORE_DEFINITIONS[storeName].purpose,
+    NOTEQUEST_STORE_DEFINITIONS[storeName].owner,
   ]),
-) as Record<NoteQuestStoreName, string>;
+) as Record<NoteQuestStoreName, NoteQuestStoreOwner>;
 
 export function createNoteQuestTestDatabaseName(suffix: string): string {
   return `${NOTEQUEST_TEST_DATABASE_PREFIX}-${suffix}`;
