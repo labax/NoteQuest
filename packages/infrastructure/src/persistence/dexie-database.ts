@@ -88,6 +88,10 @@ export interface DexieConstructor<TDatabase extends DexieSchemaHost = DexieSchem
 
 export type NoteQuestDexieLifecycle = {
   open(): Promise<unknown>;
+  transaction<T>(
+    mode: 'r' | 'rw',
+    ...tablesAndScope: [...unknown[], () => Promise<T> | T]
+  ): Promise<T>;
   close(): void;
   delete(): Promise<void>;
   backendDB(): IDBDatabase;
