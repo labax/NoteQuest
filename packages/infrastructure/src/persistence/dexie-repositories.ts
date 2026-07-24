@@ -76,10 +76,52 @@ function translateStorageError(
   });
 }
 
-function requireString(value: string, field: string, entity: string): RepositoryError | null {
+export function requireString(
+  value: string,
+  field: string,
+  entity: string,
+): RepositoryError | null {
   return value.trim() === ''
     ? { code: 'validation_failure', entity, message: `${field} is required.` }
     : null;
+}
+
+export function validateWorkspaceEntry(entry: WorkspaceEntry): RepositoryError | null {
+  return requireString(entry.key, 'key', 'workspace entry');
+}
+
+export function validateSlotRecord(slot: SlotRecord): RepositoryError | null {
+  return requireString(slot.slotId, 'slotId', 'slot');
+}
+
+export function validatePersistedRecord(record: PersistedRecord): RepositoryError | null {
+  return requireString(record.recordId, 'recordId', 'record');
+}
+
+export function validateEventRecord(event: EventRecord): RepositoryError | null {
+  return event.sequence < 1
+    ? { code: 'validation_failure', entity: 'event', message: 'sequence must be positive.' }
+    : null;
+}
+
+export function validateSnapshotRecord(snapshot: SnapshotRecord): RepositoryError | null {
+  return snapshot.sourceRevision < 0
+    ? {
+        code: 'validation_failure',
+        entity: 'snapshot',
+        message: 'sourceRevision cannot be negative.',
+      }
+    : null;
+}
+
+export function validateContentPackageRecord(
+  contentPackage: ContentPackageRecord,
+): RepositoryError | null {
+  return requireString(contentPackage.packageId, 'packageId', 'content package');
+}
+
+export function validateStagingRecord(stagingRecord: StagingRecord): RepositoryError | null {
+  return requireString(stagingRecord.stageId, 'stageId', 'staging record');
 }
 
 function clonePersistedPayload<T>(payload: T): T {
@@ -130,7 +172,7 @@ export class DexieWorkspaceRepository implements WorkspaceRepository {
     return writeOne(
       'workspace entry',
       entry,
-      () => requireString(entry.key, 'key', 'workspace entry'),
+      () => validateWorkspaceEntry(entry),
       () => this.table.put(toWorkspaceRow(entry)),
     );
   }
@@ -147,7 +189,7 @@ export class DexieSlotRepository implements SlotRepository {
     return writeOne(
       'slot',
       slot,
-      () => requireString(slot.slotId, 'slotId', 'slot'),
+      () => validateSlotRecord(slot),
       () => this.table.put(toSlotRow(slot)),
     );
   }
@@ -168,7 +210,7 @@ export class DexieRecordRepository implements RecordRepository {
     return writeOne(
       'record',
       record,
-      () => requireString(record.recordId, 'recordId', 'record'),
+      () => validatePersistedRecord(record),
       () => this.table.put(toRecordRow(record)),
     );
   }
@@ -200,10 +242,7 @@ export class DexieEventRepository implements EventRepository {
     return writeOne(
       'event',
       event,
-      () =>
-        event.sequence < 1
-          ? { code: 'validation_failure', entity: 'event', message: 'sequence must be positive.' }
-          : null,
+      () => validateEventRecord(event),
       () => this.table.add(toEventRow(event)),
     );
   }
@@ -233,14 +272,7 @@ export class DexieSnapshotRepository implements SnapshotRepository {
     return writeOne(
       'snapshot',
       snapshot,
-      () =>
-        snapshot.sourceRevision < 0
-          ? {
-              code: 'validation_failure',
-              entity: 'snapshot',
-              message: 'sourceRevision cannot be negative.',
-            }
-          : null,
+      () => validateSnapshotRecord(snapshot),
       () => this.table.put(toSnapshotRow(snapshot)),
     );
   }
@@ -261,7 +293,7 @@ export class DexieContentPackageRepository implements ContentPackageRepository {
     return writeOne(
       'content package',
       contentPackage,
-      () => requireString(contentPackage.packageId, 'packageId', 'content package'),
+      () => validateContentPackageRecord(contentPackage),
       () => this.table.put(toContentPackageRow(contentPackage)),
     );
   }
@@ -278,7 +310,7 @@ export class DexieStagingRepository implements StagingRepository {
     return writeOne(
       'staging record',
       stagingRecord,
-      () => requireString(stagingRecord.stageId, 'stageId', 'staging record'),
+      () => validateStagingRecord(stagingRecord),
       () => this.table.put(toStagingRow(stagingRecord)),
     );
   }
