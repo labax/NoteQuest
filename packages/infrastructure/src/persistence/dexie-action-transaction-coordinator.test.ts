@@ -585,6 +585,104 @@ describe('Dexie action transaction coordinator', () => {
     expect(diagnosticEvents).toEqual(['started:1', 'committed:1', 'started:1', 'duplicate:1']);
   });
 
+  it('rejects idempotency key collisions for different action ids without mutation', async () => {
+    const diagnosticEvents: string[] = [];
+
+    await withCoordinator(
+      async ({ coordinator, repositories }) => {
+        const firstResult = await coordinator.commit(
+          createEnvelope({ idempotencyKey: fixtureIdempotencyKey, expectedRevision: 0 }),
+        );
+
+        expect(firstResult).toMatchObject({
+          ok: true,
+          actionId: 'action.fixture.commit',
+          committed: true,
+          duplicate: false,
+          stateRevision: 1,
+        });
+
+        const collisionResult = await coordinator.commit(
+          createEnvelope({
+            actionId: 'action.fixture.collision',
+            idempotencyKey: fixtureIdempotencyKey,
+            expectedRevision: 1,
+            stateRecords: [
+              {
+                ...repositoryRecordFixture,
+                body: { hp: 99, name: 'Collision submit must not mutate' },
+              },
+            ],
+            events: [
+              {
+                ...repositoryEventFixture,
+                sequence: 2,
+                body: { summary: 'collision submit must not append event' },
+              },
+            ],
+          }),
+        );
+
+        expect(collisionResult).toMatchObject({
+          ok: false,
+          actionId: 'action.fixture.collision',
+          idempotencyKey: fixtureIdempotencyKey,
+          committed: false,
+          duplicate: false,
+          error: {
+            code: 'idempotency_conflict',
+            currentRevision: 1,
+            existingActionId: 'action.fixture.commit',
+            submittedActionId: 'action.fixture.collision',
+          },
+        });
+
+        await expect(
+          repositories.records.get(repositoryFixtureSlotId, 'adventurer', 'adventurer.fixture'),
+        ).resolves.toEqual({ ok: true, value: repositoryRecordFixture });
+        await expect(repositories.events.get(repositoryFixtureSlotId, 2)).resolves.toMatchObject({
+          ok: false,
+          error: { code: 'missing_record' },
+        });
+        await expect(
+          repositories.workspace.get(
+            actionCommitIdempotencyWorkspaceKey(repositoryFixtureSlotId, fixtureIdempotencyKey),
+          ),
+        ).resolves.toMatchObject({
+          ok: true,
+          value: {
+            key: actionCommitIdempotencyWorkspaceKey(
+              repositoryFixtureSlotId,
+              fixtureIdempotencyKey,
+            ),
+            value: { actionId: 'action.fixture.commit', stateRevision: 1 },
+          },
+        });
+      },
+      {
+        transactionStarted: (_envelope, plannedWrites) => {
+          diagnosticEvents.push(`started:${plannedWrites.idempotencyMarkers}`);
+        },
+        transactionCommitted: (_envelope, written) => {
+          diagnosticEvents.push(`committed:${written.idempotencyMarkers}`);
+        },
+        transactionDuplicate: (_envelope, stateRevision) => {
+          diagnosticEvents.push(`duplicate:${stateRevision}`);
+        },
+        transactionAborted: (_envelope, error) => {
+          diagnosticEvents.push(`aborted:${error.code}`);
+        },
+      },
+    );
+
+    expect(diagnosticEvents).toEqual([
+      'started:1',
+      'committed:1',
+      'started:1',
+      'aborted:idempotency_conflict',
+    ]);
+  });
+
   it('rejects stale expected revisions without writing mutations', async () => {
     const diagnosticEvents: string[] = [];
 

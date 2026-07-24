@@ -44,6 +44,7 @@ export type ActionCommitErrorCode =
   | ActionCommitValidationErrorCode
   | 'revision_conflict'
   | 'sequence_conflict'
+  | 'idempotency_conflict'
   | 'write_failed'
   | 'transaction_failed';
 
@@ -57,6 +58,8 @@ export interface ActionCommitError {
   readonly expectedRevision?: number;
   readonly expectedSequences?: readonly number[];
   readonly submittedSequences?: readonly number[];
+  readonly existingActionId?: string;
+  readonly submittedActionId?: string;
 }
 
 export interface ActionCommitWriteCounts {
@@ -252,6 +255,27 @@ export function actionCommitDuplicate(
     duplicate: true,
     stateRevision,
     written: emptyActionCommitWriteCounts(),
+  };
+}
+
+export function actionCommitIdempotencyConflict(
+  envelope: ActionCommitEnvelope & { readonly idempotencyKey: IdempotencyKey },
+  existingActionId: string,
+  stateRevision: number,
+): ActionCommitResult {
+  return {
+    ok: false,
+    actionId: envelope.actionId,
+    idempotencyKey: envelope.idempotencyKey,
+    committed: false,
+    duplicate: false,
+    error: {
+      code: 'idempotency_conflict',
+      message: 'Action commit idempotency key already belongs to a different action.',
+      currentRevision: stateRevision,
+      existingActionId,
+      submittedActionId: envelope.actionId,
+    },
   };
 }
 

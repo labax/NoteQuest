@@ -1,5 +1,6 @@
 import {
   actionCommitDuplicate,
+  actionCommitIdempotencyConflict,
   actionCommitRevisionConflict,
   actionCommitSequenceConflict,
   actionCommitSuccess,
@@ -238,7 +239,13 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             );
 
             if (marker !== undefined && isIdempotencyMarkerValue(marker.value)) {
-              return actionCommitDuplicate(envelope, marker.value.stateRevision);
+              return marker.value.actionId === envelope.actionId
+                ? actionCommitDuplicate(envelope, marker.value.stateRevision)
+                : actionCommitIdempotencyConflict(
+                    envelope,
+                    marker.value.actionId,
+                    marker.value.stateRevision,
+                  );
             }
           }
 
