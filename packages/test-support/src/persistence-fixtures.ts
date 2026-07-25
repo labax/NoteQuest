@@ -9,7 +9,7 @@ import type {
 } from '@notequest/application';
 import type { SaveSlotId } from '@notequest/domain';
 
-export const repositoryFixtureSlotId = '123e4567-e89b-42d3-a456-426614174066' as SaveSlotId;
+export const repositoryFixtureSlotId = '00000000-0000-4000-8000-000000000001' as SaveSlotId;
 
 export const repositoryWorkspaceFixture = {
   key: 'release.current',
@@ -19,11 +19,19 @@ export const repositoryWorkspaceFixture = {
 
 export const repositorySlotFixture = {
   slotId: repositoryFixtureSlotId,
+  slotIndex: 1,
+  displayName: 'Save 1',
+  revision: 1,
+  createdAt: '2026-07-23T00:00:00.000Z',
   updatedAt: '2026-07-23T00:00:01.000Z',
   status: 'ready',
   schemaVersion: 1,
   rulesVersion: 'rules.test@0.1',
   contentVersion: 'content.test@0.1',
+  currentSnapshotId: 'snapshot.fixture',
+  lastValidSnapshotId: 'snapshot.fixture',
+  recoveryAvailable: true,
+  integrityStatus: 'valid',
 } as const satisfies SlotRecord;
 
 export const repositoryRecordFixture = {

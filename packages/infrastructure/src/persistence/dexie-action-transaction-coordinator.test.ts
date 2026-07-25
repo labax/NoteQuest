@@ -11,7 +11,7 @@ import {
   repositoryWorkspaceFixture,
 } from '@notequest/test-support';
 import type { ActionCommitEnvelope, ActionTransactionDiagnostics } from '@notequest/application';
-import type { IdempotencyKey } from '@notequest/domain';
+import type { IdempotencyKey, SaveSlotId } from '@notequest/domain';
 
 import { createNoteQuestDatabase } from './dexie-database';
 import { createDexiePersistenceRepositories } from './dexie-repositories';
@@ -19,6 +19,7 @@ import {
   actionCommitIdempotencyWorkspaceKey,
   createDexieActionTransactionCoordinator,
 } from './dexie-action-transaction-coordinator';
+import { initializeSaveSlotFoundation } from './save-slot-foundation';
 import { createNoteQuestTestDatabaseName } from './schema';
 
 const fixtureIdempotencyKey = 'fixture-idempotency-key' as IdempotencyKey;
@@ -41,8 +42,17 @@ async function withCoordinator<T>(
 
   try {
     await database.open();
+    const initialized = await initializeSaveSlotFoundation(
+      database,
+      () => repositorySlotFixture.createdAt,
+    );
+    if (!initialized.ok) throw new Error(initialized.error.message);
     return await run({
-      coordinator: createDexieActionTransactionCoordinator(database, diagnostics),
+      coordinator: createDexieActionTransactionCoordinator(
+        database,
+        diagnostics,
+        () => repositorySlotFixture.updatedAt,
+      ),
       repositories: createDexiePersistenceRepositories(database),
     });
   } finally {
@@ -89,6 +99,102 @@ function createEnvelope(overrides: Partial<ActionCommitEnvelope> = {}): ActionCo
 }
 
 describe('Dexie action transaction coordinator', () => {
+  it('rejects a non-catalogue slot before creating metadata or child rows', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      const foreignSlotId = '00000000-0000-4000-8000-999999999999' as SaveSlotId;
+      const result = await coordinator.commit(
+        createEnvelope({
+          slotId: foreignSlotId,
+          idempotencyKey: fixtureIdempotencyKey,
+          stateRecords: [{ ...repositoryRecordFixture, slotId: foreignSlotId }],
+          randomStreamRecords: [
+            {
+              ...repositoryRecordFixture,
+              slotId: foreignSlotId,
+              recordType: 'random-stream',
+              recordId: 'random-stream.fixture',
+            },
+          ],
+          randomResultRecords: [
+            {
+              ...repositoryRecordFixture,
+              slotId: foreignSlotId,
+              recordType: 'random-result',
+              recordId: 'roll.fixture',
+            },
+          ],
+          events: [{ ...repositoryEventFixture, slotId: foreignSlotId }],
+          slotMetadata: { ...repositorySlotFixture, slotId: foreignSlotId },
+          recoveryPointers: {
+            snapshots: [{ ...repositorySnapshotFixture, slotId: foreignSlotId }],
+            workspaceEntries: [
+              {
+                ...repositoryWorkspaceFixture,
+                key: `slot.${foreignSlotId}.lastValidPointer`,
+              },
+            ],
+          },
+        }),
+      );
+
+      expect(result).toMatchObject({
+        ok: false,
+        committed: false,
+        duplicate: false,
+        error: { code: 'invalid_slot' },
+      });
+      await expect(repositories.slots.list()).resolves.toMatchObject({
+        ok: true,
+        value: [{ slotIndex: 1 }, { slotIndex: 2 }, { slotIndex: 3 }],
+      });
+      await expect(repositories.slots.get(foreignSlotId)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'missing_record' },
+      });
+      await expect(
+        repositories.records.get(foreignSlotId, 'adventurer', 'adventurer.fixture'),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+      await expect(repositories.events.get(foreignSlotId, 1)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'missing_record' },
+      });
+      await expect(repositories.snapshots.get(foreignSlotId, 'last-valid')).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'missing_record' },
+      });
+      await expect(
+        repositories.workspace.get(
+          actionCommitIdempotencyWorkspaceKey(foreignSlotId, fixtureIdempotencyKey),
+        ),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+    });
+  });
+
+  it('derives and advances durable slot metadata when the envelope omits it', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      const envelopeWithoutSlotMetadata = createEnvelope({
+        expectedRevision: 0,
+      });
+      Reflect.deleteProperty(envelopeWithoutSlotMetadata, 'slotMetadata');
+      const result = await coordinator.commit(envelopeWithoutSlotMetadata);
+
+      expect(result).toMatchObject({
+        ok: true,
+        committed: true,
+        stateRevision: 1,
+        written: { slotMetadata: 1 },
+      });
+      await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: true,
+        value: {
+          revision: 1,
+          updatedAt: repositorySlotFixture.updatedAt,
+          status: 'empty',
+        },
+      });
+    });
+  });
+
   it('commits state records, events, random records, slot metadata, and recovery pointers atomically', async () => {
     const diagnosticEvents: string[] = [];
 
@@ -164,7 +270,7 @@ describe('Dexie action transaction coordinator', () => {
 
     await withCoordinator(
       async ({ coordinator, repositories }) => {
-        const previousSlot = { ...repositorySlotFixture, status: 'previous-valid' };
+        const previousSlot = { ...repositorySlotFixture, status: 'active' as const };
         const previousStateRecord = {
           ...repositoryRecordFixture,
           body: { hp: 3, name: 'Previous durable adventurer' },
@@ -417,6 +523,9 @@ describe('Dexie action transaction coordinator', () => {
 
     await withCoordinator(
       async ({ coordinator, repositories }) => {
+        await expect(repositories.slots.put(repositorySlotFixture)).resolves.toMatchObject({
+          ok: true,
+        });
         await expect(repositories.events.append(repositoryEventFixture)).resolves.toMatchObject({
           ok: true,
         });
@@ -585,6 +694,48 @@ describe('Dexie action transaction coordinator', () => {
     expect(diagnosticEvents).toEqual(['started:1', 'committed:1', 'started:1', 'duplicate:1']);
   });
 
+  it('advances the durable slot revision once per action rather than once per event', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      const result = await coordinator.commit(
+        createEnvelope({
+          expectedRevision: 0,
+          events: [
+            repositoryEventFixture,
+            { ...repositoryEventFixture, sequence: 2, eventType: 'event.fixture_follow_up' },
+          ],
+          slotMetadata: { ...repositorySlotFixture, revision: 99 },
+        }),
+      );
+
+      expect(result).toMatchObject({ ok: true, stateRevision: 1 });
+      await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: true,
+        value: {
+          revision: 1,
+          updatedAt: repositorySlotFixture.updatedAt,
+        },
+      });
+      await expect(repositories.events.get(repositoryFixtureSlotId, 2)).resolves.toMatchObject({
+        ok: true,
+      });
+    });
+  });
+
+  it('rejects an empty idempotency token before starting a transaction', async () => {
+    const result = await withCoordinator(async ({ coordinator }) =>
+      coordinator.commit(createEnvelope({ idempotencyKey: '   ' as IdempotencyKey })),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      committed: false,
+      error: {
+        code: 'invalid_idempotency_key',
+        validationErrors: [{ code: 'invalid_idempotency_key', path: 'idempotencyKey' }],
+      },
+    });
+  });
+
   it('rejects idempotency key collisions for different action ids without mutation', async () => {
     const diagnosticEvents: string[] = [];
 
@@ -688,6 +839,9 @@ describe('Dexie action transaction coordinator', () => {
 
     await withCoordinator(
       async ({ coordinator, repositories }) => {
+        await expect(repositories.slots.put(repositorySlotFixture)).resolves.toMatchObject({
+          ok: true,
+        });
         await expect(repositories.events.append(repositoryEventFixture)).resolves.toMatchObject({
           ok: true,
         });

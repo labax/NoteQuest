@@ -32,6 +32,7 @@ export type ActionCommitValidationErrorCode =
   | 'missing_required_write'
   | 'invalid_sequence'
   | 'invalid_expected_revision'
+  | 'invalid_idempotency_key'
   | 'invalid_required_write';
 
 export interface ActionCommitValidationError {
@@ -45,6 +46,7 @@ export type ActionCommitErrorCode =
   | 'revision_conflict'
   | 'sequence_conflict'
   | 'idempotency_conflict'
+  | 'invalid_slot'
   | 'write_failed'
   | 'transaction_failed';
 
@@ -125,11 +127,22 @@ export function validateActionCommitEnvelope(
     });
   }
 
-  if (envelope.expectedRevision !== undefined && envelope.expectedRevision < 0) {
+  if (
+    envelope.expectedRevision !== undefined &&
+    (!Number.isSafeInteger(envelope.expectedRevision) || envelope.expectedRevision < 0)
+  ) {
     errors.push({
       code: 'invalid_expected_revision',
-      message: 'expectedRevision cannot be negative.',
+      message: 'expectedRevision must be a non-negative safe integer.',
       path: 'expectedRevision',
+    });
+  }
+
+  if (envelope.idempotencyKey !== undefined && envelope.idempotencyKey.trim() === '') {
+    errors.push({
+      code: 'invalid_idempotency_key',
+      message: 'idempotencyKey cannot be empty when supplied.',
+      path: 'idempotencyKey',
     });
   }
 
@@ -208,10 +221,24 @@ export function countActionCommitWrites(envelope: ActionCommitEnvelope): ActionC
     events: envelope.events.length,
     randomStreamRecords: envelope.randomStreamRecords?.length ?? 0,
     randomResultRecords: envelope.randomResultRecords?.length ?? 0,
-    slotMetadata: envelope.slotMetadata === undefined ? 0 : 1,
+    slotMetadata: 1,
     recoverySnapshots: envelope.recoveryPointers?.snapshots?.length ?? 0,
     recoveryWorkspaceEntries: envelope.recoveryPointers?.workspaceEntries?.length ?? 0,
     idempotencyMarkers: envelope.idempotencyKey === undefined ? 0 : 1,
+  };
+}
+
+export function actionCommitInvalidSlot(envelope: ActionCommitEnvelope): ActionCommitResult {
+  return {
+    ok: false,
+    actionId: envelope.actionId,
+    ...(envelope.idempotencyKey === undefined ? {} : { idempotencyKey: envelope.idempotencyKey }),
+    committed: false,
+    duplicate: false,
+    error: {
+      code: 'invalid_slot',
+      message: 'Action commit slot is not present in the initialized three-slot catalogue.',
+    },
   };
 }
 
