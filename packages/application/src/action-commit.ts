@@ -46,6 +46,7 @@ export type ActionCommitErrorCode =
   | 'revision_conflict'
   | 'sequence_conflict'
   | 'idempotency_conflict'
+  | 'invalid_slot'
   | 'write_failed'
   | 'transaction_failed';
 
@@ -220,10 +221,24 @@ export function countActionCommitWrites(envelope: ActionCommitEnvelope): ActionC
     events: envelope.events.length,
     randomStreamRecords: envelope.randomStreamRecords?.length ?? 0,
     randomResultRecords: envelope.randomResultRecords?.length ?? 0,
-    slotMetadata: envelope.slotMetadata === undefined ? 0 : 1,
+    slotMetadata: 1,
     recoverySnapshots: envelope.recoveryPointers?.snapshots?.length ?? 0,
     recoveryWorkspaceEntries: envelope.recoveryPointers?.workspaceEntries?.length ?? 0,
     idempotencyMarkers: envelope.idempotencyKey === undefined ? 0 : 1,
+  };
+}
+
+export function actionCommitInvalidSlot(envelope: ActionCommitEnvelope): ActionCommitResult {
+  return {
+    ok: false,
+    actionId: envelope.actionId,
+    ...(envelope.idempotencyKey === undefined ? {} : { idempotencyKey: envelope.idempotencyKey }),
+    committed: false,
+    duplicate: false,
+    error: {
+      code: 'invalid_slot',
+      message: 'Action commit slot is not present in the initialized three-slot catalogue.',
+    },
   };
 }
 

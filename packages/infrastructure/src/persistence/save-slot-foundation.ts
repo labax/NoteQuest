@@ -45,7 +45,7 @@ function emptySlot(slotIndex: 1 | 2 | 3, timestamp: string): SlotRecord {
   };
 }
 
-function isCatalogue(value: unknown): value is SaveSlotCatalogue {
+export function isSaveSlotCatalogue(value: unknown): value is SaveSlotCatalogue {
   if (typeof value !== 'object' || value === null || !('slotIds' in value)) return false;
   const slotIds = value.slotIds;
   return (
@@ -73,7 +73,7 @@ export async function initializeSaveSlotFoundation(
 
       const timestamp = now();
       const workspaceRow = await database.workspace.get(NOTEQUEST_WORKSPACE_SLOT_CATALOGUE_KEY);
-      if (workspaceRow !== undefined && !isCatalogue(workspaceRow.value)) {
+      if (workspaceRow !== undefined && !isSaveSlotCatalogue(workspaceRow.value)) {
         return repositoryFailure({
           code: 'invalid_record',
           entity: 'slot catalogue',
@@ -82,7 +82,7 @@ export async function initializeSaveSlotFoundation(
       }
 
       const createdAt =
-        workspaceRow?.value && isCatalogue(workspaceRow.value)
+        workspaceRow?.value && isSaveSlotCatalogue(workspaceRow.value)
           ? workspaceRow.value.createdAt
           : timestamp;
       const slots = ([1, 2, 3] as const).map(

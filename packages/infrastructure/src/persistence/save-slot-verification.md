@@ -29,17 +29,12 @@ The following commands passed locally on 2026-07-25:
   — no infrastructure storage references were found in domain or application
   source.
 
-## Documented environment gap
+## Reviewed-head verification
 
-`npm test` ran 144 tests successfully across 19 suites. The command did not
-complete cleanly because `apps/web/src/App.test.tsx` could not load: the local
-installation contains `react` 19.2.8 and `react-dom` 19.2.7, while React
-requires those packages to have identical versions.
-
-This environment mismatch does not affect the focused persistence suites,
-lint, strict typecheck, or the successful production build. Dependency repair
-is not part of issue #68 and no lockfile or application dependency was changed
-for this verification-only subtask.
+The review-fix pass restored the committed dependency tree with `npm ci`, then
+ran `npm test`: all 147 tests across 20 suites passed, including the web shell
+test and the new non-catalogue/durable-metadata regressions. No lockfile or
+application dependency was changed.
 
 ## Remaining follow-up boundaries
 

@@ -1,6 +1,7 @@
 import {
   actionCommitDuplicate,
   actionCommitIdempotencyConflict,
+  actionCommitInvalidSlot,
   actionCommitRevisionConflict,
   actionCommitSequenceConflict,
   actionCommitSuccess,
@@ -20,6 +21,7 @@ import type { IdempotencyKey, SaveSlotId } from '@notequest/domain';
 import type { NoteQuestDexieDatabase, WorkspaceRow } from './dexie-database';
 import {
   toEventRow,
+  mapSlotRow,
   toRecordRow,
   toSlotRow,
   toSnapshotRow,
@@ -30,6 +32,10 @@ import {
   validateSnapshotRecord,
   validateWorkspaceEntry,
 } from './dexie-repositories';
+import {
+  isSaveSlotCatalogue,
+  NOTEQUEST_WORKSPACE_SLOT_CATALOGUE_KEY,
+} from './save-slot-foundation';
 
 interface IdempotencyMarkerValue {
   readonly actionId: string;
@@ -231,6 +237,19 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
         'rw',
         ...actionCommitDexieStores(this.database),
         async (): Promise<ActionCommitResult> => {
+          const catalogueRow = await this.database.workspace.get(
+            NOTEQUEST_WORKSPACE_SLOT_CATALOGUE_KEY,
+          );
+          const currentSlot = await this.database.slots.get(envelope.slotId);
+          if (
+            catalogueRow === undefined ||
+            !isSaveSlotCatalogue(catalogueRow.value) ||
+            !catalogueRow.value.slotIds.includes(envelope.slotId) ||
+            currentSlot === undefined
+          ) {
+            return actionCommitInvalidSlot(envelope);
+          }
+
           if (isIdempotentEnvelope(envelope)) {
             const marker = await this.database.workspace.get(
               actionCommitIdempotencyWorkspaceKey(envelope.slotId, envelope.idempotencyKey),
@@ -247,8 +266,7 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             }
           }
 
-          const currentSlot = await this.database.slots.get(envelope.slotId);
-          const currentRevision = currentSlot?.revision ?? 0;
+          const currentRevision = currentSlot.revision;
           const latestEvent = await this.database.events
             .where('slotId')
             .equals(envelope.slotId)
@@ -292,15 +310,17 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             await this.database.workspace.bulkPut(workspaceEntries.map(toWorkspaceRow));
           }
 
-          if (envelope.slotMetadata !== undefined) {
-            await this.database.slots.put(
-              toSlotRow({
-                ...envelope.slotMetadata,
-                revision: stateRevision,
-                updatedAt: this.now(),
-              }),
-            );
-          }
+          const currentSlotMetadata = mapSlotRow(currentSlot);
+          await this.database.slots.put(
+            toSlotRow({
+              ...(envelope.slotMetadata ?? currentSlotMetadata),
+              slotId: currentSlotMetadata.slotId,
+              slotIndex: currentSlotMetadata.slotIndex,
+              createdAt: currentSlotMetadata.createdAt,
+              revision: stateRevision,
+              updatedAt: this.now(),
+            }),
+          );
 
           if (isIdempotentEnvelope(envelope)) {
             await this.database.workspace.put(idempotencyWorkspaceEntry(envelope, stateRevision));

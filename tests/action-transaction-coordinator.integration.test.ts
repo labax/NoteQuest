@@ -9,6 +9,7 @@ import {
   createDexiePersistenceRepositories,
   createNoteQuestDatabase,
   createNoteQuestTestDatabaseName,
+  initializeSaveSlotFoundation,
 } from '@notequest/infrastructure';
 import {
   repositoryEventFixture,
@@ -77,6 +78,11 @@ async function withIntegrationDatabase<T>(
 
   try {
     await database.open();
+    const initialized = await initializeSaveSlotFoundation(
+      database,
+      () => repositorySlotFixture.createdAt,
+    );
+    if (!initialized.ok) throw new Error(initialized.error.message);
     const repositories = createDexiePersistenceRepositories(database);
     const coordinator = createDexieActionTransactionCoordinator(
       database,

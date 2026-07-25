@@ -11,7 +11,7 @@ import {
   repositoryWorkspaceFixture,
 } from '@notequest/test-support';
 import type { ActionCommitEnvelope, ActionTransactionDiagnostics } from '@notequest/application';
-import type { IdempotencyKey } from '@notequest/domain';
+import type { IdempotencyKey, SaveSlotId } from '@notequest/domain';
 
 import { createNoteQuestDatabase } from './dexie-database';
 import { createDexiePersistenceRepositories } from './dexie-repositories';
@@ -19,6 +19,7 @@ import {
   actionCommitIdempotencyWorkspaceKey,
   createDexieActionTransactionCoordinator,
 } from './dexie-action-transaction-coordinator';
+import { initializeSaveSlotFoundation } from './save-slot-foundation';
 import { createNoteQuestTestDatabaseName } from './schema';
 
 const fixtureIdempotencyKey = 'fixture-idempotency-key' as IdempotencyKey;
@@ -41,6 +42,11 @@ async function withCoordinator<T>(
 
   try {
     await database.open();
+    const initialized = await initializeSaveSlotFoundation(
+      database,
+      () => repositorySlotFixture.createdAt,
+    );
+    if (!initialized.ok) throw new Error(initialized.error.message);
     return await run({
       coordinator: createDexieActionTransactionCoordinator(
         database,
@@ -93,6 +99,102 @@ function createEnvelope(overrides: Partial<ActionCommitEnvelope> = {}): ActionCo
 }
 
 describe('Dexie action transaction coordinator', () => {
+  it('rejects a non-catalogue slot before creating metadata or child rows', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      const foreignSlotId = '00000000-0000-4000-8000-999999999999' as SaveSlotId;
+      const result = await coordinator.commit(
+        createEnvelope({
+          slotId: foreignSlotId,
+          idempotencyKey: fixtureIdempotencyKey,
+          stateRecords: [{ ...repositoryRecordFixture, slotId: foreignSlotId }],
+          randomStreamRecords: [
+            {
+              ...repositoryRecordFixture,
+              slotId: foreignSlotId,
+              recordType: 'random-stream',
+              recordId: 'random-stream.fixture',
+            },
+          ],
+          randomResultRecords: [
+            {
+              ...repositoryRecordFixture,
+              slotId: foreignSlotId,
+              recordType: 'random-result',
+              recordId: 'roll.fixture',
+            },
+          ],
+          events: [{ ...repositoryEventFixture, slotId: foreignSlotId }],
+          slotMetadata: { ...repositorySlotFixture, slotId: foreignSlotId },
+          recoveryPointers: {
+            snapshots: [{ ...repositorySnapshotFixture, slotId: foreignSlotId }],
+            workspaceEntries: [
+              {
+                ...repositoryWorkspaceFixture,
+                key: `slot.${foreignSlotId}.lastValidPointer`,
+              },
+            ],
+          },
+        }),
+      );
+
+      expect(result).toMatchObject({
+        ok: false,
+        committed: false,
+        duplicate: false,
+        error: { code: 'invalid_slot' },
+      });
+      await expect(repositories.slots.list()).resolves.toMatchObject({
+        ok: true,
+        value: [{ slotIndex: 1 }, { slotIndex: 2 }, { slotIndex: 3 }],
+      });
+      await expect(repositories.slots.get(foreignSlotId)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'missing_record' },
+      });
+      await expect(
+        repositories.records.get(foreignSlotId, 'adventurer', 'adventurer.fixture'),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+      await expect(repositories.events.get(foreignSlotId, 1)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'missing_record' },
+      });
+      await expect(repositories.snapshots.get(foreignSlotId, 'last-valid')).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'missing_record' },
+      });
+      await expect(
+        repositories.workspace.get(
+          actionCommitIdempotencyWorkspaceKey(foreignSlotId, fixtureIdempotencyKey),
+        ),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+    });
+  });
+
+  it('derives and advances durable slot metadata when the envelope omits it', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      const envelopeWithoutSlotMetadata = createEnvelope({
+        expectedRevision: 0,
+      });
+      Reflect.deleteProperty(envelopeWithoutSlotMetadata, 'slotMetadata');
+      const result = await coordinator.commit(envelopeWithoutSlotMetadata);
+
+      expect(result).toMatchObject({
+        ok: true,
+        committed: true,
+        stateRevision: 1,
+        written: { slotMetadata: 1 },
+      });
+      await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: true,
+        value: {
+          revision: 1,
+          updatedAt: repositorySlotFixture.updatedAt,
+          status: 'empty',
+        },
+      });
+    });
+  });
+
   it('commits state records, events, random records, slot metadata, and recovery pointers atomically', async () => {
     const diagnosticEvents: string[] = [];
 

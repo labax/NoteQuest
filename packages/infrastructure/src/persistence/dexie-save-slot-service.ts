@@ -12,8 +12,8 @@ import type { SaveSlotId } from '@notequest/domain';
 import type { NoteQuestDexieDatabase, SlotRow, WorkspaceRow } from './dexie-database';
 import { mapSlotRow, toSlotRow, validateSlotRecord } from './dexie-repositories';
 import {
-  NOTEQUEST_SLOT_IDS,
   NOTEQUEST_WORKSPACE_SLOT_CATALOGUE_KEY,
+  isSaveSlotCatalogue,
   type SaveSlotCatalogue,
 } from './save-slot-foundation';
 
@@ -28,17 +28,6 @@ function invalidSlot(slotId: SaveSlotId): SaveSlotOperationResult<never> {
       message: `Slot ${slotId} is not part of this local workspace.`,
     },
   };
-}
-
-function isCatalogue(value: unknown): value is SaveSlotCatalogue {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'slotIds' in value &&
-    Array.isArray(value.slotIds) &&
-    value.slotIds.length === 3 &&
-    value.slotIds.every((slotId, index) => slotId === NOTEQUEST_SLOT_IDS[index])
-  );
 }
 
 function storageFailure(message: string, cause: unknown): SaveSlotOperationResult<never> {
@@ -56,7 +45,7 @@ export class DexieSaveSlotService implements SaveSlotService {
 
   private async catalogue(): Promise<SaveSlotCatalogue | null> {
     const row = await this.database.workspace.get(NOTEQUEST_WORKSPACE_SLOT_CATALOGUE_KEY);
-    return row !== undefined && isCatalogue(row.value) ? row.value : null;
+    return row !== undefined && isSaveSlotCatalogue(row.value) ? row.value : null;
   }
 
   private async scopedRow(slotId: SaveSlotId): Promise<SlotRow | null> {

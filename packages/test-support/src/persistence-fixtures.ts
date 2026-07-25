@@ -9,7 +9,7 @@ import type {
 } from '@notequest/application';
 import type { SaveSlotId } from '@notequest/domain';
 
-export const repositoryFixtureSlotId = '123e4567-e89b-42d3-a456-426614174066' as SaveSlotId;
+export const repositoryFixtureSlotId = '00000000-0000-4000-8000-000000000001' as SaveSlotId;
 
 export const repositoryWorkspaceFixture = {
   key: 'release.current',
