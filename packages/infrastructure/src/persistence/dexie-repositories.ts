@@ -91,7 +91,19 @@ export function validateWorkspaceEntry(entry: WorkspaceEntry): RepositoryError |
 }
 
 export function validateSlotRecord(slot: SlotRecord): RepositoryError | null {
-  return requireString(slot.slotId, 'slotId', 'slot');
+  const idError = requireString(slot.slotId, 'slotId', 'slot');
+  if (idError !== null) return idError;
+  if (![1, 2, 3].includes(slot.slotIndex)) {
+    return { code: 'validation_failure', entity: 'slot', message: 'slotIndex must be 1, 2, or 3.' };
+  }
+  if (!Number.isSafeInteger(slot.revision) || slot.revision < 0) {
+    return {
+      code: 'validation_failure',
+      entity: 'slot',
+      message: 'revision must be a non-negative safe integer.',
+    };
+  }
+  return requireString(slot.displayName, 'displayName', 'slot');
 }
 
 export function validatePersistedRecord(record: PersistedRecord): RepositoryError | null {
@@ -183,6 +195,17 @@ export class DexieSlotRepository implements SlotRepository {
 
   async get(slotId: SaveSlotId): Promise<RepositoryResult<SlotRecord>> {
     return readOne('slot', () => this.table.get(slotId), mapSlotRow);
+  }
+
+  async list(): Promise<RepositoryResult<readonly SlotRecord[]>> {
+    try {
+      const rows = await this.table.toArray();
+      return repositorySuccess(
+        rows.map(mapSlotRow).sort((left, right) => left.slotIndex - right.slotIndex),
+      );
+    } catch (cause) {
+      return translateStorageError('slot', 'read', cause);
+    }
   }
 
   async put(slot: SlotRecord): Promise<RepositoryResult<SlotRecord>> {

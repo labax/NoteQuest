@@ -13,11 +13,27 @@ export interface WorkspaceRow {
 }
 export interface SlotRow {
   slotId: string;
+  slotIndex: 1 | 2 | 3;
+  displayName: string;
+  revision: number;
+  createdAt: string;
   updatedAt: string;
-  status: string;
-  schemaVersion: number;
-  rulesVersion: string;
-  contentVersion: string;
+  status:
+    | 'empty'
+    | 'creating'
+    | 'ready'
+    | 'active'
+    | 'importing'
+    | 'migrating'
+    | 'isolated'
+    | 'resetting';
+  schemaVersion: number | null;
+  rulesVersion: string | null;
+  contentVersion: string | null;
+  currentSnapshotId: string | null;
+  lastValidSnapshotId: string | null;
+  recoveryAvailable: boolean;
+  integrityStatus: 'not_checked' | 'valid' | 'invalid';
 }
 export interface RecordRow {
   slotId: string;

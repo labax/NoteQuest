@@ -42,7 +42,11 @@ async function withCoordinator<T>(
   try {
     await database.open();
     return await run({
-      coordinator: createDexieActionTransactionCoordinator(database, diagnostics),
+      coordinator: createDexieActionTransactionCoordinator(
+        database,
+        diagnostics,
+        () => repositorySlotFixture.updatedAt,
+      ),
       repositories: createDexiePersistenceRepositories(database),
     });
   } finally {
@@ -164,7 +168,7 @@ describe('Dexie action transaction coordinator', () => {
 
     await withCoordinator(
       async ({ coordinator, repositories }) => {
-        const previousSlot = { ...repositorySlotFixture, status: 'previous-valid' };
+        const previousSlot = { ...repositorySlotFixture, status: 'active' as const };
         const previousStateRecord = {
           ...repositoryRecordFixture,
           body: { hp: 3, name: 'Previous durable adventurer' },
@@ -417,6 +421,9 @@ describe('Dexie action transaction coordinator', () => {
 
     await withCoordinator(
       async ({ coordinator, repositories }) => {
+        await expect(repositories.slots.put(repositorySlotFixture)).resolves.toMatchObject({
+          ok: true,
+        });
         await expect(repositories.events.append(repositoryEventFixture)).resolves.toMatchObject({
           ok: true,
         });
@@ -585,6 +592,48 @@ describe('Dexie action transaction coordinator', () => {
     expect(diagnosticEvents).toEqual(['started:1', 'committed:1', 'started:1', 'duplicate:1']);
   });
 
+  it('advances the durable slot revision once per action rather than once per event', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      const result = await coordinator.commit(
+        createEnvelope({
+          expectedRevision: 0,
+          events: [
+            repositoryEventFixture,
+            { ...repositoryEventFixture, sequence: 2, eventType: 'event.fixture_follow_up' },
+          ],
+          slotMetadata: { ...repositorySlotFixture, revision: 99 },
+        }),
+      );
+
+      expect(result).toMatchObject({ ok: true, stateRevision: 1 });
+      await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: true,
+        value: {
+          revision: 1,
+          updatedAt: repositorySlotFixture.updatedAt,
+        },
+      });
+      await expect(repositories.events.get(repositoryFixtureSlotId, 2)).resolves.toMatchObject({
+        ok: true,
+      });
+    });
+  });
+
+  it('rejects an empty idempotency token before starting a transaction', async () => {
+    const result = await withCoordinator(async ({ coordinator }) =>
+      coordinator.commit(createEnvelope({ idempotencyKey: '   ' as IdempotencyKey })),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      committed: false,
+      error: {
+        code: 'invalid_idempotency_key',
+        validationErrors: [{ code: 'invalid_idempotency_key', path: 'idempotencyKey' }],
+      },
+    });
+  });
+
   it('rejects idempotency key collisions for different action ids without mutation', async () => {
     const diagnosticEvents: string[] = [];
 
@@ -688,6 +737,9 @@ describe('Dexie action transaction coordinator', () => {
 
     await withCoordinator(
       async ({ coordinator, repositories }) => {
+        await expect(repositories.slots.put(repositorySlotFixture)).resolves.toMatchObject({
+          ok: true,
+        });
         await expect(repositories.events.append(repositoryEventFixture)).resolves.toMatchObject({
           ok: true,
         });

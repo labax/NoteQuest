@@ -6,6 +6,7 @@ import {
   actionCommitSuccess,
   actionCommitValidationFailure,
   countActionCommitWrites,
+  createPerSlotActionCommitQueue,
   validateActionCommitEnvelope,
   type ActionCommitEnvelope,
   type ActionCommitValidationError,
@@ -16,7 +17,7 @@ import {
 } from '@notequest/application';
 import type { IdempotencyKey, SaveSlotId } from '@notequest/domain';
 
-import type { EventRow, NoteQuestDexieDatabase, WorkspaceRow } from './dexie-database';
+import type { NoteQuestDexieDatabase, WorkspaceRow } from './dexie-database';
 import {
   toEventRow,
   toRecordRow,
@@ -89,10 +90,6 @@ function isIdempotencyMarkerValue(value: unknown): value is IdempotencyMarkerVal
     typeof value.actionId === 'string' &&
     typeof value.stateRevision === 'number'
   );
-}
-
-function maxEventRevision(events: readonly EventRow[]): number {
-  return events.reduce((maxSequence, event) => Math.max(maxSequence, event.sequence), 0);
 }
 
 function idempotencyWorkspaceEntry(
@@ -213,6 +210,7 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
   constructor(
     private readonly database: NoteQuestDexieDatabase,
     private readonly diagnostics: ActionTransactionDiagnostics = {},
+    private readonly now: () => string = () => new Date().toISOString(),
   ) {}
 
   async commit(envelope: ActionCommitEnvelope): Promise<ActionCommitResult> {
@@ -249,9 +247,13 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             }
           }
 
-          const currentRevision = maxEventRevision(
-            await this.database.events.where('slotId').equals(envelope.slotId).toArray(),
-          );
+          const currentSlot = await this.database.slots.get(envelope.slotId);
+          const currentRevision = currentSlot?.revision ?? 0;
+          const latestEvent = await this.database.events
+            .where('slotId')
+            .equals(envelope.slotId)
+            .last();
+          const currentEventSequence = latestEvent?.sequence ?? 0;
 
           if (
             envelope.expectedRevision !== undefined &&
@@ -260,7 +262,7 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             return actionCommitRevisionConflict(envelope, currentRevision);
           }
 
-          const sequenceConflict = validateContiguousEventSequences(currentRevision, envelope);
+          const sequenceConflict = validateContiguousEventSequences(currentEventSequence, envelope);
           if (sequenceConflict !== null) {
             return sequenceConflict;
           }
@@ -270,10 +272,7 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             ...(envelope.randomStreamRecords ?? []),
             ...(envelope.randomResultRecords ?? []),
           ].map(toRecordRow);
-
-          if (envelope.slotMetadata !== undefined) {
-            await this.database.slots.put(toSlotRow(envelope.slotMetadata));
-          }
+          const stateRevision = currentRevision + 1;
 
           if (stateRows.length > 0) {
             await this.database.records.bulkPut(stateRows);
@@ -293,7 +292,16 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             await this.database.workspace.bulkPut(workspaceEntries.map(toWorkspaceRow));
           }
 
-          const stateRevision = currentRevision + envelope.events.length;
+          if (envelope.slotMetadata !== undefined) {
+            await this.database.slots.put(
+              toSlotRow({
+                ...envelope.slotMetadata,
+                revision: stateRevision,
+                updatedAt: this.now(),
+              }),
+            );
+          }
+
           if (isIdempotentEnvelope(envelope)) {
             await this.database.workspace.put(idempotencyWorkspaceEntry(envelope, stateRevision));
           }
@@ -322,6 +330,9 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
 export function createDexieActionTransactionCoordinator(
   database: NoteQuestDexieDatabase,
   diagnostics: ActionTransactionDiagnostics = {},
+  now?: () => string,
 ): ActionTransactionCoordinator {
-  return new DexieActionTransactionCoordinator(database, diagnostics);
+  return createPerSlotActionCommitQueue(
+    new DexieActionTransactionCoordinator(database, diagnostics, now),
+  );
 }

@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 
 import type { ActionCommitEnvelope } from '@notequest/application';
+import type { IdempotencyKey } from '@notequest/domain';
 import {
   createDexieActionTransactionCoordinator,
   createDexiePersistenceRepositories,
@@ -77,7 +78,11 @@ async function withIntegrationDatabase<T>(
   try {
     await database.open();
     const repositories = createDexiePersistenceRepositories(database);
-    const coordinator = createDexieActionTransactionCoordinator(database);
+    const coordinator = createDexieActionTransactionCoordinator(
+      database,
+      {},
+      () => repositorySlotFixture.updatedAt,
+    );
     return await run({ database, repositories, coordinator });
   } finally {
     database.close();
@@ -126,9 +131,60 @@ describe('action commit transaction integration', () => {
     });
   });
 
+  it('serializes overlapping commits for the same slot and preserves submission order', async () => {
+    await withIntegrationDatabase(async ({ repositories, coordinator }) => {
+      const first = createIntegrationEnvelope({
+        actionId: 'integration.action.first',
+        idempotencyKey: 'integration-token-first' as IdempotencyKey,
+      });
+      const second = createIntegrationEnvelope({
+        actionId: 'integration.action.second',
+        idempotencyKey: 'integration-token-second' as IdempotencyKey,
+        expectedRevision: 1,
+        stateRecords: [
+          {
+            ...repositoryRecordFixture,
+            body: { hp: 5, name: 'Second queued synthetic state' },
+          },
+        ],
+        events: [
+          {
+            ...repositoryEventFixture,
+            sequence: 2,
+            eventType: 'event.integration_second',
+          },
+        ],
+      });
+
+      const [firstResult, secondResult] = await Promise.all([
+        coordinator.commit(first),
+        coordinator.commit(second),
+      ]);
+
+      expect(firstResult).toMatchObject({ ok: true, stateRevision: 1 });
+      expect(secondResult).toMatchObject({ ok: true, stateRevision: 2 });
+      await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: true,
+        value: { revision: 2 },
+      });
+      await expect(repositories.events.listForSlot(repositoryFixtureSlotId)).resolves.toMatchObject(
+        {
+          ok: true,
+          value: [{ sequence: 1 }, { sequence: 2 }],
+        },
+      );
+      await expect(
+        repositories.records.get(repositoryFixtureSlotId, 'adventurer', 'adventurer.fixture'),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: { body: { hp: 5, name: 'Second queued synthetic state' } },
+      });
+    });
+  });
+
   it('returns no success and leaves no partial writes when an in-transaction write throws', async () => {
     await withIntegrationDatabase(async ({ database, repositories, coordinator }) => {
-      const previousSlot = { ...repositorySlotFixture, status: 'previous-valid' };
+      const previousSlot = { ...repositorySlotFixture, status: 'active' as const };
       const previousRecord = {
         ...repositoryRecordFixture,
         body: { hp: 4, name: 'Previous integration state' },
@@ -142,7 +198,9 @@ describe('action commit transaction integration', () => {
         Promise.reject(thrownCause)) as unknown as typeof database.records.bulkPut;
 
       try {
-        const result = await coordinator.commit(createIntegrationEnvelope());
+        const result = await coordinator.commit(
+          createIntegrationEnvelope({ expectedRevision: previousSlot.revision }),
+        );
 
         expect(result).toMatchObject({
           ok: false,

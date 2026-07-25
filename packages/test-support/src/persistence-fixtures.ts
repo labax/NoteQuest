@@ -19,11 +19,19 @@ export const repositoryWorkspaceFixture = {
 
 export const repositorySlotFixture = {
   slotId: repositoryFixtureSlotId,
+  slotIndex: 1,
+  displayName: 'Save 1',
+  revision: 1,
+  createdAt: '2026-07-23T00:00:00.000Z',
   updatedAt: '2026-07-23T00:00:01.000Z',
   status: 'ready',
   schemaVersion: 1,
   rulesVersion: 'rules.test@0.1',
   contentVersion: 'content.test@0.1',
+  currentSnapshotId: 'snapshot.fixture',
+  lastValidSnapshotId: 'snapshot.fixture',
+  recoveryAvailable: true,
+  integrityStatus: 'valid',
 } as const satisfies SlotRecord;
 
 export const repositoryRecordFixture = {

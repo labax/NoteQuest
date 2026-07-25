@@ -28,11 +28,27 @@ export interface WorkspaceEntry {
 
 export interface SlotRecord {
   readonly slotId: SaveSlotId;
+  readonly slotIndex: 1 | 2 | 3;
+  readonly displayName: string;
+  readonly revision: number;
+  readonly createdAt: string;
   readonly updatedAt: string;
-  readonly status: string;
-  readonly schemaVersion: number;
-  readonly rulesVersion: string;
-  readonly contentVersion: string;
+  readonly status:
+    | 'empty'
+    | 'creating'
+    | 'ready'
+    | 'active'
+    | 'importing'
+    | 'migrating'
+    | 'isolated'
+    | 'resetting';
+  readonly schemaVersion: number | null;
+  readonly rulesVersion: string | null;
+  readonly contentVersion: string | null;
+  readonly currentSnapshotId: string | null;
+  readonly lastValidSnapshotId: string | null;
+  readonly recoveryAvailable: boolean;
+  readonly integrityStatus: 'not_checked' | 'valid' | 'invalid';
 }
 
 export interface PersistedRecord {
@@ -101,6 +117,7 @@ export interface WorkspaceRepository {
 
 export interface SlotRepository {
   get(slotId: SaveSlotId): Promise<RepositoryResult<SlotRecord>>;
+  list(): Promise<RepositoryResult<readonly SlotRecord[]>>;
   put(slot: SlotRecord): Promise<RepositoryResult<SlotRecord>>;
 }
 

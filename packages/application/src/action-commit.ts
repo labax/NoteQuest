@@ -32,6 +32,7 @@ export type ActionCommitValidationErrorCode =
   | 'missing_required_write'
   | 'invalid_sequence'
   | 'invalid_expected_revision'
+  | 'invalid_idempotency_key'
   | 'invalid_required_write';
 
 export interface ActionCommitValidationError {
@@ -125,11 +126,22 @@ export function validateActionCommitEnvelope(
     });
   }
 
-  if (envelope.expectedRevision !== undefined && envelope.expectedRevision < 0) {
+  if (
+    envelope.expectedRevision !== undefined &&
+    (!Number.isSafeInteger(envelope.expectedRevision) || envelope.expectedRevision < 0)
+  ) {
     errors.push({
       code: 'invalid_expected_revision',
-      message: 'expectedRevision cannot be negative.',
+      message: 'expectedRevision must be a non-negative safe integer.',
       path: 'expectedRevision',
+    });
+  }
+
+  if (envelope.idempotencyKey !== undefined && envelope.idempotencyKey.trim() === '') {
+    errors.push({
+      code: 'invalid_idempotency_key',
+      message: 'idempotencyKey cannot be empty when supplied.',
+      path: 'idempotencyKey',
     });
   }
 
