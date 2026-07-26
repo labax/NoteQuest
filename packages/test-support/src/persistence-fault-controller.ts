@@ -7,7 +7,6 @@ export const PERSISTENCE_FAULT_POINTS = [
   'snapshot.retain.before-transaction',
   'snapshot.retain.after-write',
   'snapshot.retain.before-completion',
-  'snapshot.retain.after-completion-before-receipt',
   'snapshot.read.before-transaction',
   'snapshot.read.after-read',
   'snapshot.select.before-transaction',
@@ -15,7 +14,6 @@ export const PERSISTENCE_FAULT_POINTS = [
   'snapshot.restore.before-transaction',
   'snapshot.restore.after-required-writes',
   'snapshot.restore.before-completion',
-  'snapshot.restore.after-completion-before-receipt',
 ] as const;
 
 export type PersistenceFaultPoint = (typeof PERSISTENCE_FAULT_POINTS)[number];

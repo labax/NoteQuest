@@ -197,6 +197,40 @@ describe('DexieSnapshotService', () => {
     });
   });
 
+  it('propagates an injected recovery read failure from listRecoverable without mutation', async () => {
+    const existingRecord = {
+      slotId: slotOne,
+      recordType: 'adventurer',
+      recordId: 'active',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      body: { hp: 8, valid: true },
+    };
+    await database.records.put(existingRecord);
+    await service.retainValidated(candidate(1, { records: [existingRecord] }), () => true);
+    const before = {
+      slot: await database.slots.get(slotOne),
+      records: await database.records.toArray(),
+      snapshots: await database.snapshots.toArray(),
+      staging: await database.staging.toArray(),
+    };
+    const faults = createPersistenceFaultController();
+    faults.armScenario(PERSISTENCE_FAULT_SCENARIOS.recoveryReadFailure);
+    const faultingService = new DexieSnapshotService(database, undefined, faults);
+
+    await expect(faultingService.listRecoverable(slotOne, eligible)).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'storage_failure',
+        message:
+          'Injected persistence fault at snapshot.select.after-read (recovery_read_failure).',
+      },
+    });
+    await expect(database.slots.get(slotOne)).resolves.toEqual(before.slot);
+    await expect(database.records.toArray()).resolves.toEqual(before.records);
+    await expect(database.snapshots.toArray()).resolves.toEqual(before.snapshots);
+    await expect(database.staging.toArray()).resolves.toEqual(before.staging);
+  });
+
   it('retains one snapshot per protected class and preserves slot isolation', async () => {
     for (const snapshotClass of ['last-valid', 'pre-import', 'pre-reset'] as const) {
       await service.retainValidated(candidate(1, { snapshotClass }, { snapshotClass }), () => true);

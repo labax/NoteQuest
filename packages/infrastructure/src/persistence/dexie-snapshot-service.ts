@@ -198,7 +198,6 @@ export class DexieSnapshotService {
           return structuredClone(durable);
         },
       );
-      this.faultHooks?.hit('snapshot.retain.after-completion-before-receipt');
       return { ok: true, value };
     } catch (cause) {
       if (cause instanceof SnapshotValidationAbort) {
@@ -350,6 +349,10 @@ export class DexieSnapshotService {
         (selection) => !selection.ok && selection.error.code === 'slot_not_found',
       );
       if (slotFailure !== undefined && !slotFailure.ok) return slotFailure;
+      const storageFailure = selections.find(
+        (selection) => !selection.ok && selection.error.code === 'storage_failure',
+      );
+      if (storageFailure !== undefined && !storageFailure.ok) return storageFailure;
       return {
         ok: true,
         value: selections.flatMap((selection) => (selection.ok ? [selection.value.snapshot] : [])),
@@ -513,7 +516,6 @@ export class DexieSnapshotService {
           };
         },
       );
-      this.faultHooks?.hit('snapshot.restore.after-completion-before-receipt');
       return result;
     } catch (cause) {
       return {

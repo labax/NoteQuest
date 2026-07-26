@@ -24,6 +24,15 @@ describe('test-only persistence fault controller', () => {
     expect(new Set(PERSISTENCE_FAULT_POINTS).size).toBe(PERSISTENCE_FAULT_POINTS.length);
   });
 
+  it('does not advertise untruthful post-completion snapshot receipt faults', () => {
+    expect(PERSISTENCE_FAULT_POINTS).not.toContain(
+      'snapshot.retain.after-completion-before-receipt',
+    );
+    expect(PERSISTENCE_FAULT_POINTS).not.toContain(
+      'snapshot.restore.after-completion-before-receipt',
+    );
+  });
+
   it('arms a named quota-like scenario with a machine-readable failure kind', () => {
     const controller = createPersistenceFaultController();
     controller.armScenario(PERSISTENCE_FAULT_SCENARIOS.quotaLikeTransactionFailure);

@@ -7,15 +7,13 @@ export type PersistenceFaultPoint =
   | 'snapshot.retain.before-transaction'
   | 'snapshot.retain.after-write'
   | 'snapshot.retain.before-completion'
-  | 'snapshot.retain.after-completion-before-receipt'
   | 'snapshot.read.before-transaction'
   | 'snapshot.read.after-read'
   | 'snapshot.select.before-transaction'
   | 'snapshot.select.after-read'
   | 'snapshot.restore.before-transaction'
   | 'snapshot.restore.after-required-writes'
-  | 'snapshot.restore.before-completion'
-  | 'snapshot.restore.after-completion-before-receipt';
+  | 'snapshot.restore.before-completion';
 
 export interface PersistenceFaultHooks {
   hit(point: PersistenceFaultPoint): void;

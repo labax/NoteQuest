@@ -18,12 +18,12 @@ The following commands passed locally on 2026-07-26:
 
 - `npm ci` — restored the committed dependency tree successfully.
 - `npm test -- --run packages/test-support/src/persistence-fault-controller.test.ts packages/infrastructure/src/persistence/dexie-action-transaction-coordinator.test.ts packages/infrastructure/src/persistence/dexie-snapshot-service.test.ts tests/production-persistence-fault-boundary.test.ts`
-  — 45 focused tests passed across four files.
+  — 47 focused tests passed across four files.
 - `npm run verify` — the repository verification chain passed:
   - `npm run format:check` passed;
   - `npm run lint` completed with zero warnings;
   - `npm run typecheck` completed successfully under strict TypeScript;
-  - `npm test` passed 179 tests across 23 files; and
+  - `npm test` passed 181 tests across 23 files; and
   - `npm run build` completed the typecheck and Vite production build, then inspected three emitted
     files and found no test persistence fault controls.
 - `git diff --check` — the final patch contains no whitespace errors.
@@ -37,6 +37,8 @@ The following commands passed locally on 2026-07-26:
 - Snapshot replacement and restore faults retain the prior protected snapshot, slot pointer, records,
   and staging state.
 - Quota-like and recovery-read scenarios identify their exact point and machine-readable failure kind.
+- Recovery listing propagates injected recovery-read storage failures without returning a partial or
+  misleading successful list and without mutating persistence state.
 - Production construction rejects supplied hooks, the infrastructure entrypoint excludes the test
   controller, and emitted web assets exclude test-controller identifiers.
 
@@ -46,3 +48,5 @@ No required local verification command was skipped. `npm ci` reported one high-s
 dependency remediation is not part of this persistence fault-hook subtask and must follow the project's
 separate dependency review process. The exhaustive 1,000-fault release-candidate matrix, real browser
 quota simulation, and staging/migration/import scenarios remain explicitly deferred.
+Post-completion snapshot retain/restore receipt-loss points are also deferred until their service
+contract can represent a durable-but-unacknowledged result without calling it a rolled-back failure.
