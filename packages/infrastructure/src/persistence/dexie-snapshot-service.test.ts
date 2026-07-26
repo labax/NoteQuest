@@ -5,10 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createNoteQuestDatabase, type NoteQuestDexieDatabase } from './dexie-database';
 import { DexieSnapshotService, type SnapshotWriteRequest } from './dexie-snapshot-service';
+import { initializeSaveSlotFoundation, NOTEQUEST_SLOT_IDS } from './save-slot-foundation';
 import { createNoteQuestTestDatabaseName } from './schema';
 
-const slotOne = 'slot-one' as SaveSlotId;
-const slotTwo = 'slot-two' as SaveSlotId;
+const slotOne = NOTEQUEST_SLOT_IDS[0];
+const slotTwo = NOTEQUEST_SLOT_IDS[1];
+const straySlot = '00000000-0000-4000-8000-000000000004' as SaveSlotId;
 const eligible = {
   supportedSchemaVersions: [1],
   validate: () => true,
@@ -39,6 +41,11 @@ describe('DexieSnapshotService', () => {
       createNoteQuestTestDatabaseName(`snapshot-${Date.now()}-${Math.random()}`),
     );
     await database.open();
+    const initialized = await initializeSaveSlotFoundation(
+      database,
+      () => '2026-01-01T00:00:00.000Z',
+    );
+    if (!initialized.ok) throw new Error(initialized.error.message);
     const baseSlot = {
       slotIndex: 1 as const,
       displayName: 'One',
@@ -54,10 +61,14 @@ describe('DexieSnapshotService', () => {
       recoveryAvailable: false,
       integrityStatus: 'valid' as const,
     };
-    await database.slots.bulkPut([
-      { ...baseSlot, slotId: slotOne },
-      { ...baseSlot, slotId: slotTwo, slotIndex: 2, displayName: 'Two' },
-    ]);
+    await database.slots.bulkPut(
+      initialized.value.slots.map((slot) => ({
+        ...baseSlot,
+        slotId: slot.slotId,
+        slotIndex: slot.slotIndex,
+        displayName: slot.displayName,
+      })),
+    );
     service = new DexieSnapshotService(database);
   });
 
@@ -398,5 +409,79 @@ describe('DexieSnapshotService', () => {
       database.staging.get(`slot.${slotOne}.recovery-failed-source`),
     ).resolves.toMatchObject({ body: { records: [{ body: { state: 'invalid-second' } }] } });
     await expect(database.snapshots.count()).resolves.toBe(1);
+  });
+
+  it('rejects every protected snapshot operation for a stray fourth slot without mutation', async () => {
+    const catalogueSlot = await database.slots.get(slotOne);
+    if (catalogueSlot === undefined) throw new Error('catalogue test slot missing');
+    await database.slots.put({
+      ...catalogueSlot,
+      slotId: straySlot,
+      displayName: 'Stray slot',
+      currentSnapshotId: 'stray.current',
+      lastValidSnapshotId: null,
+      recoveryAvailable: false,
+    });
+    const strayRecord = {
+      slotId: straySlot,
+      recordType: 'adventurer',
+      recordId: 'stray.active',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      body: { hp: -1 },
+    };
+    await database.records.put(strayRecord);
+    await database.snapshots.put({
+      ...candidate(1, { records: [{ ...strayRecord, body: { hp: 7 } }] }),
+      slotId: straySlot,
+    });
+    await database.staging.put({
+      stageId: 'stray.existing-stage',
+      targetSlotId: straySlot,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      stageType: 'test-sentinel',
+      status: 'preserved',
+      body: { untouched: true },
+    });
+    const before = await Promise.all([
+      database.slots.toArray(),
+      database.snapshots.toArray(),
+      database.records.toArray(),
+      database.staging.toArray(),
+    ]);
+
+    await expect(
+      service.retainValidated(
+        candidate(2, { records: [], replacement: true }, { slotId: straySlot }),
+        () => true,
+      ),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'slot_not_found' } });
+    await expect(service.read(straySlot, 'last-valid')).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'slot_not_found' },
+    });
+    await expect(
+      service.selectForRestore(straySlot, { ...eligible, snapshotClass: 'last-valid' }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'slot_not_found' } });
+    await expect(service.listRecoverable(straySlot, eligible)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'slot_not_found' },
+    });
+    await expect(
+      service.restore(straySlot, {
+        ...eligible,
+        snapshotClass: 'last-valid',
+        restoredCurrentSnapshotId: 'stray.restored',
+        preserveInvalidCurrent: true,
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'slot_not_found' } });
+
+    await expect(
+      Promise.all([
+        database.slots.toArray(),
+        database.snapshots.toArray(),
+        database.records.toArray(),
+        database.staging.toArray(),
+      ]),
+    ).resolves.toEqual(before);
   });
 });

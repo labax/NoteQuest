@@ -222,7 +222,7 @@ describe('save-slot persistence reliability', () => {
             revision: 1,
             updatedAt: '2026-07-25T13:00:00.000Z',
             currentSnapshotId: 'snapshot.1',
-            lastValidSnapshotId: 'snapshot.1',
+            lastValidSnapshotId: 'last-valid',
             recoveryAvailable: true,
           },
           { slotId: NOTEQUEST_SLOT_IDS[1], revision: 0, status: 'empty' },

@@ -33,10 +33,7 @@ import {
   validateSnapshotRecord,
   validateWorkspaceEntry,
 } from './dexie-repositories';
-import {
-  isSaveSlotCatalogue,
-  NOTEQUEST_WORKSPACE_SLOT_CATALOGUE_KEY,
-} from './save-slot-foundation';
+import { isCataloguedSaveSlot } from './save-slot-foundation';
 
 interface IdempotencyMarkerValue {
   readonly actionId: string;
@@ -238,14 +235,9 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
         'rw',
         ...actionCommitDexieStores(this.database),
         async (): Promise<ActionCommitResult> => {
-          const catalogueRow = await this.database.workspace.get(
-            NOTEQUEST_WORKSPACE_SLOT_CATALOGUE_KEY,
-          );
           const currentSlot = await this.database.slots.get(envelope.slotId);
           if (
-            catalogueRow === undefined ||
-            !isSaveSlotCatalogue(catalogueRow.value) ||
-            !catalogueRow.value.slotIds.includes(envelope.slotId) ||
+            !(await isCataloguedSaveSlot(this.database, envelope.slotId)) ||
             currentSlot === undefined
           ) {
             return actionCommitInvalidSlot(envelope);
@@ -365,7 +357,7 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
               updatedAt: this.now(),
               ...(retainedLastValid
                 ? {
-                    lastValidSnapshotId: envelope.slotMetadata?.lastValidSnapshotId ?? 'last-valid',
+                    lastValidSnapshotId: 'last-valid',
                     recoveryAvailable: true,
                   }
                 : {}),

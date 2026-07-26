@@ -23,9 +23,9 @@ The following commands passed locally on 2026-07-26:
 - `npm run typecheck` — strict TypeScript completed successfully.
 - `npm run lint` — ESLint completed with zero warnings.
 - `npm test -- --run packages/infrastructure/src/persistence/dexie-snapshot-service.test.ts packages/infrastructure/src/persistence/dexie-action-transaction-coordinator.test.ts tests/action-transaction-coordinator.integration.test.ts tests/save-slot-reliability.integration.test.ts`
-  — all 31 focused snapshot, transaction, restore, retry, and slot-isolation tests passed across
+  — all 33 focused snapshot, transaction, restore, retry, and slot-isolation tests passed across
   four suites.
-- `npm test` — all 160 tests across 21 suites passed.
+- `npm test` — all 162 tests across 21 suites passed.
 - `npm run format:check` — all tracked files passed Prettier validation.
 - `if rg -n "from 'dexie'|from \"dexie\"|indexedDB|IndexedDB|Table<" packages/domain packages/application --glob '!**/README.md'; then exit 1; else echo 'PASS: no infrastructure storage references in domain/application source'; fi`
   — no infrastructure storage references were found in domain or application source.

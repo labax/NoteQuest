@@ -109,7 +109,7 @@ describe('action commit transaction integration', () => {
       });
       await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toEqual({
         ok: true,
-        value: repositorySlotFixture,
+        value: { ...repositorySlotFixture, lastValidSnapshotId: 'last-valid' },
       });
       await expect(
         repositories.records.get(repositoryFixtureSlotId, 'adventurer', 'adventurer.fixture'),

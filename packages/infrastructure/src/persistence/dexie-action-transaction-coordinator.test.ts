@@ -222,7 +222,7 @@ describe('Dexie action transaction coordinator', () => {
 
         await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toEqual({
           ok: true,
-          value: repositorySlotFixture,
+          value: { ...repositorySlotFixture, lastValidSnapshotId: 'last-valid' },
         });
         await expect(
           repositories.records.get(
@@ -263,6 +263,26 @@ describe('Dexie action transaction coordinator', () => {
     );
 
     expect(diagnosticEvents).toEqual(['started:1', 'committed:1']);
+  });
+
+  it('forces truthful last-valid metadata when the supplied slot pointer is stale', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      const result = await coordinator.commit(
+        createEnvelope({
+          expectedRevision: 0,
+          slotMetadata: {
+            ...repositorySlotFixture,
+            lastValidSnapshotId: 'snapshot.stale-envelope-pointer',
+          },
+        }),
+      );
+
+      expect(result).toMatchObject({ ok: true, committed: true, stateRevision: 1 });
+      await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: true,
+        value: { lastValidSnapshotId: 'last-valid', recoveryAvailable: true },
+      });
+    });
   });
 
   it('updates last-valid only with the successfully committed revision and preserves the prior snapshot on rejection', async () => {
@@ -307,7 +327,7 @@ describe('Dexie action transaction coordinator', () => {
         ok: true,
         value: {
           revision: 1,
-          lastValidSnapshotId: repositorySlotFixture.lastValidSnapshotId,
+          lastValidSnapshotId: 'last-valid',
           recoveryAvailable: true,
         },
       });

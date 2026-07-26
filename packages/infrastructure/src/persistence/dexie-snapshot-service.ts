@@ -2,6 +2,7 @@ import type { SaveSlotId } from '@notequest/domain';
 import Dexie from 'dexie';
 
 import type { NoteQuestDexieDatabase, RecordRow, SnapshotRow } from './dexie-database';
+import { isCataloguedSaveSlot } from './save-slot-foundation';
 
 export const NOTEQUEST_PROTECTED_SNAPSHOT_CLASSES = [
   'last-valid',
@@ -42,7 +43,8 @@ export interface SnapshotRestoreResult {
   readonly preservedStageId: string | null;
 }
 
-export type SnapshotWriteRequest = Readonly<SnapshotRow> & {
+export type SnapshotWriteRequest = Omit<Readonly<SnapshotRow>, 'slotId'> & {
+  readonly slotId: SaveSlotId;
   /** Required when replacing a pre-migration snapshot after its protected operation. */
   readonly priorOperationVerified?: boolean;
 };
@@ -124,9 +126,16 @@ export class DexieSnapshotService {
     try {
       const value = await this.database.transaction(
         'rw',
+        this.database.workspace,
         this.database.slots,
         this.database.snapshots,
         async () => {
+          if (!(await isCataloguedSaveSlot(this.database, request.slotId))) {
+            throw new SnapshotValidationAbort(
+              'slot_not_found',
+              'The snapshot slot is not part of the fixed local catalogue.',
+            );
+          }
           const slot = await this.database.slots.get(snapshot.slotId);
           if (slot === undefined) {
             throw new SnapshotValidationAbort(
@@ -198,10 +207,29 @@ export class DexieSnapshotService {
     snapshotClass: ProtectedSnapshotClass,
   ): Promise<SnapshotServiceResult<SnapshotRow>> {
     try {
-      const snapshot = await this.database.snapshots.get([slotId, snapshotClass]);
-      return snapshot === undefined
-        ? { ok: false, error: { code: 'snapshot_not_found', message: 'Snapshot was not found.' } }
-        : { ok: true, value: structuredClone(snapshot) };
+      return await this.database.transaction(
+        'r',
+        this.database.workspace,
+        this.database.snapshots,
+        async () => {
+          if (!(await isCataloguedSaveSlot(this.database, slotId))) {
+            return {
+              ok: false,
+              error: {
+                code: 'slot_not_found',
+                message: 'The snapshot slot is not part of the fixed local catalogue.',
+              },
+            };
+          }
+          const snapshot = await this.database.snapshots.get([slotId, snapshotClass]);
+          return snapshot === undefined
+            ? {
+                ok: false,
+                error: { code: 'snapshot_not_found', message: 'Snapshot was not found.' },
+              }
+            : { ok: true, value: structuredClone(snapshot) };
+        },
+      );
     } catch {
       return {
         ok: false,
@@ -222,9 +250,19 @@ export class DexieSnapshotService {
     try {
       return await this.database.transaction(
         'r',
+        this.database.workspace,
         this.database.slots,
         this.database.snapshots,
         async () => {
+          if (!(await isCataloguedSaveSlot(this.database, slotId))) {
+            return {
+              ok: false,
+              error: {
+                code: 'slot_not_found',
+                message: 'The snapshot slot is not part of the fixed local catalogue.',
+              },
+            };
+          }
           const slot = await this.database.slots.get(slotId);
           if (slot === undefined) {
             return {
@@ -318,11 +356,21 @@ export class DexieSnapshotService {
     try {
       return await this.database.transaction(
         'rw',
+        this.database.workspace,
         this.database.slots,
         this.database.records,
         this.database.snapshots,
         this.database.staging,
         async () => {
+          if (!(await isCataloguedSaveSlot(this.database, slotId))) {
+            return {
+              ok: false,
+              error: {
+                code: 'slot_not_found',
+                message: 'The snapshot slot is not part of the fixed local catalogue.',
+              },
+            };
+          }
           const slot = await this.database.slots.get(slotId);
           if (slot === undefined) {
             return {
