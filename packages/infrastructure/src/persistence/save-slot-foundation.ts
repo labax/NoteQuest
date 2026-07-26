@@ -55,6 +55,19 @@ export function isSaveSlotCatalogue(value: unknown): value is SaveSlotCatalogue 
   );
 }
 
+/** Checks membership against the persisted fixed catalogue, not row existence alone. */
+export async function isCataloguedSaveSlot(
+  database: NoteQuestDexieDatabase,
+  slotId: SaveSlotId,
+): Promise<boolean> {
+  const catalogueRow = await database.workspace.get(NOTEQUEST_WORKSPACE_SLOT_CATALOGUE_KEY);
+  return (
+    catalogueRow !== undefined &&
+    isSaveSlotCatalogue(catalogueRow.value) &&
+    catalogueRow.value.slotIds.includes(slotId)
+  );
+}
+
 /** Creates the fixed catalogue once and repairs only missing empty slot records. */
 export async function initializeSaveSlotFoundation(
   database: NoteQuestDexieDatabase,

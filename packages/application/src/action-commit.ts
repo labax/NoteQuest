@@ -194,6 +194,17 @@ export function validateActionCommitEnvelope(
     }
   }
 
+  const snapshotClasses = envelope.recoveryPointers?.snapshots?.map(
+    (snapshot) => snapshot.snapshotClass,
+  );
+  if (snapshotClasses !== undefined && new Set(snapshotClasses).size !== snapshotClasses.length) {
+    errors.push({
+      code: 'invalid_required_write',
+      message: 'An action commit may retain at most one snapshot of each protected class.',
+      path: 'recoveryPointers.snapshots',
+    });
+  }
+
   return errors;
 }
 

@@ -222,7 +222,7 @@ describe('Dexie action transaction coordinator', () => {
 
         await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toEqual({
           ok: true,
-          value: repositorySlotFixture,
+          value: { ...repositorySlotFixture, lastValidSnapshotId: 'last-valid' },
         });
         await expect(
           repositories.records.get(
@@ -263,6 +263,75 @@ describe('Dexie action transaction coordinator', () => {
     );
 
     expect(diagnosticEvents).toEqual(['started:1', 'committed:1']);
+  });
+
+  it('forces truthful last-valid metadata when the supplied slot pointer is stale', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      const result = await coordinator.commit(
+        createEnvelope({
+          expectedRevision: 0,
+          slotMetadata: {
+            ...repositorySlotFixture,
+            lastValidSnapshotId: 'snapshot.stale-envelope-pointer',
+          },
+        }),
+      );
+
+      expect(result).toMatchObject({ ok: true, committed: true, stateRevision: 1 });
+      await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: true,
+        value: { lastValidSnapshotId: 'last-valid', recoveryAvailable: true },
+      });
+    });
+  });
+
+  it('updates last-valid only with the successfully committed revision and preserves the prior snapshot on rejection', async () => {
+    await withCoordinator(async ({ coordinator, repositories }) => {
+      expect(await coordinator.commit(createEnvelope({ expectedRevision: 0 }))).toMatchObject({
+        ok: true,
+        stateRevision: 1,
+      });
+
+      const staleReplacement = await coordinator.commit(
+        createEnvelope({
+          actionId: 'action.fixture.stale-snapshot',
+          expectedRevision: 1,
+          events: [{ ...repositoryEventFixture, sequence: 2 }],
+          recoveryPointers: {
+            snapshots: [{ ...repositorySnapshotFixture, sourceRevision: 1 }],
+          },
+        }),
+      );
+
+      expect(staleReplacement).toMatchObject({
+        ok: false,
+        committed: false,
+        error: {
+          code: 'invalid_required_write',
+          validationErrors: [
+            {
+              path: 'recoveryPointers.snapshots.0.sourceRevision',
+              message: 'A last-valid snapshot must describe the revision being committed.',
+            },
+          ],
+        },
+      });
+      await expect(
+        repositories.snapshots.get(repositoryFixtureSlotId, 'last-valid'),
+      ).resolves.toEqual({ ok: true, value: repositorySnapshotFixture });
+      await expect(repositories.events.get(repositoryFixtureSlotId, 2)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'missing_record' },
+      });
+      await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: true,
+        value: {
+          revision: 1,
+          lastValidSnapshotId: 'last-valid',
+          recoveryAvailable: true,
+        },
+      });
+    });
   });
 
   it('aborts every write and preserves prior durable state when a required write fails', async () => {

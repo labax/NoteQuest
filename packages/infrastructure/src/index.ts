@@ -14,3 +14,4 @@ export * from './persistence/dexie-repositories';
 export * from './persistence/dexie-action-transaction-coordinator';
 export * from './persistence/save-slot-foundation';
 export * from './persistence/dexie-save-slot-service';
+export * from './persistence/dexie-snapshot-service';

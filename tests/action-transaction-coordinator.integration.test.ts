@@ -109,7 +109,7 @@ describe('action commit transaction integration', () => {
       });
       await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toEqual({
         ok: true,
-        value: repositorySlotFixture,
+        value: { ...repositorySlotFixture, lastValidSnapshotId: 'last-valid' },
       });
       await expect(
         repositories.records.get(repositoryFixtureSlotId, 'adventurer', 'adventurer.fixture'),
@@ -160,6 +160,15 @@ describe('action commit transaction integration', () => {
             eventType: 'event.integration_second',
           },
         ],
+        recoveryPointers: {
+          snapshots: [
+            {
+              ...repositorySnapshotFixture,
+              sourceRevision: 2,
+              body: { stateRootId: 'state.integration.second' },
+            },
+          ],
+        },
       });
 
       const [firstResult, secondResult] = await Promise.all([
@@ -185,6 +194,12 @@ describe('action commit transaction integration', () => {
         ok: true,
         value: { body: { hp: 5, name: 'Second queued synthetic state' } },
       });
+      await expect(
+        repositories.snapshots.get(repositoryFixtureSlotId, 'last-valid'),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: { sourceRevision: 2, body: { stateRootId: 'state.integration.second' } },
+      });
     });
   });
 
@@ -205,7 +220,10 @@ describe('action commit transaction integration', () => {
 
       try {
         const result = await coordinator.commit(
-          createIntegrationEnvelope({ expectedRevision: previousSlot.revision }),
+          createIntegrationEnvelope({
+            expectedRevision: previousSlot.revision,
+            recoveryPointers: { snapshots: [] },
+          }),
         );
 
         expect(result).toMatchObject({
