@@ -34,6 +34,11 @@ import {
   validateWorkspaceEntry,
 } from './dexie-repositories';
 import { isCataloguedSaveSlot } from './save-slot-foundation';
+import {
+  assertTestOnlyFaultHooks,
+  injectedFaultPoint,
+  type PersistenceFaultHooks,
+} from './persistence-fault-hooks';
 
 interface IdempotencyMarkerValue {
   readonly actionId: string;
@@ -215,7 +220,10 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
     private readonly database: NoteQuestDexieDatabase,
     private readonly diagnostics: ActionTransactionDiagnostics = {},
     private readonly now: () => string = () => new Date().toISOString(),
-  ) {}
+    private readonly faultHooks?: PersistenceFaultHooks,
+  ) {
+    assertTestOnlyFaultHooks(faultHooks);
+  }
 
   async commit(envelope: ActionCommitEnvelope): Promise<ActionCommitResult> {
     const validationErrors = [
@@ -231,6 +239,7 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
     this.diagnostics.transactionStarted?.(envelope, plannedWrites);
 
     try {
+      this.faultHooks?.hit('transaction.before-transaction');
       const result = await this.database.transaction(
         'rw',
         ...actionCommitDexieStores(this.database),
@@ -368,6 +377,9 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             await this.database.workspace.put(idempotencyWorkspaceEntry(envelope, stateRevision));
           }
 
+          this.faultHooks?.hit('transaction.after-required-writes');
+          this.faultHooks?.hit('transaction.before-completion');
+
           return actionCommitSuccess(envelope, stateRevision);
         },
       );
@@ -380,8 +392,27 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
         this.diagnostics.transactionAborted?.(envelope, result.error);
       }
 
+      this.faultHooks?.hit('transaction.after-completion-before-receipt');
+
       return result;
     } catch (cause) {
+      if (injectedFaultPoint(cause) === 'transaction.after-completion-before-receipt') {
+        return {
+          ok: false,
+          actionId: envelope.actionId,
+          ...(envelope.idempotencyKey === undefined
+            ? {}
+            : { idempotencyKey: envelope.idempotencyKey }),
+          committed: 'unknown',
+          duplicate: false,
+          error: {
+            code: 'commit_receipt_failed',
+            message:
+              'The transaction completed but its receipt was lost; reconcile durable state before retrying.',
+            cause,
+          },
+        };
+      }
       const error = toTransactionError(cause);
       this.diagnostics.transactionAborted?.(envelope, error);
       return toTransactionFailure(envelope, error);
@@ -393,8 +424,9 @@ export function createDexieActionTransactionCoordinator(
   database: NoteQuestDexieDatabase,
   diagnostics: ActionTransactionDiagnostics = {},
   now?: () => string,
+  faultHooks?: PersistenceFaultHooks,
 ): ActionTransactionCoordinator {
   return createPerSlotActionCommitQueue(
-    new DexieActionTransactionCoordinator(database, diagnostics, now),
+    new DexieActionTransactionCoordinator(database, diagnostics, now, faultHooks),
   );
 }
