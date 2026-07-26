@@ -3,6 +3,11 @@ import Dexie from 'dexie';
 
 import type { NoteQuestDexieDatabase, RecordRow, SnapshotRow } from './dexie-database';
 import { isCataloguedSaveSlot } from './save-slot-foundation';
+import {
+  assertTestOnlyFaultHooks,
+  injectedFaultMessage,
+  type PersistenceFaultHooks,
+} from './persistence-fault-hooks';
 
 export const NOTEQUEST_PROTECTED_SNAPSHOT_CLASSES = [
   'last-valid',
@@ -100,7 +105,10 @@ export class DexieSnapshotService {
   constructor(
     private readonly database: NoteQuestDexieDatabase,
     private readonly now: () => string = () => new Date().toISOString(),
-  ) {}
+    private readonly faultHooks?: PersistenceFaultHooks,
+  ) {
+    assertTestOnlyFaultHooks(faultHooks);
+  }
 
   private failedSourceStageId(slotId: SaveSlotId): string {
     return `slot.${slotId}.recovery-failed-source`;
@@ -124,6 +132,7 @@ export class DexieSnapshotService {
     }
 
     try {
+      this.faultHooks?.hit('snapshot.retain.before-transaction');
       const value = await this.database.transaction(
         'rw',
         this.database.workspace,
@@ -169,6 +178,7 @@ export class DexieSnapshotService {
           }
 
           await this.database.snapshots.put(snapshot);
+          this.faultHooks?.hit('snapshot.retain.after-write');
           const durable = await this.database.snapshots.get(key);
           if (durable === undefined || !validate(structuredClone(durable))) {
             throw new SnapshotValidationAbort(
@@ -184,6 +194,7 @@ export class DexieSnapshotService {
               recoveryAvailable: true,
             });
           }
+          this.faultHooks?.hit('snapshot.retain.before-completion');
           return structuredClone(durable);
         },
       );
@@ -196,7 +207,7 @@ export class DexieSnapshotService {
         ok: false,
         error: {
           code: 'storage_failure',
-          message: 'The protected snapshot could not be retained.',
+          message: injectedFaultMessage(cause) ?? 'The protected snapshot could not be retained.',
         },
       };
     }
@@ -207,11 +218,12 @@ export class DexieSnapshotService {
     snapshotClass: ProtectedSnapshotClass,
   ): Promise<SnapshotServiceResult<SnapshotRow>> {
     try {
-      return await this.database.transaction(
+      this.faultHooks?.hit('snapshot.read.before-transaction');
+      const result = await this.database.transaction(
         'r',
         this.database.workspace,
         this.database.snapshots,
-        async () => {
+        async (): Promise<SnapshotServiceResult<SnapshotRow>> => {
           if (!(await isCataloguedSaveSlot(this.database, slotId))) {
             return {
               ok: false,
@@ -230,10 +242,15 @@ export class DexieSnapshotService {
             : { ok: true, value: structuredClone(snapshot) };
         },
       );
-    } catch {
+      this.faultHooks?.hit('snapshot.read.after-read');
+      return result;
+    } catch (cause) {
       return {
         ok: false,
-        error: { code: 'storage_failure', message: 'The protected snapshot could not be read.' },
+        error: {
+          code: 'storage_failure',
+          message: injectedFaultMessage(cause) ?? 'The protected snapshot could not be read.',
+        },
       };
     }
   }
@@ -248,12 +265,13 @@ export class DexieSnapshotService {
     request: SnapshotSelectionRequest,
   ): Promise<SnapshotServiceResult<SelectedRecoverySnapshot>> {
     try {
-      return await this.database.transaction(
+      this.faultHooks?.hit('snapshot.select.before-transaction');
+      const result = await this.database.transaction(
         'r',
         this.database.workspace,
         this.database.slots,
         this.database.snapshots,
-        async () => {
+        async (): Promise<SnapshotServiceResult<SelectedRecoverySnapshot>> => {
           if (!(await isCataloguedSaveSlot(this.database, slotId))) {
             return {
               ok: false,
@@ -304,10 +322,15 @@ export class DexieSnapshotService {
           };
         },
       );
-    } catch {
+      this.faultHooks?.hit('snapshot.select.after-read');
+      return result;
+    } catch (cause) {
       return {
         ok: false,
-        error: { code: 'storage_failure', message: 'The recovery snapshot could not be selected.' },
+        error: {
+          code: 'storage_failure',
+          message: injectedFaultMessage(cause) ?? 'The recovery snapshot could not be selected.',
+        },
       };
     }
   }
@@ -326,6 +349,10 @@ export class DexieSnapshotService {
         (selection) => !selection.ok && selection.error.code === 'slot_not_found',
       );
       if (slotFailure !== undefined && !slotFailure.ok) return slotFailure;
+      const storageFailure = selections.find(
+        (selection) => !selection.ok && selection.error.code === 'storage_failure',
+      );
+      if (storageFailure !== undefined && !storageFailure.ok) return storageFailure;
       return {
         ok: true,
         value: selections.flatMap((selection) => (selection.ok ? [selection.value.snapshot] : [])),
@@ -354,14 +381,15 @@ export class DexieSnapshotService {
       };
     }
     try {
-      return await this.database.transaction(
+      this.faultHooks?.hit('snapshot.restore.before-transaction');
+      const result = await this.database.transaction(
         'rw',
         this.database.workspace,
         this.database.slots,
         this.database.records,
         this.database.snapshots,
         this.database.staging,
-        async () => {
+        async (): Promise<SnapshotServiceResult<SnapshotRestoreResult>> => {
           if (!(await isCataloguedSaveSlot(this.database, slotId))) {
             return {
               ok: false,
@@ -475,6 +503,8 @@ export class DexieSnapshotService {
             recoveryAvailable: true,
             integrityStatus: 'valid',
           });
+          this.faultHooks?.hit('snapshot.restore.after-required-writes');
+          this.faultHooks?.hit('snapshot.restore.before-completion');
           return {
             ok: true,
             value: {
@@ -486,10 +516,14 @@ export class DexieSnapshotService {
           };
         },
       );
-    } catch {
+      return result;
+    } catch (cause) {
       return {
         ok: false,
-        error: { code: 'storage_failure', message: 'The recovery snapshot could not be restored.' },
+        error: {
+          code: 'storage_failure',
+          message: injectedFaultMessage(cause) ?? 'The recovery snapshot could not be restored.',
+        },
       };
     }
   }

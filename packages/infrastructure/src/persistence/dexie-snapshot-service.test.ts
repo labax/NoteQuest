@@ -1,6 +1,10 @@
 import 'fake-indexeddb/auto';
 
 import type { SaveSlotId } from '@notequest/domain';
+import {
+  createPersistenceFaultController,
+  PERSISTENCE_FAULT_SCENARIOS,
+} from '@notequest/test-support';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createNoteQuestDatabase, type NoteQuestDexieDatabase } from './dexie-database';
@@ -114,6 +118,117 @@ describe('DexieSnapshotService', () => {
       lastValidSnapshotId: 'last-valid',
       recoveryAvailable: true,
     });
+  });
+
+  it('rolls back a deterministic snapshot write fault and preserves the prior snapshot', async () => {
+    await service.retainValidated(candidate(1, { hp: 9 }), () => true);
+    const faults = createPersistenceFaultController();
+    faults.arm('snapshot.retain.after-write');
+    const faultingService = new DexieSnapshotService(database, undefined, faults);
+
+    await expect(
+      faultingService.retainValidated(candidate(2, { hp: 1 }), () => true),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'storage_failure',
+        message: 'Injected persistence fault at snapshot.retain.after-write.',
+      },
+    });
+    await expect(database.snapshots.get([slotOne, 'last-valid'])).resolves.toMatchObject({
+      sourceRevision: 1,
+      body: { hp: 9 },
+    });
+    await expect(database.slots.get(slotOne)).resolves.toMatchObject({
+      revision: 2,
+      lastValidSnapshotId: 'last-valid',
+    });
+  });
+
+  it('preserves the prior snapshot and pointer when failure occurs before retain completion', async () => {
+    await service.retainValidated(candidate(1, { hp: 9, valid: true }), () => true);
+    const slotBefore = await database.slots.get(slotOne);
+    const faults = createPersistenceFaultController();
+    faults.arm('snapshot.retain.before-completion');
+    const faultingService = new DexieSnapshotService(database, undefined, faults);
+
+    await expect(
+      faultingService.retainValidated(candidate(2, { hp: 1, valid: false }), () => true),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'storage_failure',
+        message: 'Injected persistence fault at snapshot.retain.before-completion.',
+      },
+    });
+    await expect(database.snapshots.get([slotOne, 'last-valid'])).resolves.toEqual(
+      candidate(1, { hp: 9, valid: true }),
+    );
+    await expect(database.slots.get(slotOne)).resolves.toEqual(slotBefore);
+  });
+
+  it('simulates a recovery read failure without mutating the recoverable snapshot', async () => {
+    await service.retainValidated(candidate(1, { hp: 8 }), () => true);
+    const faults = createPersistenceFaultController();
+    faults.armScenario(PERSISTENCE_FAULT_SCENARIOS.recoveryReadFailure);
+    const faultingService = new DexieSnapshotService(database, undefined, faults);
+
+    await expect(
+      faultingService.selectForRestore(slotOne, {
+        ...eligible,
+        snapshotClass: 'last-valid',
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'storage_failure',
+        message:
+          'Injected persistence fault at snapshot.select.after-read (recovery_read_failure).',
+      },
+    });
+    await expect(database.snapshots.get([slotOne, 'last-valid'])).resolves.toMatchObject({
+      sourceRevision: 1,
+      body: { hp: 8 },
+    });
+    await expect(database.slots.get(slotOne)).resolves.toMatchObject({
+      revision: 2,
+      lastValidSnapshotId: 'last-valid',
+      recoveryAvailable: true,
+    });
+  });
+
+  it('propagates an injected recovery read failure from listRecoverable without mutation', async () => {
+    const existingRecord = {
+      slotId: slotOne,
+      recordType: 'adventurer',
+      recordId: 'active',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      body: { hp: 8, valid: true },
+    };
+    await database.records.put(existingRecord);
+    await service.retainValidated(candidate(1, { records: [existingRecord] }), () => true);
+    const before = {
+      slot: await database.slots.get(slotOne),
+      records: await database.records.toArray(),
+      snapshots: await database.snapshots.toArray(),
+      staging: await database.staging.toArray(),
+    };
+    const faults = createPersistenceFaultController();
+    faults.armScenario(PERSISTENCE_FAULT_SCENARIOS.recoveryReadFailure);
+    const faultingService = new DexieSnapshotService(database, undefined, faults);
+
+    await expect(faultingService.listRecoverable(slotOne, eligible)).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'storage_failure',
+        message:
+          'Injected persistence fault at snapshot.select.after-read (recovery_read_failure).',
+      },
+    });
+    await expect(database.slots.get(slotOne)).resolves.toEqual(before.slot);
+    await expect(database.records.toArray()).resolves.toEqual(before.records);
+    await expect(database.snapshots.toArray()).resolves.toEqual(before.snapshots);
+    await expect(database.staging.toArray()).resolves.toEqual(before.staging);
   });
 
   it('retains one snapshot per protected class and preserves slot isolation', async () => {
@@ -306,6 +421,50 @@ describe('DexieSnapshotService', () => {
       currentSnapshotId: 'restored.last-valid.1',
       integrityStatus: 'valid',
     });
+  });
+
+  it('aborts an injected restore failure and preserves all previous valid state', async () => {
+    const previousRecord = {
+      slotId: slotOne,
+      recordType: 'adventurer',
+      recordId: 'active',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      body: { hp: 6, valid: true },
+    };
+    const restoredRecord = {
+      ...previousRecord,
+      updatedAt: '2026-01-01T00:00:01.000Z',
+      body: { hp: 10, valid: true },
+    };
+    await database.records.put(previousRecord);
+    await service.retainValidated(candidate(1, { records: [restoredRecord] }), () => true);
+    const slotBefore = await database.slots.get(slotOne);
+    const faults = createPersistenceFaultController();
+    faults.arm('snapshot.restore.before-completion');
+    const faultingService = new DexieSnapshotService(database, undefined, faults);
+
+    await expect(
+      faultingService.restore(slotOne, {
+        ...eligible,
+        snapshotClass: 'last-valid',
+        restoredCurrentSnapshotId: 'must-not-activate',
+        preserveInvalidCurrent: true,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'storage_failure',
+        message: 'Injected persistence fault at snapshot.restore.before-completion.',
+      },
+    });
+    await expect(database.records.get([slotOne, 'adventurer', 'active'])).resolves.toEqual(
+      previousRecord,
+    );
+    await expect(database.slots.get(slotOne)).resolves.toEqual(slotBefore);
+    await expect(database.staging.count()).resolves.toBe(0);
+    await expect(database.snapshots.get([slotOne, 'last-valid'])).resolves.toEqual(
+      candidate(1, { records: [restoredRecord] }),
+    );
   });
 
   it('leaves invalid current data untouched when a restore package is incomplete', async () => {

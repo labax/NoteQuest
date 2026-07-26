@@ -48,7 +48,8 @@ export type ActionCommitErrorCode =
   | 'idempotency_conflict'
   | 'invalid_slot'
   | 'write_failed'
-  | 'transaction_failed';
+  | 'transaction_failed'
+  | 'commit_receipt_failed';
 
 export interface ActionCommitError {
   readonly code: ActionCommitErrorCode;
@@ -100,6 +101,15 @@ export type ActionCommitResult =
       readonly idempotencyKey?: IdempotencyKey;
       readonly committed: false;
       readonly duplicate?: false;
+      readonly error: ActionCommitError;
+    }
+  | {
+      readonly ok: false;
+      readonly actionId: string;
+      readonly idempotencyKey?: IdempotencyKey;
+      /** IndexedDB completed, but the caller did not receive the commit result. */
+      readonly committed: 'unknown';
+      readonly duplicate: false;
       readonly error: ActionCommitError;
     };
 

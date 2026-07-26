@@ -1,9 +1,11 @@
 import 'fake-indexeddb/auto';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   repositoryEventFixture,
+  createPersistenceFaultController,
+  PERSISTENCE_FAULT_SCENARIOS,
   repositoryFixtureSlotId,
   repositoryRecordFixture,
   repositorySlotFixture,
@@ -18,7 +20,9 @@ import { createDexiePersistenceRepositories } from './dexie-repositories';
 import {
   actionCommitIdempotencyWorkspaceKey,
   createDexieActionTransactionCoordinator,
+  DexieActionTransactionCoordinator,
 } from './dexie-action-transaction-coordinator';
+import type { PersistenceFaultHooks } from './persistence-fault-hooks';
 import { initializeSaveSlotFoundation } from './save-slot-foundation';
 import { createNoteQuestTestDatabaseName } from './schema';
 
@@ -37,6 +41,7 @@ async function withCoordinator<T>(
     readonly repositories: ReturnType<typeof createDexiePersistenceRepositories>;
   }) => Promise<T>,
   diagnostics: ActionTransactionDiagnostics = {},
+  faultHooks?: PersistenceFaultHooks,
 ): Promise<T> {
   const database = await createNoteQuestDatabase(createTransactionTestDatabaseName());
 
@@ -52,6 +57,7 @@ async function withCoordinator<T>(
         database,
         diagnostics,
         () => repositorySlotFixture.updatedAt,
+        faultHooks,
       ),
       repositories: createDexiePersistenceRepositories(database),
     });
@@ -99,6 +105,165 @@ function createEnvelope(overrides: Partial<ActionCommitEnvelope> = {}): ActionCo
 }
 
 describe('Dexie action transaction coordinator', () => {
+  it('rejects an injected hook when constructed for production behavior', async () => {
+    const database = await createNoteQuestDatabase(createTransactionTestDatabaseName());
+    vi.stubEnv('NODE_ENV', 'production');
+    try {
+      expect(
+        () =>
+          new DexieActionTransactionCoordinator(database, {}, undefined, {
+            hit: () => undefined,
+          }),
+      ).toThrow('Persistence fault hooks cannot be enabled outside a test process.');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('aborts all writes at the deterministic after-required-writes fault', async () => {
+    const faults = createPersistenceFaultController();
+    faults.arm('transaction.after-required-writes');
+
+    await withCoordinator(
+      async ({ coordinator, repositories }) => {
+        await expect(coordinator.commit(createEnvelope())).resolves.toMatchObject({
+          ok: false,
+          committed: false,
+          error: {
+            code: 'transaction_failed',
+            cause: { point: 'transaction.after-required-writes' },
+          },
+        });
+        await expect(
+          repositories.records.get(
+            repositoryFixtureSlotId,
+            repositoryRecordFixture.recordType,
+            repositoryRecordFixture.recordId,
+          ),
+        ).resolves.toMatchObject({ ok: false, error: { code: 'missing_record' } });
+        await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+          ok: true,
+          value: { revision: 0 },
+        });
+      },
+      {},
+      faults,
+    );
+  });
+
+  it.each([
+    'transaction.before-transaction',
+    'transaction.after-required-writes',
+    'transaction.before-completion',
+  ] as const)('preserves an existing valid state and reports %s truthfully', async (point) => {
+    const faults = createPersistenceFaultController();
+    faults.arm(point);
+
+    await withCoordinator(
+      async ({ coordinator, repositories }) => {
+        const previousRecord = { ...repositoryRecordFixture, body: { hp: 10, valid: true } };
+        await expect(repositories.records.put(previousRecord)).resolves.toMatchObject({ ok: true });
+
+        const result = await coordinator.commit(
+          createEnvelope({
+            stateRecords: [{ ...repositoryRecordFixture, body: { hp: 1, valid: false } }],
+          }),
+        );
+
+        expect(result).toMatchObject({
+          ok: false,
+          committed: false,
+          error: {
+            code: 'transaction_failed',
+            message: 'Atomic action commit failed; no success result was returned.',
+            cause: {
+              name: 'InjectedPersistenceFault',
+              point,
+              failure: 'storage_failure',
+              message: `Injected persistence fault at ${point}.`,
+            },
+          },
+        });
+        await expect(
+          repositories.records.get(
+            repositoryFixtureSlotId,
+            repositoryRecordFixture.recordType,
+            repositoryRecordFixture.recordId,
+          ),
+        ).resolves.toEqual({ ok: true, value: previousRecord });
+        await expect(repositories.events.get(repositoryFixtureSlotId, 1)).resolves.toMatchObject({
+          ok: false,
+          error: { code: 'missing_record' },
+        });
+        await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+          ok: true,
+          value: { revision: 0 },
+        });
+      },
+      {},
+      faults,
+    );
+  });
+
+  it('models a lost receipt after a committed transaction without rolling state back', async () => {
+    const faults = createPersistenceFaultController();
+    faults.arm('transaction.after-completion-before-receipt');
+
+    await withCoordinator(
+      async ({ coordinator, repositories }) => {
+        await expect(coordinator.commit(createEnvelope())).resolves.toMatchObject({
+          ok: false,
+          committed: 'unknown',
+          error: {
+            code: 'commit_receipt_failed',
+            message:
+              'The transaction completed but its receipt was lost; reconcile durable state before retrying.',
+            cause: { point: 'transaction.after-completion-before-receipt' },
+          },
+        });
+        await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+          ok: true,
+          value: { revision: 1 },
+        });
+      },
+      {},
+      faults,
+    );
+  });
+
+  it('simulates a quota-like failure while preserving the prior transaction state', async () => {
+    const faults = createPersistenceFaultController();
+    faults.armScenario(PERSISTENCE_FAULT_SCENARIOS.quotaLikeTransactionFailure);
+
+    await withCoordinator(
+      async ({ coordinator, repositories }) => {
+        await expect(coordinator.commit(createEnvelope())).resolves.toMatchObject({
+          ok: false,
+          committed: false,
+          error: {
+            code: 'transaction_failed',
+            cause: {
+              point: 'transaction.after-required-writes',
+              failure: 'quota_exceeded',
+              message:
+                'Injected persistence fault at transaction.after-required-writes (quota_exceeded).',
+            },
+          },
+        });
+        await expect(repositories.slots.get(repositoryFixtureSlotId)).resolves.toMatchObject({
+          ok: true,
+          value: { revision: 0 },
+        });
+        await expect(repositories.events.get(repositoryFixtureSlotId, 1)).resolves.toMatchObject({
+          ok: false,
+          error: { code: 'missing_record' },
+        });
+      },
+      {},
+      faults,
+    );
+  });
+
   it('rejects a non-catalogue slot before creating metadata or child rows', async () => {
     await withCoordinator(async ({ coordinator, repositories }) => {
       const foreignSlotId = '00000000-0000-4000-8000-999999999999' as SaveSlotId;
