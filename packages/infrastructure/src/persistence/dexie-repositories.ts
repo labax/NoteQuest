@@ -117,13 +117,35 @@ export function validateEventRecord(event: EventRecord): RepositoryError | null 
 }
 
 export function validateSnapshotRecord(snapshot: SnapshotRecord): RepositoryError | null {
-  return snapshot.sourceRevision < 0
-    ? {
-        code: 'validation_failure',
-        entity: 'snapshot',
-        message: 'sourceRevision cannot be negative.',
-      }
-    : null;
+  if (!Number.isSafeInteger(snapshot.sourceRevision) || snapshot.sourceRevision < 0) {
+    return {
+      code: 'validation_failure',
+      entity: 'snapshot',
+      message: 'sourceRevision cannot be negative.',
+    };
+  }
+  if (!Number.isSafeInteger(snapshot.schemaVersion) || snapshot.schemaVersion < 1) {
+    return {
+      code: 'validation_failure',
+      entity: 'snapshot',
+      message: 'schemaVersion must be a positive safe integer.',
+    };
+  }
+  if (Number.isNaN(Date.parse(snapshot.createdAt))) {
+    return {
+      code: 'validation_failure',
+      entity: 'snapshot',
+      message: 'createdAt must be an ISO-compatible date.',
+    };
+  }
+  if (snapshot.body === undefined) {
+    return {
+      code: 'validation_failure',
+      entity: 'snapshot',
+      message: 'body is required.',
+    };
+  }
+  return null;
 }
 
 export function validateContentPackageRecord(

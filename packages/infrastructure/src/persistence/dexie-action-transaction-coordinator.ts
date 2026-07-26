@@ -18,6 +18,7 @@ import {
 } from '@notequest/application';
 import type { IdempotencyKey, SaveSlotId } from '@notequest/domain';
 
+import { serializeCanonicalJson } from '../canonical-json';
 import type { NoteQuestDexieDatabase, WorkspaceRow } from './dexie-database';
 import {
   toEventRow,
@@ -291,6 +292,35 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             ...(envelope.randomResultRecords ?? []),
           ].map(toRecordRow);
           const stateRevision = currentRevision + 1;
+          const snapshots = envelope.recoveryPointers?.snapshots ?? [];
+
+          for (const [index, snapshot] of snapshots.entries()) {
+            if (
+              snapshot.snapshotClass === 'last-valid' &&
+              snapshot.sourceRevision !== stateRevision
+            ) {
+              return actionCommitValidationFailure(envelope, [
+                {
+                  code: 'invalid_required_write',
+                  path: `recoveryPointers.snapshots.${index}.sourceRevision`,
+                  message: 'A last-valid snapshot must describe the revision being committed.',
+                },
+              ]);
+            }
+            const previous = await this.database.snapshots.get([
+              envelope.slotId,
+              snapshot.snapshotClass,
+            ]);
+            if (previous !== undefined && snapshot.sourceRevision <= previous.sourceRevision) {
+              return actionCommitValidationFailure(envelope, [
+                {
+                  code: 'invalid_required_write',
+                  path: `recoveryPointers.snapshots.${index}.sourceRevision`,
+                  message: 'A retained snapshot must have a newer source revision.',
+                },
+              ]);
+            }
+          }
 
           if (stateRows.length > 0) {
             await this.database.records.bulkPut(stateRows);
@@ -300,9 +330,20 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
             await this.database.events.bulkAdd(envelope.events.map(toEventRow));
           }
 
-          const snapshots = envelope.recoveryPointers?.snapshots ?? [];
           if (snapshots.length > 0) {
             await this.database.snapshots.bulkPut(snapshots.map(toSnapshotRow));
+            for (const snapshot of snapshots) {
+              const durable = await this.database.snapshots.get([
+                envelope.slotId,
+                snapshot.snapshotClass,
+              ]);
+              if (
+                durable === undefined ||
+                serializeCanonicalJson(durable) !== serializeCanonicalJson(toSnapshotRow(snapshot))
+              ) {
+                throw new Error('Snapshot durable read-back validation failed.');
+              }
+            }
           }
 
           const workspaceEntries = envelope.recoveryPointers?.workspaceEntries ?? [];
@@ -311,6 +352,9 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
           }
 
           const currentSlotMetadata = mapSlotRow(currentSlot);
+          const retainedLastValid = snapshots.some(
+            (snapshot) => snapshot.snapshotClass === 'last-valid',
+          );
           await this.database.slots.put(
             toSlotRow({
               ...(envelope.slotMetadata ?? currentSlotMetadata),
@@ -319,6 +363,12 @@ export class DexieActionTransactionCoordinator implements ActionTransactionCoord
               createdAt: currentSlotMetadata.createdAt,
               revision: stateRevision,
               updatedAt: this.now(),
+              ...(retainedLastValid
+                ? {
+                    lastValidSnapshotId: envelope.slotMetadata?.lastValidSnapshotId ?? 'last-valid',
+                    recoveryAvailable: true,
+                  }
+                : {}),
             }),
           );
 
