@@ -8,3 +8,10 @@ export const infrastructureDependsOn = [applicationLayerName, domainLayerName] a
 export * from './canonical-json.ts';
 export * from './sha256.ts';
 export * from './sha256-fixtures.ts';
+export * from './persistence/schema';
+export * from './persistence/dexie-database';
+export * from './persistence/dexie-repositories';
+export * from './persistence/dexie-action-transaction-coordinator';
+export * from './persistence/save-slot-foundation';
+export * from './persistence/dexie-save-slot-service';
+export * from './persistence/dexie-snapshot-service';
