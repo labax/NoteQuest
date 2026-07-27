@@ -142,7 +142,11 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
         </div>
       </header>
       <div className="shell-layout">
-        <nav className="destination-nav" aria-label="Primary destinations">
+        <nav
+          className="destination-nav"
+          aria-label="Primary destinations"
+          aria-describedby={route.slotId === undefined ? 'guarded-navigation-help' : undefined}
+        >
           {shellDestinations
             .filter((destination) => routeMetadata[destination].showInNavigation)
             .map((destination) => {
@@ -154,11 +158,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
                   key={destination}
                   aria-current={route.destination === destination ? 'page' : undefined}
                   disabled={unavailable}
-                  title={
-                    unavailable
-                      ? 'Select a save slot to make this destination available.'
-                      : undefined
-                  }
+                  aria-describedby={unavailable ? 'guarded-navigation-help' : undefined}
                   onClick={() =>
                     composition.route.navigate({
                       destination,
@@ -171,6 +171,12 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
               );
             })}
         </nav>
+        {route.slotId === undefined ? (
+          <p className="navigation-help" id="guarded-navigation-help">
+            Select an available save slot to open Town, Expedition, Inventory, History, or
+            Graveyard. Data and About remain available without a selected slot.
+          </p>
+        ) : null}
         <main className="workspace" aria-labelledby="workspace-title">
           <p className="eyebrow">Primary workspace</p>
           <h2 id="workspace-title" ref={destinationHeading} tabIndex={-1}>
@@ -180,7 +186,9 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
             <div className="route-notice" role="status">
               {route.fallback === 'unknown-route'
                 ? 'That page is not available. You are back at the save slots.'
-                : 'Select a save slot before opening that destination.'}
+                : route.fallback === 'invalid-context'
+                  ? 'That save slot is not available. Choose an available save slot to continue.'
+                  : 'Select a save slot before opening that destination.'}
             </div>
           ) : null}
           <p className="intro">

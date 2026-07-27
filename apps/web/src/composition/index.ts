@@ -51,7 +51,7 @@ export async function createWebComposition(): Promise<AppComposition> {
 
   return {
     services: { saveSlots: createDexieSaveSlotService(database) },
-    route: createBrowserRouteAdapter(),
+    route: createBrowserRouteAdapter(initialized.value.catalogue.slotIds),
     pwa: createPwaStatusAdapter(),
     version: import.meta.env.VITE_APP_VERSION ?? 'development',
     close: () => database.close(),

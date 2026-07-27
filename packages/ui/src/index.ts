@@ -33,7 +33,7 @@ export interface RouteMetadata {
 
 export interface RouteState extends RouteSelection {
   readonly metadata: RouteMetadata;
-  readonly fallback: null | 'unknown-route' | 'missing-context';
+  readonly fallback: null | 'unknown-route' | 'missing-context' | 'invalid-context';
 }
 
 /** Project-owned boundary used by UI code instead of browser/router APIs. */

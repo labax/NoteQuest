@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { NOTEQUEST_SLOT_IDS } from '@notequest/infrastructure';
 import { createPwaStatusAdapter, type AppComposition } from './composition';
 import { App, RootErrorBoundary } from './App.tsx';
 import {
@@ -13,7 +14,7 @@ import {
 } from '@notequest/ui';
 
 const emptySlots = [1, 2, 3].map((slotIndex) => ({
-  slotId: `slot-${slotIndex}`,
+  slotId: NOTEQUEST_SLOT_IDS[slotIndex - 1]!,
   slotIndex: slotIndex as 1 | 2 | 3,
   displayName: `Slot ${slotIndex}`,
   revision: 0,
@@ -125,6 +126,31 @@ describe('App shell', () => {
       await screen.findByText('Select a save slot before opening that destination.'),
     ).toHaveAttribute('role', 'status');
     expect(screen.getByRole('button', { name: 'Town' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Town' })).toHaveAttribute(
+      'aria-describedby',
+      'guarded-navigation-help',
+    );
+    expect(screen.getByText(/Select an available save slot to open Town/)).toBeVisible();
+  });
+
+  it('truthfully explains a non-catalogued routed slot without enabling guarded destinations', async () => {
+    const route = fixtureRoute({
+      destination: 'save-slots',
+      metadata: routeMetadata['save-slots'],
+      fallback: 'invalid-context',
+    });
+    render(
+      <App compose={() => Promise.resolve(fixtureComposition(undefined, undefined, route))} />,
+    );
+    expect(
+      await screen.findByText(
+        'That save slot is not available. Choose an available save slot to continue.',
+      ),
+    ).toHaveAttribute('role', 'status');
+    expect(screen.getByRole('button', { name: 'Inventory' })).toBeDisabled();
+    expect(
+      screen.getByRole('navigation', { name: 'Primary destinations' }),
+    ).toHaveAccessibleDescription(/Select an available save slot/);
   });
 
   it('shows a truthful loading state while composition is pending', () => {

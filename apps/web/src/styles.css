@@ -93,6 +93,12 @@ h2 {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+.navigation-help {
+  grid-column: 1 / -1;
+  margin: -0.75rem 0 0;
+  color: #536174;
+  font-size: 0.875rem;
+}
 .destination-nav button[aria-current='page'] {
   border-color: #172033;
   background: #172033;
