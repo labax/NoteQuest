@@ -5,6 +5,12 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { createPwaStatusAdapter, type AppComposition } from './composition';
 import { App, RootErrorBoundary } from './App.tsx';
+import {
+  routeMetadata,
+  type RouteAdapter,
+  type RouteSelection,
+  type RouteState,
+} from '@notequest/ui';
 
 const emptySlots = [1, 2, 3].map((slotIndex) => ({
   slotId: `slot-${slotIndex}`,
@@ -26,6 +32,7 @@ const emptySlots = [1, 2, 3].map((slotIndex) => ({
 function fixtureComposition(
   list = vi.fn().mockResolvedValue({ ok: true, value: emptySlots }),
   pwa = createPwaStatusAdapter({ serviceWorker: {} }),
+  route: RouteAdapter = fixtureRoute(),
 ): AppComposition {
   return {
     services: {
@@ -36,10 +43,32 @@ function fixtureComposition(
         updateMetadata: vi.fn(),
       },
     },
-    route: { current: () => 'home', navigate: vi.fn() },
+    route,
     pwa,
     version: 'test-version',
     close: vi.fn(),
+  };
+}
+
+function fixtureRoute(
+  initial: RouteState = {
+    destination: 'save-slots',
+    metadata: routeMetadata['save-slots'],
+    fallback: null,
+  },
+): RouteAdapter {
+  let current = initial;
+  const listeners = new Set<(route: RouteState) => void>();
+  return {
+    current: () => current,
+    navigate: vi.fn((selection: RouteSelection) => {
+      current = { ...selection, metadata: routeMetadata[selection.destination], fallback: null };
+      listeners.forEach((listener) => listener(current));
+    }),
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
   };
 }
 
@@ -68,6 +97,34 @@ describe('App shell', () => {
     expect(screen.queryByText(/offline support available|app up to date/i)).not.toBeInTheDocument();
     expect(screen.getByText('Version test-version')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Slot 3' })).toBeInTheDocument();
+  });
+
+  it('navigates through the project adapter and focuses the destination heading', async () => {
+    const route = fixtureRoute();
+    render(
+      <App compose={() => Promise.resolve(fixtureComposition(undefined, undefined, route))} />,
+    );
+    await screen.findByRole('heading', { name: 'Choose a local save slot' });
+    await userEvent.click(screen.getByRole('button', { name: 'About and credits' }));
+    const heading = await screen.findByRole('heading', { name: 'About and credits' });
+    expect(route.navigate).toHaveBeenCalledWith({ destination: 'about' });
+    expect(heading).toHaveFocus();
+    expect(document.title).toBe('About and Credits · NoteQuest');
+  });
+
+  it('explains a guarded direct load and returns to the safe save-slot state', async () => {
+    const route = fixtureRoute({
+      destination: 'save-slots',
+      metadata: routeMetadata['save-slots'],
+      fallback: 'missing-context',
+    });
+    render(
+      <App compose={() => Promise.resolve(fixtureComposition(undefined, undefined, route))} />,
+    );
+    expect(
+      await screen.findByText('Select a save slot before opening that destination.'),
+    ).toHaveAttribute('role', 'status');
+    expect(screen.getByRole('button', { name: 'Town' })).toBeDisabled();
   });
 
   it('shows a truthful loading state while composition is pending', () => {

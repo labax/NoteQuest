@@ -1,18 +1,13 @@
 import type { SaveSlotService } from '@notequest/application';
+import type { RouteAdapter } from '@notequest/ui';
 import {
   createDexieSaveSlotService,
   createNoteQuestDatabase,
   initializeSaveSlotFoundation,
 } from '@notequest/infrastructure';
+import { createBrowserRouteAdapter } from '../routing';
 
 export const compositionRootName = 'web-composition' as const;
-
-export type ShellRoute = 'home';
-
-export interface RouteAdapter {
-  current(): ShellRoute;
-  navigate(route: ShellRoute): void;
-}
 
 export interface PwaStatusAdapter {
   getStatus(): Readonly<{
@@ -32,15 +27,6 @@ export interface AppComposition {
   readonly pwa: PwaStatusAdapter;
   readonly version: string;
   close(): void;
-}
-
-function createBrowserRouteAdapter(): RouteAdapter {
-  return {
-    current: () => 'home',
-    navigate: () => {
-      window.history.pushState(null, '', '/');
-    },
-  };
 }
 
 export function createPwaStatusAdapter(environment: object = navigator): PwaStatusAdapter {
