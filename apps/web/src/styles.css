@@ -87,6 +87,34 @@ h2 {
   gap: 1.25rem;
   padding: clamp(1rem, 4vw, 3rem);
 }
+.destination-nav {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.navigation-help {
+  grid-column: 1 / -1;
+  margin: -0.75rem 0 0;
+  color: #536174;
+  font-size: 0.875rem;
+}
+.destination-nav button[aria-current='page'] {
+  border-color: #172033;
+  background: #172033;
+  color: #fff;
+}
+.route-notice,
+.inline-error {
+  margin-bottom: 1rem;
+  border-left: 0.3rem solid #8a5b20;
+  padding: 0.75rem 1rem;
+  background: #fff5df;
+}
+#workspace-title:focus {
+  outline: 3px solid #245ea8;
+  outline-offset: 0.25rem;
+}
 .workspace,
 .context-panel,
 .state-card {

@@ -1,5 +1,6 @@
-import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
+import { Component, type ErrorInfo, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { SlotRecord } from '@notequest/application';
+import { routeMetadata, shellDestinations, type RouteState } from '@notequest/ui';
 import { createWebComposition, type AppComposition } from './composition';
 
 interface AppProps {
@@ -88,6 +89,8 @@ function statusLabel(status: 'not-checked'): string {
 }
 
 function ApplicationShell({ composition }: { readonly composition: AppComposition }) {
+  const [route, setRoute] = useState<RouteState>(() => composition.route.current());
+  const destinationHeading = useRef<HTMLHeadingElement>(null);
   const [slotRequest, setSlotRequest] = useState<
     | { readonly status: 'loading' }
     | { readonly status: 'failed' }
@@ -95,6 +98,13 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
   >({ status: 'loading' });
   const [slotRequestAttempt, setSlotRequestAttempt] = useState(0);
   const pwa = composition.pwa.getStatus();
+
+  useEffect(() => composition.route.subscribe(setRoute), [composition]);
+
+  useEffect(() => {
+    document.title = route.metadata.title;
+    destinationHeading.current?.focus();
+  }, [route]);
 
   useEffect(() => {
     let active = true;
@@ -132,12 +142,59 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
         </div>
       </header>
       <div className="shell-layout">
+        <nav
+          className="destination-nav"
+          aria-label="Primary destinations"
+          aria-describedby={route.slotId === undefined ? 'guarded-navigation-help' : undefined}
+        >
+          {shellDestinations
+            .filter((destination) => routeMetadata[destination].showInNavigation)
+            .map((destination) => {
+              const metadata = routeMetadata[destination];
+              const unavailable = metadata.requiresSelectedSlot && route.slotId === undefined;
+              return (
+                <button
+                  type="button"
+                  key={destination}
+                  aria-current={route.destination === destination ? 'page' : undefined}
+                  disabled={unavailable}
+                  aria-describedby={unavailable ? 'guarded-navigation-help' : undefined}
+                  onClick={() =>
+                    composition.route.navigate({
+                      destination,
+                      ...(route.slotId === undefined ? {} : { slotId: route.slotId }),
+                    })
+                  }
+                >
+                  {metadata.heading}
+                </button>
+              );
+            })}
+        </nav>
+        {route.slotId === undefined ? (
+          <p className="navigation-help" id="guarded-navigation-help">
+            Select an available save slot to open Town, Expedition, Inventory, History, or
+            Graveyard. Data and About remain available without a selected slot.
+          </p>
+        ) : null}
         <main className="workspace" aria-labelledby="workspace-title">
           <p className="eyebrow">Primary workspace</p>
-          <h2 id="workspace-title">Choose a local save slot</h2>
+          <h2 id="workspace-title" ref={destinationHeading} tabIndex={-1}>
+            {route.metadata.heading}
+          </h2>
+          {route.fallback !== null ? (
+            <div className="route-notice" role="status">
+              {route.fallback === 'unknown-route'
+                ? 'That page is not available. You are back at the save slots.'
+                : route.fallback === 'invalid-context'
+                  ? 'That save slot is not available. Choose an available save slot to continue.'
+                  : 'Select a save slot before opening that destination.'}
+            </div>
+          ) : null}
           <p className="intro">
-            This shell is ready for later gameplay screens. Starting or continuing play is not part
-            of this milestone.
+            {route.destination === 'save-slots'
+              ? 'Choose a local workspace. Opening a destination does not perform a game action.'
+              : 'This destination is represented in the shell. Its gameplay features are not available yet.'}
           </p>
           {slotRequest.status === 'failed' ? (
             <div className="inline-error" role="alert">
@@ -147,8 +204,10 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
               </button>
             </div>
           ) : null}
-          {slotRequest.status === 'loading' ? <p role="status">Loading local slots…</p> : null}
-          {slotRequest.status === 'ready' ? (
+          {route.destination === 'save-slots' && slotRequest.status === 'loading' ? (
+            <p role="status">Loading local slots…</p>
+          ) : null}
+          {route.destination === 'save-slots' && slotRequest.status === 'ready' ? (
             <div className="slot-grid">
               {slotRequest.slots.map((slot) => (
                 <article className="slot-card" key={slot.slotId}>
@@ -173,7 +232,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
       </div>
       <footer className="shell-footer">
         <span>Version {composition.version}</span>
-        <span>Route: {composition.route.current()}</span>
+        <span>Destination: {route.metadata.heading}</span>
       </footer>
     </div>
   );
