@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   repositoryEventFixture,
+  createValidPersistenceFixture,
   createPersistenceFaultController,
   PERSISTENCE_FAULT_SCENARIOS,
   repositoryFixtureSlotId,
@@ -37,6 +38,7 @@ function createTransactionTestDatabaseName(): string {
 
 async function withCoordinator<T>(
   run: (context: {
+    readonly database: Awaited<ReturnType<typeof createNoteQuestDatabase>>;
     readonly coordinator: ReturnType<typeof createDexieActionTransactionCoordinator>;
     readonly repositories: ReturnType<typeof createDexiePersistenceRepositories>;
   }) => Promise<T>,
@@ -53,6 +55,7 @@ async function withCoordinator<T>(
     );
     if (!initialized.ok) throw new Error(initialized.error.message);
     return await run({
+      database,
       coordinator: createDexieActionTransactionCoordinator(
         database,
         diagnostics,
@@ -65,6 +68,18 @@ async function withCoordinator<T>(
     database.close();
     await database.delete();
   }
+}
+
+async function readActionTransactionState(
+  database: Awaited<ReturnType<typeof createNoteQuestDatabase>>,
+) {
+  return {
+    workspace: await database.workspace.toArray(),
+    slots: await database.slots.toArray(),
+    records: await database.records.toArray(),
+    events: await database.events.toArray(),
+    snapshots: await database.snapshots.toArray(),
+  };
 }
 
 function createEnvelope(overrides: Partial<ActionCommitEnvelope> = {}): ActionCommitEnvelope {
@@ -204,6 +219,86 @@ describe('Dexie action transaction coordinator', () => {
       faults,
     );
   });
+
+  it.each(['transaction.after-required-writes', 'transaction.before-completion'] as const)(
+    'rolls every required store back to the prior valid fixture at %s',
+    async (point) => {
+      const faults = createPersistenceFaultController();
+      faults.arm(point);
+
+      await withCoordinator(
+        async ({ database, coordinator }) => {
+          const prior = createValidPersistenceFixture();
+          const priorPointer = {
+            ...repositoryWorkspaceFixture,
+            key: `slot.${repositoryFixtureSlotId}.lastValidPointer`,
+            value: { snapshotClass: 'last-valid', sourceRevision: 1 },
+          };
+          await database.transaction(
+            'rw',
+            database.workspace,
+            database.slots,
+            database.records,
+            database.events,
+            database.snapshots,
+            async () => {
+              await database.workspace.put(priorPointer);
+              await database.slots.put(prior.slot);
+              await database.records.bulkPut([...prior.records]);
+              await database.events.bulkPut([...prior.events]);
+              await database.snapshots.bulkPut([...prior.snapshots]);
+            },
+          );
+          const before = await readActionTransactionState(database);
+
+          const result = await coordinator.commit(
+            createEnvelope({
+              actionId: `action.fixture.abort.${point}`,
+              expectedRevision: prior.slot.revision,
+              stateRecords: [
+                { ...repositoryRecordFixture, body: { integrity: 'synthetic-attempted-change' } },
+              ],
+              events: [
+                {
+                  ...repositoryEventFixture,
+                  sequence: 2,
+                  eventType: 'event.synthetic_attempted_change',
+                },
+              ],
+              slotMetadata: { ...repositorySlotFixture, revision: 2 },
+              recoveryPointers: {
+                snapshots: [
+                  {
+                    ...repositorySnapshotFixture,
+                    sourceRevision: 2,
+                    body: { stateRootId: 'synthetic-attempted-root' },
+                  },
+                ],
+                workspaceEntries: [
+                  {
+                    ...priorPointer,
+                    value: { snapshotClass: 'last-valid', sourceRevision: 2 },
+                  },
+                ],
+              },
+            }),
+          );
+
+          expect(result).toMatchObject({
+            ok: false,
+            committed: false,
+            error: {
+              code: 'transaction_failed',
+              cause: { point, failure: 'storage_failure' },
+            },
+          });
+          expect(await readActionTransactionState(database)).toEqual(before);
+        },
+        {},
+        faults,
+      );
+    },
+  );
 
   it('models a lost receipt after a committed transaction without rolling state back', async () => {
     const faults = createPersistenceFaultController();

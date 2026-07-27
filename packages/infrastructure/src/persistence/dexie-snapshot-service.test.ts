@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto';
 import type { SaveSlotId } from '@notequest/domain';
 import {
   createPersistenceFaultController,
+  createProtectedSnapshotPersistenceFixture,
   PERSISTENCE_FAULT_SCENARIOS,
 } from '@notequest/test-support';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -281,20 +282,46 @@ describe('DexieSnapshotService', () => {
     expect(replaced).toMatchObject({ ok: true, value: { sourceRevision: 2 } });
   });
 
-  it('selects each protected class explicitly and rejects incompatible or invalid candidates', async () => {
-    const protectedClasses = ['last-valid', 'pre-migration', 'pre-import', 'pre-reset'] as const;
-    for (const snapshotClass of protectedClasses) {
-      await service.retainValidated(
-        candidate(0, { complete: true, snapshotClass }, { snapshotClass }),
-        () => true,
-      );
+  it('selects last-valid and every protected class from a recovery fixture without mutation', async () => {
+    const fixture = createProtectedSnapshotPersistenceFixture();
+    await database.slots.put(fixture.slot);
+    await database.records.bulkPut([...fixture.records]);
+    await database.snapshots.bulkPut([...fixture.snapshots]);
+    await database.staging.bulkPut([...fixture.staging]);
+    const before = {
+      slot: await database.slots.get(slotOne),
+      records: await database.records.toArray(),
+      snapshots: await database.snapshots.toArray(),
+      staging: await database.staging.toArray(),
+    };
+
+    for (const expected of fixture.snapshots) {
       await expect(
-        service.selectForRestore(slotOne, { ...eligible, snapshotClass }),
-      ).resolves.toMatchObject({
+        service.selectForRestore(slotOne, {
+          ...eligible,
+          snapshotClass: expected.snapshotClass,
+          validate: (selected) =>
+            (selected.body as { selectionMarker?: string }).selectionMarker ===
+            expected.snapshotClass,
+        }),
+      ).resolves.toEqual({
         ok: true,
-        value: { snapshot: { slotId: slotOne, snapshotClass, body: { complete: true } } },
+        value: { snapshot: expected, slotRevision: fixture.slot.revision },
       });
     }
+
+    await expect(service.listRecoverable(slotOne, eligible)).resolves.toEqual({
+      ok: true,
+      value: fixture.snapshots,
+    });
+    await expect(database.slots.get(slotOne)).resolves.toEqual(before.slot);
+    await expect(database.records.toArray()).resolves.toEqual(before.records);
+    await expect(database.snapshots.toArray()).resolves.toEqual(before.snapshots);
+    await expect(database.staging.toArray()).resolves.toEqual(before.staging);
+  });
+
+  it('rejects incompatible or invalid last-valid selection candidates', async () => {
+    await service.retainValidated(candidate(0, { complete: true }), () => true);
 
     await expect(
       service.selectForRestore(slotOne, {

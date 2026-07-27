@@ -9,6 +9,26 @@ import type {
 } from '@notequest/application';
 import type { SaveSlotId } from '@notequest/domain';
 
+export type SyntheticPersistenceState =
+  'empty' | 'valid' | 'large' | 'recoverable' | 'invalid' | 'incompatible';
+
+export interface SyntheticPersistenceFixture {
+  readonly state: SyntheticPersistenceState;
+  readonly slot: SlotRecord;
+  readonly records: readonly PersistedRecord[];
+  readonly events: readonly EventRecord[];
+  readonly snapshots: readonly SnapshotRecord[];
+  readonly staging: readonly StagingRecord[];
+}
+
+export interface LargePersistenceFixtureOptions {
+  /** A deliberately explicit scale knob for later quota and performance suites. */
+  readonly recordCount?: number;
+  readonly eventCount?: number;
+}
+
+export type SyntheticWorkflowPlaceholder = 'import' | 'migration';
+
 export const repositoryFixtureSlotId = '00000000-0000-4000-8000-000000000001' as SaveSlotId;
 
 export const repositoryWorkspaceFixture = {
@@ -83,3 +103,244 @@ export const repositoryStagingFixture = {
   status: 'pending',
   body: { validation: 'not-started' },
 } as const satisfies StagingRecord;
+
+const fixtureTimestamp = (offset: number): string =>
+  `2026-07-23T00:00:${String(offset).padStart(2, '0')}.000Z`;
+
+function fixtureSlot(overrides: Partial<SlotRecord> = {}): SlotRecord {
+  return { ...repositorySlotFixture, ...overrides };
+}
+
+function fixtureRecord(index: number): PersistedRecord {
+  const id = `synthetic-record-${String(index).padStart(4, '0')}`;
+  return {
+    slotId: repositoryFixtureSlotId,
+    recordType: 'fixture-state',
+    recordId: id,
+    ownerType: 'slot',
+    ownerId: repositoryFixtureSlotId,
+    updatedAt: fixtureTimestamp(10),
+    body: { id, ordinal: index, marker: `deterministic-value-${index % 17}` },
+  };
+}
+
+function fixtureEvent(sequence: number): EventRecord {
+  return {
+    slotId: repositoryFixtureSlotId,
+    sequence,
+    timestamp: fixtureTimestamp(20),
+    eventType: 'fixture.synthetic_transition',
+    aggregateType: 'fixture-state',
+    aggregateId: `synthetic-record-${String(sequence - 1).padStart(4, '0')}`,
+    retentionClass: 'active',
+    body: { sequence, outcome: `synthetic-outcome-${sequence % 11}` },
+  };
+}
+
+export function createEmptyPersistenceFixture(): SyntheticPersistenceFixture {
+  return {
+    state: 'empty',
+    slot: fixtureSlot({
+      revision: 0,
+      status: 'empty',
+      schemaVersion: null,
+      rulesVersion: null,
+      contentVersion: null,
+      currentSnapshotId: null,
+      lastValidSnapshotId: null,
+      recoveryAvailable: false,
+      integrityStatus: 'not_checked',
+    }),
+    records: [],
+    events: [],
+    snapshots: [],
+    staging: [],
+  };
+}
+
+export function createValidPersistenceFixture(): SyntheticPersistenceFixture {
+  return {
+    state: 'valid',
+    slot: fixtureSlot(),
+    records: [fixtureRecord(0)],
+    events: [fixtureEvent(1)],
+    snapshots: [{ ...repositorySnapshotFixture }],
+    staging: [],
+  };
+}
+
+export function createLargePersistenceFixture(
+  options: LargePersistenceFixtureOptions = {},
+): SyntheticPersistenceFixture {
+  const recordCount = options.recordCount ?? 256;
+  const eventCount = options.eventCount ?? 512;
+  if (!Number.isSafeInteger(recordCount) || recordCount < 1) {
+    throw new RangeError('recordCount must be a positive safe integer.');
+  }
+  if (!Number.isSafeInteger(eventCount) || eventCount < 1) {
+    throw new RangeError('eventCount must be a positive safe integer.');
+  }
+
+  return {
+    state: 'large',
+    slot: fixtureSlot({ revision: eventCount }),
+    records: Array.from({ length: recordCount }, (_, index) => fixtureRecord(index)),
+    events: Array.from({ length: eventCount }, (_, index) => fixtureEvent(index + 1)),
+    snapshots: [
+      {
+        ...repositorySnapshotFixture,
+        sourceRevision: eventCount,
+        body: { recordCount, eventCount, stateRootId: 'synthetic-large-root' },
+      },
+    ],
+    staging: [],
+  };
+}
+
+export function createRecoverablePersistenceFixture(): SyntheticPersistenceFixture {
+  const valid = createValidPersistenceFixture();
+  return {
+    ...valid,
+    state: 'recoverable',
+    slot: fixtureSlot({
+      revision: 2,
+      currentSnapshotId: null,
+      lastValidSnapshotId: 'last-valid',
+      integrityStatus: 'invalid',
+      status: 'isolated',
+    }),
+    records: [{ ...fixtureRecord(0), body: { integrity: 'synthetic-current-state-invalid' } }],
+    staging: [
+      {
+        ...repositoryStagingFixture,
+        stageType: 'recovery-validation',
+        body: { sourceSnapshotClass: 'last-valid', validation: 'pending' },
+      },
+    ],
+  };
+}
+
+export function createProtectedSnapshotPersistenceFixture(): SyntheticPersistenceFixture {
+  const recoverable = createRecoverablePersistenceFixture();
+  return {
+    ...recoverable,
+    snapshots: (['last-valid', 'pre-migration', 'pre-import', 'pre-reset'] as const).map(
+      (snapshotClass) => ({
+        ...repositorySnapshotFixture,
+        snapshotClass,
+        body: {
+          stateRootId: `synthetic-${snapshotClass}-root`,
+          selectionMarker: snapshotClass,
+        },
+      }),
+    ),
+  };
+}
+
+function createWorkflowPlaceholderPersistenceFixture(
+  workflow: SyntheticWorkflowPlaceholder,
+): SyntheticPersistenceFixture {
+  const valid = createValidPersistenceFixture();
+  const snapshotClass = workflow === 'import' ? 'pre-import' : 'pre-migration';
+  return {
+    ...valid,
+    state: 'recoverable',
+    slot: fixtureSlot({ status: workflow === 'import' ? 'importing' : 'migrating' }),
+    snapshots: [
+      ...valid.snapshots,
+      {
+        ...repositorySnapshotFixture,
+        snapshotClass,
+        body: {
+          stateRootId: `synthetic-${snapshotClass}-root`,
+          sourceRevision: valid.slot.revision,
+        },
+      },
+    ],
+    staging: [
+      {
+        ...repositoryStagingFixture,
+        stageId: `stage.synthetic-${workflow}`,
+        stageType: `${workflow}-validation`,
+        body:
+          workflow === 'import'
+            ? { phase: 'parsed', sourceSchemaVersion: 1, syntheticEntryCount: 1 }
+            : {
+                phase: 'reserved',
+                migrationId: 'schema-1-to-2-reserved',
+                fromSchemaVersion: 1,
+                toSchemaVersion: 2,
+              },
+      },
+    ],
+  };
+}
+
+export function createImportPlaceholderPersistenceFixture(): SyntheticPersistenceFixture {
+  return createWorkflowPlaceholderPersistenceFixture('import');
+}
+
+export function createMigrationPlaceholderPersistenceFixture(): SyntheticPersistenceFixture {
+  return createWorkflowPlaceholderPersistenceFixture('migration');
+}
+
+export function createQuotaPlaceholderPersistenceFixture(
+  options: LargePersistenceFixtureOptions = {},
+): SyntheticPersistenceFixture {
+  const large = createLargePersistenceFixture({
+    recordCount: options.recordCount ?? 1_024,
+    eventCount: options.eventCount ?? 2_048,
+  });
+  return {
+    ...large,
+    snapshots: large.snapshots.map((snapshot) => ({
+      ...snapshot,
+      body: {
+        ...(snapshot.body as Record<string, unknown>),
+        quotaScenario: 'synthetic-pressure-candidate',
+      },
+    })),
+  };
+}
+
+export function createInvalidPersistenceFixture(): SyntheticPersistenceFixture {
+  return {
+    state: 'invalid',
+    slot: fixtureSlot({
+      status: 'isolated',
+      integrityStatus: 'invalid',
+      currentSnapshotId: null,
+      lastValidSnapshotId: null,
+      recoveryAvailable: false,
+    }),
+    records: [{ ...fixtureRecord(0), body: { integrity: 'synthetic-reference-missing' } }],
+    events: [fixtureEvent(1)],
+    snapshots: [],
+    staging: [],
+  };
+}
+
+export function createIncompatiblePersistenceFixture(): SyntheticPersistenceFixture {
+  const unsupportedSchemaVersion = 2;
+  return {
+    state: 'incompatible',
+    slot: fixtureSlot({
+      status: 'isolated',
+      schemaVersion: unsupportedSchemaVersion,
+      integrityStatus: 'invalid',
+      currentSnapshotId: null,
+      lastValidSnapshotId: null,
+      recoveryAvailable: false,
+    }),
+    records: [],
+    events: [],
+    snapshots: [
+      {
+        ...repositorySnapshotFixture,
+        schemaVersion: unsupportedSchemaVersion,
+        body: { compatibility: 'synthetic-unsupported-newer-schema' },
+      },
+    ],
+    staging: [],
+  };
+}
