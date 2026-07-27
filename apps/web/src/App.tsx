@@ -28,7 +28,7 @@ export class RootErrorBoundary extends Component<BoundaryProps, BoundaryState> {
 
   render(): ReactNode {
     if (this.state.error !== null) {
-      return <RootErrorState onRetry={this.props.onRetry} />;
+      return <RenderErrorState onRetry={this.props.onRetry} />;
     }
     return this.props.children;
   }
@@ -52,8 +52,24 @@ function RootErrorState({ onRetry }: { readonly onRetry: () => void }) {
       <div className="state-card error-card" role="alert">
         <p className="eyebrow">Workspace unavailable</p>
         <h1 id="error-title">NoteQuest could not start</h1>
+        <p>The local workspace could not be checked. No game action was requested.</p>
+        <button type="button" onClick={onRetry}>
+          Try again
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function RenderErrorState({ onRetry }: { readonly onRetry: () => void }) {
+  return (
+    <main className="root-state" aria-labelledby="render-error-title">
+      <div className="state-card error-card" role="alert">
+        <p className="eyebrow">Display unavailable</p>
+        <h1 id="render-error-title">NoteQuest could not display this workspace</h1>
         <p>
-          No progress was changed or reported as saved. Check browser storage access and try again.
+          The application encountered an unexpected display error. Check the current data status
+          after retrying.
         </p>
         <button type="button" onClick={onRetry}>
           Try again
@@ -67,22 +83,39 @@ function slotLabel(slot: SlotRecord): string {
   return slot.status === 'empty' ? 'Empty — ready for a future adventure' : 'Local data available';
 }
 
+function statusLabel(status: 'not-checked'): string {
+  return status.replace('-', ' ');
+}
+
 function ApplicationShell({ composition }: { readonly composition: AppComposition }) {
-  const [slots, setSlots] = useState<readonly SlotRecord[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [slotRequest, setSlotRequest] = useState<
+    | { readonly status: 'loading' }
+    | { readonly status: 'failed' }
+    | { readonly status: 'ready'; readonly slots: readonly SlotRecord[] }
+  >({ status: 'loading' });
+  const [slotRequestAttempt, setSlotRequestAttempt] = useState(0);
   const pwa = composition.pwa.getStatus();
 
   useEffect(() => {
     let active = true;
-    void composition.services.saveSlots.list().then((result) => {
-      if (!active) return;
-      if (result.ok) setSlots(result.value);
-      else setLoadFailed(true);
-    });
+    void composition.services.saveSlots
+      .list()
+      .then((result) => {
+        if (!active) return;
+        setSlotRequest(result.ok ? { status: 'ready', slots: result.value } : { status: 'failed' });
+      })
+      .catch(() => {
+        if (active) setSlotRequest({ status: 'failed' });
+      });
     return () => {
       active = false;
     };
-  }, [composition]);
+  }, [composition, slotRequestAttempt]);
+
+  const retrySlots = () => {
+    setSlotRequest({ status: 'loading' });
+    setSlotRequestAttempt((value) => value + 1);
+  };
 
   return (
     <div className="app-shell">
@@ -92,9 +125,10 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           <h1>NoteQuest</h1>
         </div>
         <div className="status-cluster" aria-label="Application status">
-          <span>Save state: unchanged</span>
-          <span>{pwa.offlineReady ? 'Offline support available' : 'Offline support pending'}</span>
-          <span>{pwa.updateAvailable ? 'Update available' : 'App up to date'}</span>
+          <span>Save status: not checked</span>
+          <span>Offline readiness: {statusLabel(pwa.offlineReadiness)}</span>
+          <span>Updates: {statusLabel(pwa.updateStatus)}</span>
+          <span>Service workers: {pwa.serviceWorkerSupport}</span>
         </div>
       </header>
       <div className="shell-layout">
@@ -105,13 +139,18 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
             This shell is ready for later gameplay screens. Starting or continuing play is not part
             of this milestone.
           </p>
-          {loadFailed ? (
-            <p role="alert">Local slots could not be read. No progress was changed.</p>
+          {slotRequest.status === 'failed' ? (
+            <div className="inline-error" role="alert">
+              <p>Local slots could not be read.</p>
+              <button type="button" onClick={retrySlots}>
+                Retry local slots
+              </button>
+            </div>
           ) : null}
-          {slots === null && !loadFailed ? <p role="status">Loading local slots…</p> : null}
-          {slots !== null ? (
+          {slotRequest.status === 'loading' ? <p role="status">Loading local slots…</p> : null}
+          {slotRequest.status === 'ready' ? (
             <div className="slot-grid">
-              {slots.map((slot) => (
+              {slotRequest.slots.map((slot) => (
                 <article className="slot-card" key={slot.slotId}>
                   <h3>Slot {slot.slotIndex}</h3>
                   <p>{slotLabel(slot)}</p>

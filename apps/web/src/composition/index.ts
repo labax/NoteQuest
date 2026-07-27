@@ -15,7 +15,11 @@ export interface RouteAdapter {
 }
 
 export interface PwaStatusAdapter {
-  getStatus(): Readonly<{ offlineReady: boolean; updateAvailable: boolean }>;
+  getStatus(): Readonly<{
+    serviceWorkerSupport: 'supported' | 'unsupported';
+    offlineReadiness: 'not-checked';
+    updateStatus: 'not-checked';
+  }>;
 }
 
 export interface AppServices {
@@ -39,11 +43,12 @@ function createBrowserRouteAdapter(): RouteAdapter {
   };
 }
 
-function createPwaStatusAdapter(): PwaStatusAdapter {
+export function createPwaStatusAdapter(environment: object = navigator): PwaStatusAdapter {
   return {
     getStatus: () => ({
-      offlineReady: navigator.onLine && 'serviceWorker' in navigator,
-      updateAvailable: false,
+      serviceWorkerSupport: 'serviceWorker' in environment ? 'supported' : 'unsupported',
+      offlineReadiness: 'not-checked',
+      updateStatus: 'not-checked',
     }),
   };
 }
