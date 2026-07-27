@@ -229,6 +229,16 @@ describe('Dexie action transaction coordinator', () => {
       await withCoordinator(
         async ({ database, coordinator }) => {
           const prior = createValidPersistenceFixture();
+          expect(prior.slot).toMatchObject({
+            recoveryAvailable: true,
+            lastValidSnapshotId: 'last-valid',
+          });
+          expect(prior.snapshots).toContainEqual(
+            expect.objectContaining({
+              slotId: prior.slot.slotId,
+              snapshotClass: prior.slot.lastValidSnapshotId,
+            }),
+          );
           const priorPointer = {
             ...repositoryWorkspaceFixture,
             key: `slot.${repositoryFixtureSlotId}.lastValidPointer`,

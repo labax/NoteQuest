@@ -24,6 +24,11 @@ isolated invalid state, unsupported-newer schema state, and caller-selected reco
 scale controls are the preparation point for later quota and performance suites; they do not claim a
 browser quota boundary or performance certification in this subtask.
 
+Recovery metadata is derived at the fixture boundary: every recovery-enabled slot points to the
+seeded `last-valid` protected snapshot key, while every non-recoverable slot has a null pointer. Tests
+apply this contract to valid, large, recoverable, protected-snapshot, import, migration, quota, empty,
+invalid, and incompatible builders so composed fixtures cannot inherit a stale pointer.
+
 Transaction abort/no-change and snapshot creation, replacement, retention, and recovery behavior are
 exercised by the infrastructure persistence suites. The transaction coordinator tests inject faults
 after required writes and immediately before completion, then compare every transaction-owned store

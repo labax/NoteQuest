@@ -30,6 +30,7 @@ export interface LargePersistenceFixtureOptions {
 export type SyntheticWorkflowPlaceholder = 'import' | 'migration';
 
 export const repositoryFixtureSlotId = '00000000-0000-4000-8000-000000000001' as SaveSlotId;
+export const repositoryLastValidSnapshotId = 'last-valid';
 
 export const repositoryWorkspaceFixture = {
   key: 'release.current',
@@ -49,7 +50,7 @@ export const repositorySlotFixture = {
   rulesVersion: 'rules.test@0.1',
   contentVersion: 'content.test@0.1',
   currentSnapshotId: 'snapshot.fixture',
-  lastValidSnapshotId: 'snapshot.fixture',
+  lastValidSnapshotId: repositoryLastValidSnapshotId,
   recoveryAvailable: true,
   integrityStatus: 'valid',
 } as const satisfies SlotRecord;
@@ -111,6 +112,23 @@ function fixtureSlot(overrides: Partial<SlotRecord> = {}): SlotRecord {
   return { ...repositorySlotFixture, ...overrides };
 }
 
+function recoveryFixtureParts(
+  slotOverrides: Omit<
+    Partial<SlotRecord>,
+    'slotId' | 'lastValidSnapshotId' | 'recoveryAvailable'
+  > = {},
+  snapshotOverrides: Omit<Partial<SnapshotRecord>, 'slotId' | 'snapshotClass'> = {},
+): Pick<SyntheticPersistenceFixture, 'slot' | 'snapshots'> {
+  return {
+    slot: fixtureSlot({
+      ...slotOverrides,
+      lastValidSnapshotId: repositoryLastValidSnapshotId,
+      recoveryAvailable: true,
+    }),
+    snapshots: [{ ...repositorySnapshotFixture, ...snapshotOverrides }],
+  };
+}
+
 function fixtureRecord(index: number): PersistedRecord {
   const id = `synthetic-record-${String(index).padStart(4, '0')}`;
   return {
@@ -161,10 +179,9 @@ export function createEmptyPersistenceFixture(): SyntheticPersistenceFixture {
 export function createValidPersistenceFixture(): SyntheticPersistenceFixture {
   return {
     state: 'valid',
-    slot: fixtureSlot(),
+    ...recoveryFixtureParts(),
     records: [fixtureRecord(0)],
     events: [fixtureEvent(1)],
-    snapshots: [{ ...repositorySnapshotFixture }],
     staging: [],
   };
 }
@@ -183,16 +200,15 @@ export function createLargePersistenceFixture(
 
   return {
     state: 'large',
-    slot: fixtureSlot({ revision: eventCount }),
-    records: Array.from({ length: recordCount }, (_, index) => fixtureRecord(index)),
-    events: Array.from({ length: eventCount }, (_, index) => fixtureEvent(index + 1)),
-    snapshots: [
+    ...recoveryFixtureParts(
+      { revision: eventCount },
       {
-        ...repositorySnapshotFixture,
         sourceRevision: eventCount,
         body: { recordCount, eventCount, stateRootId: 'synthetic-large-root' },
       },
-    ],
+    ),
+    records: Array.from({ length: recordCount }, (_, index) => fixtureRecord(index)),
+    events: Array.from({ length: eventCount }, (_, index) => fixtureEvent(index + 1)),
     staging: [],
   };
 }
@@ -202,13 +218,13 @@ export function createRecoverablePersistenceFixture(): SyntheticPersistenceFixtu
   return {
     ...valid,
     state: 'recoverable',
-    slot: fixtureSlot({
+    slot: {
+      ...valid.slot,
       revision: 2,
       currentSnapshotId: null,
-      lastValidSnapshotId: 'last-valid',
       integrityStatus: 'invalid',
       status: 'isolated',
-    }),
+    },
     records: [{ ...fixtureRecord(0), body: { integrity: 'synthetic-current-state-invalid' } }],
     staging: [
       {
@@ -245,7 +261,7 @@ function createWorkflowPlaceholderPersistenceFixture(
   return {
     ...valid,
     state: 'recoverable',
-    slot: fixtureSlot({ status: workflow === 'import' ? 'importing' : 'migrating' }),
+    slot: { ...valid.slot, status: workflow === 'import' ? 'importing' : 'migrating' },
     snapshots: [
       ...valid.snapshots,
       {

@@ -20,26 +20,27 @@ certification and does not claim that the M7 gate has run.
 The following commands passed locally on 2026-07-27:
 
 - `npm ci` — restored the committed dependency tree (310 packages) and completed the audit step.
-- `npm test -- --run packages/test-support/src/persistence-fixtures.test.ts packages/test-support/src/persistence-fault-controller.test.ts packages/infrastructure/src/persistence/dexie-action-transaction-coordinator.test.ts packages/infrastructure/src/persistence/dexie-snapshot-service.test.ts tests/action-transaction-coordinator.integration.test.ts tests/save-slot-reliability.integration.test.ts tests/production-persistence-fault-boundary.test.ts`
-  — 62 focused persistence fixture, abort, recovery, reliability, and production-boundary tests passed
-  across seven files.
+- `npm test -- --run packages/test-support/src/persistence-fixtures.test.ts packages/infrastructure/src/persistence/dexie-action-transaction-coordinator.test.ts packages/infrastructure/src/persistence/dexie-snapshot-service.test.ts`
+  — 60 focused fixture-contract, abort, and recovery tests passed across three files.
 - `npm run verify` — the configured repository verification chain passed:
   - `npm run format:check` passed;
   - `npm run lint` completed with zero warnings;
   - `npm run typecheck` completed successfully under strict TypeScript;
-  - `npm test` passed 191 tests across 24 files; and
+  - `npm test` passed 201 tests across 24 files; and
   - `npm run build` repeated strict typechecking, built the Vite production application, and verified
     that three emitted production files contain no test persistence fault controls.
 - `git diff --check` — the final patch contains no whitespace errors.
 
-The focused test run completed in approximately 8.6 seconds, the full Vitest run in approximately
-24.2 seconds, and the Vite build in approximately 10.8 seconds in this container. These observations
+The focused test run completed in approximately 3.0 seconds, the full Vitest run in approximately
+15.3 seconds, and the Vite build in approximately 2.0 seconds in this container. These observations
 are diagnostic notes only, not stable budgets or browser performance evidence.
 
 ## Verified guarantees
 
 - Fixture builders use fixed identifiers, timestamps, ordering, and synthetic payloads; they contain
   no real player saves, private notes, personal identifiers, or unapproved source content.
+- Every recovery-enabled fixture points to its seeded `last-valid` protected snapshot; fixtures that
+  are not recoverable expose a null recovery pointer instead of inherited metadata.
 - Representative injected transaction failures return no success and leave the complete prior state
   unchanged, including records, events, RNG/result rows, slot metadata, recovery snapshots, and
   workspace pointers.

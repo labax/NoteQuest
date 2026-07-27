@@ -14,6 +14,42 @@ import {
 } from './persistence-fixtures';
 
 describe('synthetic persistence fixture builders', () => {
+  it.each([
+    ['valid', createValidPersistenceFixture],
+    ['large', () => createLargePersistenceFixture({ recordCount: 2, eventCount: 3 })],
+    ['recoverable', createRecoverablePersistenceFixture],
+    ['protected snapshot', createProtectedSnapshotPersistenceFixture],
+    ['import', createImportPlaceholderPersistenceFixture],
+    ['migration', createMigrationPlaceholderPersistenceFixture],
+    ['quota', () => createQuotaPlaceholderPersistenceFixture({ recordCount: 2, eventCount: 3 })],
+  ] as const)(
+    'keeps the %s recovery pointer backed by its seeded last-valid snapshot',
+    (_name, create) => {
+      const fixture = create();
+      const pointer = fixture.slot.lastValidSnapshotId;
+
+      expect(fixture.slot.recoveryAvailable).toBe(true);
+      expect(pointer).toBe('last-valid');
+      expect(
+        fixture.snapshots.some(
+          (snapshot) =>
+            snapshot.slotId === fixture.slot.slotId && snapshot.snapshotClass === pointer,
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each([
+    ['empty', createEmptyPersistenceFixture],
+    ['invalid', createInvalidPersistenceFixture],
+    ['incompatible', createIncompatiblePersistenceFixture],
+  ] as const)('clears recovery metadata for the non-recoverable %s fixture', (_name, create) => {
+    const fixture = create();
+
+    expect(fixture.slot.recoveryAvailable).toBe(false);
+    expect(fixture.slot.lastValidSnapshotId).toBeNull();
+  });
+
   it('builds each representative state with explicit integrity and recovery signals', () => {
     const empty = createEmptyPersistenceFixture();
     const valid = createValidPersistenceFixture();
