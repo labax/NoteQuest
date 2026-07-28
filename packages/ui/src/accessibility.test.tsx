@@ -97,6 +97,161 @@ describe('focus foundations', () => {
     containment.deactivate();
     expect(open).toHaveFocus();
   });
+
+  it.each([
+    [
+      'hidden',
+      (wrapper: HTMLElement) => (wrapper.hidden = true),
+      (wrapper: HTMLElement) => (wrapper.hidden = false),
+    ],
+    [
+      'inert',
+      (wrapper: HTMLElement) => wrapper.setAttribute('inert', ''),
+      (wrapper: HTMLElement) => wrapper.removeAttribute('inert'),
+    ],
+    [
+      'aria-hidden',
+      (wrapper: HTMLElement) => wrapper.setAttribute('aria-hidden', 'true'),
+      (wrapper: HTMLElement) => wrapper.removeAttribute('aria-hidden'),
+    ],
+    [
+      'display',
+      (wrapper: HTMLElement) => (wrapper.style.display = 'none'),
+      (wrapper: HTMLElement) => wrapper.style.removeProperty('display'),
+    ],
+    [
+      'visibility',
+      (wrapper: HTMLElement) => (wrapper.style.visibility = 'hidden'),
+      (wrapper: HTMLElement) => wrapper.style.removeProperty('visibility'),
+    ],
+    [
+      'content visibility',
+      (wrapper: HTMLElement) => (wrapper.style.contentVisibility = 'hidden'),
+      (wrapper: HTMLElement) => wrapper.style.removeProperty('content-visibility'),
+    ],
+  ])(
+    'does not enter a dialog under a %s ancestor and can enter after recovery',
+    (_name, hide, reveal) => {
+      document.body.innerHTML = `
+        <button id="open">Open</button>
+        <div id="wrapper"><div id="dialog" role="dialog"><button id="inside">Inside</button></div></div>`;
+      const open = document.querySelector<HTMLButtonElement>('#open')!;
+      const wrapper = document.querySelector<HTMLElement>('#wrapper')!;
+      const dialog = document.querySelector<HTMLElement>('#dialog')!;
+      const inside = document.querySelector<HTMLButtonElement>('#inside')!;
+      hide(wrapper);
+      open.focus();
+
+      const unavailable = containFocus(dialog);
+      expect(open).toHaveFocus();
+      expect(dialog).not.toHaveAttribute('tabindex');
+      unavailable.deactivate();
+      expect(open).toHaveFocus();
+
+      reveal(wrapper);
+      const available = containFocus(dialog);
+      expect(inside).toHaveFocus();
+      available.deactivate();
+      expect(open).toHaveFocus();
+    },
+  );
+
+  it('uses the checked radio as the group sequential-focus candidate and wraps to it', () => {
+    document.body.innerHTML = `
+      <button id="open">Open</button>
+      <div id="dialog" role="dialog">
+        <input id="unchecked" type="radio" name="route">
+        <input id="checked" type="radio" name="route" checked>
+        <button id="close">Close</button>
+      </div>`;
+    const open = document.querySelector<HTMLButtonElement>('#open')!;
+    const dialog = document.querySelector<HTMLElement>('#dialog')!;
+    const unchecked = document.querySelector<HTMLInputElement>('#unchecked')!;
+    const checked = document.querySelector<HTMLInputElement>('#checked')!;
+    const close = document.querySelector<HTMLButtonElement>('#close')!;
+    open.focus();
+
+    const containment = containFocus(dialog, { initialFocus: unchecked });
+    expect(checked).toHaveFocus();
+    close.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(checked).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(close).toHaveFocus();
+    containment.deactivate();
+    expect(open).toHaveFocus();
+  });
+
+  it('uses the first enabled radio when a named group has no checked member', () => {
+    document.body.innerHTML = `
+      <button id="open">Open</button>
+      <div id="dialog" role="dialog">
+        <input id="disabled" type="radio" name="route" disabled>
+        <input id="first" type="radio" name="route">
+        <input id="second" type="radio" name="route">
+        <button id="close">Close</button>
+      </div>`;
+    const open = document.querySelector<HTMLButtonElement>('#open')!;
+    const dialog = document.querySelector<HTMLElement>('#dialog')!;
+    const first = document.querySelector<HTMLInputElement>('#first')!;
+    const close = document.querySelector<HTMLButtonElement>('#close')!;
+    open.focus();
+
+    const containment = containFocus(dialog);
+    expect(first).toHaveFocus();
+    close.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(first).toHaveFocus();
+    containment.deactivate();
+    expect(open).toHaveFocus();
+  });
+
+  it('does not substitute an unchecked radio for a disabled checked group member', () => {
+    document.body.innerHTML = `
+      <button id="open">Open</button>
+      <div id="dialog" role="dialog">
+        <input type="radio" name="route" checked disabled>
+        <input id="unchecked" type="radio" name="route">
+        <button id="close">Close</button>
+      </div>`;
+    const open = document.querySelector<HTMLButtonElement>('#open')!;
+    const dialog = document.querySelector<HTMLElement>('#dialog')!;
+    const close = document.querySelector<HTMLButtonElement>('#close')!;
+    open.focus();
+
+    const containment = containFocus(dialog);
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(close).toHaveFocus();
+    containment.deactivate();
+    expect(open).toHaveFocus();
+  });
+
+  it('uses only the first summary in a details element as a native sequential target', () => {
+    document.body.innerHTML = `
+      <button id="open">Open</button>
+      <div id="dialog" role="dialog">
+        <a id="no-href">Not a link</a>
+        <details>
+          <summary id="first-summary">Details</summary>
+          <summary id="second-summary">Not a disclosure control</summary>
+        </details>
+        <button id="close">Close</button>
+      </div>`;
+    const open = document.querySelector<HTMLButtonElement>('#open')!;
+    const dialog = document.querySelector<HTMLElement>('#dialog')!;
+    const firstSummary = document.querySelector<HTMLElement>('#first-summary')!;
+    const close = document.querySelector<HTMLButtonElement>('#close')!;
+    open.focus();
+
+    const containment = containFocus(dialog);
+    expect(firstSummary).toHaveFocus();
+    close.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(firstSummary).toHaveFocus();
+    containment.deactivate();
+    expect(open).toHaveFocus();
+  });
 });
 
 describe('announcement foundations', () => {

@@ -9,11 +9,13 @@ const FOCUSABLE = [
   'select:not([disabled])',
   'textarea:not([disabled])',
   'summary',
+  'audio[controls]',
+  'video[controls]',
   '[contenteditable="true"]',
   '[tabindex]',
 ].join(',');
 
-function isHiddenByTree(element: HTMLElement, boundary: HTMLElement): boolean {
+function isHiddenByTree(element: HTMLElement): boolean {
   let current: HTMLElement | null = element;
   while (current !== null) {
     if (
@@ -40,16 +42,13 @@ function isHiddenByTree(element: HTMLElement, boundary: HTMLElement): boolean {
       );
       if (summary === undefined || !summary.contains(element)) return true;
     }
-    if (current === boundary) break;
     current = current.parentElement;
   }
   return false;
 }
 
-function isTabbable(element: HTMLElement, container: HTMLElement): boolean {
-  if (!element.isConnected || !container.contains(element) || !element.matches(FOCUSABLE)) {
-    return false;
-  }
+function isSequentiallyAvailable(element: HTMLElement): boolean {
+  if (!element.isConnected || !element.matches(FOCUSABLE)) return false;
   if (
     element.matches(':disabled') ||
     element.getAttribute('aria-disabled') === 'true' ||
@@ -57,7 +56,40 @@ function isTabbable(element: HTMLElement, container: HTMLElement): boolean {
   ) {
     return false;
   }
-  return !isHiddenByTree(element, container);
+  if (element instanceof HTMLElement && element.tagName === 'SUMMARY') {
+    const details = element.parentElement;
+    if (!(details instanceof HTMLDetailsElement)) return false;
+    const firstSummary = Array.from(details.children).find((child) => child.tagName === 'SUMMARY');
+    if (firstSummary !== element) return false;
+  }
+  return !isHiddenByTree(element);
+}
+
+function isBaseTabbable(element: HTMLElement, container: HTMLElement): boolean {
+  if (!container.contains(element)) return false;
+  if (!isSequentiallyAvailable(element)) return false;
+  return true;
+}
+
+function radioGroup(radio: HTMLInputElement): HTMLInputElement[] {
+  if (radio.name === '') return [radio];
+  const root = radio.getRootNode();
+  if (!(root instanceof Document || root instanceof ShadowRoot)) return [radio];
+  return Array.from(root.querySelectorAll<HTMLInputElement>('input[type="radio"]')).filter(
+    (candidate) => candidate.name === radio.name && candidate.form === radio.form,
+  );
+}
+
+function isTabbable(element: HTMLElement, container: HTMLElement): boolean {
+  if (!isBaseTabbable(element, container)) return false;
+  if (!(element instanceof HTMLInputElement) || element.type !== 'radio' || element.name === '') {
+    return true;
+  }
+
+  const group = radioGroup(element);
+  const checked = group.find((candidate) => candidate.checked);
+  if (checked !== undefined) return checked === element;
+  return group.find((candidate) => isSequentiallyAvailable(candidate)) === element;
 }
 
 function visibleFocusable(container: HTMLElement): HTMLElement[] {
@@ -121,13 +153,21 @@ export function containFocus(
     }
   };
   container.addEventListener('keydown', keydown);
+  const containerAvailable = container.isConnected && !isHiddenByTree(container);
   const initial =
+    containerAvailable &&
     options.initialFocus !== null &&
     options.initialFocus !== undefined &&
     isTabbable(options.initialFocus, container)
       ? options.initialFocus
-      : visibleFocusable(container)[0];
-  if (!focusTarget(initial ?? container) && initial !== undefined) focusTarget(container);
+      : containerAvailable
+        ? visibleFocusable(container)[0]
+        : undefined;
+  if (initial !== undefined) {
+    if (!focusTarget(initial)) focusTarget(container);
+  } else if (containerAvailable) {
+    focusTarget(container);
+  }
   return {
     deactivate: ({ restore = true } = {}) => {
       container.removeEventListener('keydown', keydown);
