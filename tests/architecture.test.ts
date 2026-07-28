@@ -201,6 +201,12 @@ describe('architecture workspace scaffold', () => {
     }
   });
 
+  it('keeps release-ID regression coverage in the standard CI test path', () => {
+    const rootPackage = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+
+    expect(rootPackage.scripts['test:ci']).toBe('npm run test && npm run test:pwa-release-id');
+  });
+
   it('keeps shared layers in packages and web composition in apps/web', () => {
     for (const workspace of [
       'domain',

@@ -1,4 +1,12 @@
-import { Component, type ErrorInfo, type ReactNode, useEffect, useRef, useState } from 'react';
+import {
+  Component,
+  type ErrorInfo,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { describeSaveSlotCapability, type SlotRecord } from '@notequest/application';
 import { routeMetadata, shellDestinations, type RouteState } from '@notequest/ui';
 import { createWebComposition, type AppComposition } from './composition';
@@ -80,7 +88,7 @@ function RenderErrorState({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
-function statusLabel(status: 'not-checked'): string {
+function statusLabel(status: string): string {
   return status.replace('-', ' ');
 }
 
@@ -159,7 +167,11 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
     | { readonly status: 'failed'; readonly slotId: string }
   >({ status: 'idle' });
   const selectionPending = useRef<string | null>(null);
-  const pwa = composition.pwa.getStatus();
+  const pwa = useSyncExternalStore(
+    composition.pwa.subscribe,
+    composition.pwa.getStatus,
+    composition.pwa.getStatus,
+  );
 
   useEffect(() => composition.route.subscribe(setRoute), [composition]);
 
@@ -255,6 +267,9 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           <span>Offline readiness: {statusLabel(pwa.offlineReadiness)}</span>
           <span>Updates: {statusLabel(pwa.updateStatus)}</span>
           <span>Service workers: {pwa.serviceWorkerSupport}</span>
+          {pwa.offlineReadiness === 'unavailable' ? (
+            <span role="status">Offline relaunch is unavailable; browser play can continue.</span>
+          ) : null}
         </div>
       </header>
       <div className="shell-layout">
