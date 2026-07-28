@@ -8,7 +8,14 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { describeSaveSlotCapability, type SlotRecord } from '@notequest/application';
-import { routeMetadata, shellDestinations, type RouteState } from '@notequest/ui';
+import {
+  AnnouncementRegions,
+  createAnnouncementService,
+  focusTarget,
+  routeMetadata,
+  shellDestinations,
+  type RouteState,
+} from '@notequest/ui';
 import { createWebComposition, type AppComposition } from './composition';
 import { presentPwaShellStatus } from './pwa/status-presentation';
 
@@ -154,6 +161,7 @@ function DataSlotReview({
 }
 
 function ApplicationShell({ composition }: { readonly composition: AppComposition }) {
+  const [announcements] = useState(createAnnouncementService);
   const [route, setRoute] = useState<RouteState>(() => composition.route.current());
   const destinationHeading = useRef<HTMLHeadingElement>(null);
   const [slotRequest, setSlotRequest] = useState<
@@ -192,8 +200,24 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
 
   useEffect(() => {
     document.title = route.metadata.title;
-    destinationHeading.current?.focus();
-  }, [route]);
+    focusTarget(destinationHeading.current);
+    announcements.announce('route', `${route.metadata.heading} page.`);
+  }, [announcements, route]);
+
+  useEffect(() => {
+    if (pwa.offlineReadiness === 'ready') {
+      announcements.announce('offline-ready', pwaPresentation.offlineMessage);
+    }
+  }, [announcements, pwa.offlineReadiness, pwaPresentation.offlineMessage]);
+
+  useEffect(() => {
+    if (pwaPresentation.updateMessage !== null) {
+      announcements.announce(
+        pwa.updateState === 'failed' ? 'failed' : 'update',
+        `${pwaPresentation.updateLabel}. ${pwaPresentation.updateMessage}`,
+      );
+    }
+  }, [announcements, pwa.updateState, pwaPresentation.updateLabel, pwaPresentation.updateMessage]);
 
   useEffect(() => {
     let active = true;
@@ -272,6 +296,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
 
   return (
     <div className="app-shell">
+      <AnnouncementRegions service={announcements} />
       <header className="shell-header">
         <div>
           <p className="eyebrow">Local-first workspace</p>
@@ -281,9 +306,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           <span>Save status: not checked</span>
           <span>{pwaPresentation.connectivity}</span>
           <strong>{pwaPresentation.offlineLabel}</strong>
-          <span role="status" aria-live="polite" aria-atomic="true">
-            {pwaPresentation.offlineMessage}
-          </span>
+          <span role="status">{pwaPresentation.offlineMessage}</span>
           <strong>{pwaPresentation.updateLabel}</strong>
           {pwaPresentation.updateMessage ? <span>{pwaPresentation.updateMessage}</span> : null}
           {pwa.failures.map((failure) => (

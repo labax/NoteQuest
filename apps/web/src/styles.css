@@ -138,6 +138,10 @@ h2 {
   outline: 3px solid #245ea8;
   outline-offset: 0.25rem;
 }
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid #245ea8;
+  outline-offset: 0.25rem;
+}
 .workspace,
 .context-panel,
 .state-card {
@@ -238,6 +242,16 @@ h2 {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 .slot-card button {
   width: 100%;
