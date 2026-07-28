@@ -66,3 +66,8 @@ No browser offline/repeat-launch/update smoke test was run during this review fo
 repository does not configure a browser E2E runner or disposable multi-release service-worker test
 host. That evidence remains manual/deferred and is not implied by the successful Workbox/jsdom unit
 checks.
+
+The final PR #160 follow-up additionally exercised retryable first-install registration, bounded
+storage rechecks, and rejected save-slot promises. `test:ci` passed 380 Vitest tests and 3 release-ID
+tests; the production build passed with release ID `pr-160-follow-up`. These checks do not replace the
+manual browser evidence above.

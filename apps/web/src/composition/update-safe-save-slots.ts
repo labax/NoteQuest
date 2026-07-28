@@ -10,17 +10,27 @@ export function createUpdateSafeSaveSlotService(
     lookup: (slotId) => base.lookup(slotId),
     async select(slotId) {
       safety.beginCommand(slotId);
-      const result = await base.select(slotId);
-      if (result.ok) safety.acceptDurableSlot(result.value.slot);
-      else safety.failSave(slotId);
-      return result;
+      try {
+        const result = await base.select(slotId);
+        if (result.ok) safety.acceptDurableSlot(result.value.slot);
+        else safety.failSave(slotId);
+        return result;
+      } catch (error) {
+        safety.failSave(slotId);
+        throw error;
+      }
     },
     async updateMetadata(slotId, update) {
       safety.beginSave(slotId);
-      const result = await base.updateMetadata(slotId, update);
-      if (result.ok) safety.acceptDurableSlot(result.value);
-      else safety.failSave(slotId);
-      return result;
+      try {
+        const result = await base.updateMetadata(slotId, update);
+        if (result.ok) safety.acceptDurableSlot(result.value);
+        else safety.failSave(slotId);
+        return result;
+      } catch (error) {
+        safety.failSave(slotId);
+        throw error;
+      }
     },
   };
 }

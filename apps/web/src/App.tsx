@@ -289,8 +289,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           {pwa.failures.map((failure) => (
             <span key={failure.code} data-diagnostic-code={failure.code}>
               {failure.guidance}{' '}
-              {failure.retryable &&
-              (failure.code === 'cache-check-failed' || failure.code === 'update-failed') ? (
+              {failure.retryable ? (
                 <button
                   type="button"
                   disabled={retryPending !== null}

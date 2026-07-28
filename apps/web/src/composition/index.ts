@@ -51,19 +51,20 @@ export async function createWebComposition(): Promise<AppComposition> {
     throw new Error(initialized.error.message);
   }
 
-  const pwa = createPwaLifecycleAdapter();
-  const updates = createPwaUpdateCoordinator(pwa, {
-    onlineState: navigator.onLine ? 'online' : 'offline',
-  });
-  updates.updateStorageCapability(
-    await checkStorageCapability(async () => {
+  const checkApplicationStorage = () =>
+    checkStorageCapability(async () => {
       const key = 'workspace.local.capability-probe';
       await database.transaction('rw', database.workspace, async () => {
         await database.workspace.put({ key, value: { probe: true } });
         await database.workspace.delete(key);
       });
-    }, navigator.storage),
-  );
+    }, navigator.storage);
+  const pwa = createPwaLifecycleAdapter();
+  const updates = createPwaUpdateCoordinator(pwa, {
+    onlineState: navigator.onLine ? 'online' : 'offline',
+    retryStorage: checkApplicationStorage,
+  });
+  updates.updateStorageCapability(await checkApplicationStorage());
   const updateSafety = createUpdateSafetyState();
   const baseSaveSlots = createDexieSaveSlotService(database);
   const selected = await database.workspace.get(NOTEQUEST_SELECTED_SLOT_KEY);

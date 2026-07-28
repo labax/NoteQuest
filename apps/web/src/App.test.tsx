@@ -40,8 +40,11 @@ function fixtureComposition(
     },
   }),
   route: RouteAdapter = fixtureRoute(),
+  retryStorage?: () => Promise<'not-checked' | 'available' | 'limited' | 'unavailable'>,
 ): AppComposition {
-  const updates = createPwaUpdateCoordinator(pwa);
+  const updates = createPwaUpdateCoordinator(pwa, {
+    ...(retryStorage ? { retryStorage } : {}),
+  });
   const updateSafety = createUpdateSafetyState();
   updates.updateSafety({
     safePoint: 'durable',
@@ -267,6 +270,92 @@ describe('App shell', () => {
     expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
     expect(screen.getAllByRole('button', { name: 'Start new game' })[0]).toBeEnabled();
   });
+
+  it('retries first-install registration once and verifies the new controller without mutation', async () => {
+    let messageReceived:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
+    const controller = { postMessage: vi.fn() };
+    const registered = {
+      waiting: null,
+      installing: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    const register = vi.fn().mockRejectedValueOnce(new Error('first install failed'));
+    const environment = {
+      serviceWorker: {
+        controller: null as typeof controller | null,
+        register,
+        addEventListener: vi.fn(
+          (
+            type: string,
+            listener: (event: { readonly data: unknown; readonly source?: unknown }) => void,
+          ) => {
+            if (type === 'message') messageReceived = listener;
+          },
+        ),
+        removeEventListener: vi.fn(),
+      },
+    };
+    register.mockImplementationOnce(async () => {
+      environment.serviceWorker.controller = controller;
+      return registered;
+    });
+    const pwa = createPwaStatusAdapter(environment);
+    const composition = fixtureComposition(undefined, pwa);
+    render(<App compose={() => Promise.resolve(composition)} />);
+    await pwa.register();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry check' }));
+    expect(register).toHaveBeenCalledTimes(2);
+    const request = controller.postMessage.mock.calls[0]?.[0] as { requestId: string };
+    act(() =>
+      messageReceived?.({
+        source: controller,
+        data: {
+          type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+          requestId: request.requestId,
+          ready: true,
+        },
+      }),
+    );
+    expect(screen.getByText('Offline readiness not verified')).toBeInTheDocument();
+    expect(screen.getByLabelText('Application status')).toHaveTextContent('Cache checkready');
+    expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+    expect(composition.reload).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['limited', 'available', true],
+    ['unavailable', 'unavailable', false],
+  ] as const)(
+    'runs a bounded storage recheck from %s without touching slots',
+    async (initial, result, succeeds) => {
+      const recheck = deferred<'available' | 'unavailable'>();
+      const retryStorage = vi.fn(() => recheck.promise);
+      const composition = fixtureComposition(undefined, undefined, undefined, retryStorage);
+      composition.updates.updateStorageCapability(initial);
+      render(<App compose={() => Promise.resolve(composition)} />);
+
+      const retry = await screen.findByRole('button', { name: 'Retry check' });
+      void userEvent.click(retry);
+      expect(await screen.findByRole('button', { name: 'Retrying…' })).toBeDisabled();
+      await act(async () => recheck.resolve(result));
+
+      expect(retryStorage).toHaveBeenCalledOnce();
+      expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+      expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+      expect(composition.reload).not.toHaveBeenCalled();
+      if (succeeds) {
+        expect(
+          screen.queryByText(/Free browser storage|Check browser storage settings/),
+        ).not.toBeInTheDocument();
+      } else {
+        expect(screen.getByRole('button', { name: 'Retry check' })).toBeEnabled();
+      }
+    },
+  );
 
   it('reports verified offline play without treating network availability as a prerequisite', async () => {
     let messageReceived:

@@ -67,8 +67,7 @@ describe('PWA lifecycle adapter', () => {
     const first = adapter.register();
     const second = adapter.register();
 
-    expect(first).toBe(second);
-    await first;
+    await Promise.all([first, second]);
     expect(register).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenNthCalledWith(1, {
       serviceWorkerSupport: 'supported',
@@ -312,7 +311,7 @@ describe('PWA lifecycle adapter', () => {
       offlineReadiness: 'not-checked',
       updateStatus: 'reload-required',
     });
-    expect(adapter.retryReadiness()).toBe(false);
+    await expect(adapter.retryReadiness()).resolves.toBe(false);
 
     const freshController = { postMessage: vi.fn() };
     const freshEnvironment = serviceWorkerEnvironment(
@@ -356,7 +355,7 @@ describe('PWA lifecycle adapter', () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
 
-    expect(adapter.retryReadiness()).toBe(true);
+    await expect(adapter.retryReadiness()).resolves.toBe(true);
     const retry = controller.postMessage.mock.calls[1]?.[0] as { requestId: string };
     messageReceived?.({
       source: controller,
@@ -394,7 +393,7 @@ describe('PWA lifecycle adapter', () => {
     });
     expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
 
-    expect(adapter.retryReadiness()).toBe(true);
+    await expect(adapter.retryReadiness()).resolves.toBe(true);
     const second = controller.postMessage.mock.calls[1]?.[0] as { requestId: string };
     expect(second.requestId).not.toBe(first.requestId);
     messageReceived?.({
@@ -419,7 +418,7 @@ describe('PWA lifecycle adapter', () => {
     );
     await expect(adapter.register()).resolves.toBeUndefined();
     expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
-    expect(adapter.retryReadiness()).toBe(false);
+    await expect(adapter.retryReadiness()).resolves.toBe(false);
     expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
   });
 
@@ -439,6 +438,67 @@ describe('PWA lifecycle adapter', () => {
     await expect(adapter.retryUpdate()).resolves.toBe(true);
     expect(update).toHaveBeenCalledTimes(2);
     expect(registered.waiting).toBeNull();
+  });
+
+  it('re-registers once after first-install failure and reaches scoped readiness', async () => {
+    let messageReceived:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
+    const controller = { postMessage: vi.fn() };
+    const registered = registration();
+    const register = vi.fn().mockRejectedValueOnce(new Error('first install failed'));
+    const environment = serviceWorkerEnvironment(register);
+    register.mockImplementationOnce(async () => {
+      environment.serviceWorker.controller = controller;
+      return registered;
+    });
+    environment.serviceWorker.addEventListener.mockImplementation((type, listener) => {
+      if (type === 'message') messageReceived = listener;
+    });
+    const adapter = createPwaLifecycleAdapter(environment);
+    await adapter.register();
+    expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
+
+    const firstRetry = adapter.retryReadiness();
+    const repeatedRetry = adapter.retryReadiness();
+    await expect(Promise.all([firstRetry, repeatedRetry])).resolves.toEqual([true, true]);
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(environment.serviceWorker.addEventListener).toHaveBeenCalledTimes(2);
+    expect(registered.addEventListener).toHaveBeenCalledOnce();
+    const request = controller.postMessage.mock.calls[0]?.[0] as { requestId: string };
+    messageReceived?.({
+      source: controller,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: request.requestId,
+        ready: true,
+      },
+    });
+    expect(adapter.getStatus().offlineReadiness).toBe('ready');
+  });
+
+  it('contains a second rejected registration retry and remains single-flight', async () => {
+    const register = vi.fn().mockRejectedValue(new Error('registration rejected'));
+    const adapter = createPwaLifecycleAdapter(serviceWorkerEnvironment(register));
+    await adapter.register();
+
+    const retry = adapter.retryReadiness();
+    const repeated = adapter.retryReadiness();
+    await expect(Promise.all([retry, repeated])).resolves.toEqual([false, false]);
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
+  });
+
+  it('can re-register without a controller but does not fabricate readiness', async () => {
+    const register = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('first install failed'))
+      .mockResolvedValueOnce(registration());
+    const adapter = createPwaLifecycleAdapter(serviceWorkerEnvironment(register));
+    await adapter.register();
+
+    await expect(adapter.retryReadiness()).resolves.toBe(true);
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(adapter.getStatus().offlineReadiness).toBe('installing');
   });
 
   it('stops lifecycle publication and removes owned listeners when closed', async () => {

@@ -32,7 +32,7 @@ function waitingLifecycle(): PwaLifecycleAdapter {
     getStatus: () => status,
     register: vi.fn(),
     requestActivation: vi.fn(() => true),
-    retryReadiness: vi.fn(() => true),
+    retryReadiness: vi.fn(async () => true),
     retryUpdate: vi.fn(async () => true),
     subscribe(listener) {
       listener(status);
@@ -98,4 +98,63 @@ describe('production update-safe save-slot composition', () => {
     expect(coordinator.getStatus().updateState).toBe('activation-deferred');
     unsubscribe();
   });
+
+  it.each(['select', 'updateMetadata'] as const)(
+    'finalizes a rejected %s as save-failed and permits later durable recovery',
+    async (operation) => {
+      const rejection = new Error(`${operation} rejected`);
+      const base: SaveSlotService = {
+        list: vi.fn(),
+        lookup: vi.fn(),
+        select:
+          operation === 'select'
+            ? vi
+                .fn()
+                .mockRejectedValueOnce(rejection)
+                .mockResolvedValue({
+                  ok: true,
+                  value: { selectedSlotId: slot.slotId, selectedAt: slot.updatedAt, slot },
+                })
+            : vi.fn(),
+        updateMetadata:
+          operation === 'updateMetadata'
+            ? vi.fn().mockRejectedValueOnce(rejection).mockResolvedValue({ ok: true, value: slot })
+            : vi.fn().mockResolvedValue({ ok: true, value: slot }),
+      };
+      const safety = createUpdateSafetyState();
+      const coordinator = createPwaUpdateCoordinator(waitingLifecycle());
+      const unsubscribe = safety.subscribe((snapshot) => coordinator.updateSafety(snapshot));
+      const service = createUpdateSafeSaveSlotService(base, safety);
+
+      if (operation === 'select') {
+        await expect(service.select(slot.slotId)).rejects.toBe(rejection);
+      } else {
+        await expect(
+          service.updateMetadata(slot.slotId, {
+            displayName: slot.displayName,
+            expectedRevision: slot.revision,
+          }),
+        ).rejects.toBe(rejection);
+      }
+      expect(safety.getSnapshot()).toMatchObject({
+        safePoint: 'failed',
+        commandPending: false,
+      });
+      expect(coordinator.getStatus()).toMatchObject({
+        updateState: 'activation-deferred',
+        blockers: ['save-failed'],
+      });
+
+      await service.updateMetadata(slot.slotId, {
+        displayName: slot.displayName,
+        expectedRevision: slot.revision,
+      });
+      expect(safety.getSnapshot()).toMatchObject({
+        safePoint: 'durable',
+        commandPending: false,
+      });
+      expect(coordinator.getStatus()).toMatchObject({ updateState: 'ready', blockers: [] });
+      unsubscribe();
+    },
+  );
 });

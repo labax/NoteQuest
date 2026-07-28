@@ -118,6 +118,7 @@ export function createPwaUpdateCoordinator(
   initial: {
     readonly onlineState?: OnlineState;
     readonly storageCapability?: StorageCapability;
+    readonly retryStorage?: () => Promise<StorageCapability>;
   } = {},
 ): PwaUpdateCoordinator {
   let safety = unverifiedSafety;
@@ -141,15 +142,18 @@ export function createPwaUpdateCoordinator(
     if (storageCapability === 'unavailable')
       failures.push({
         code: 'storage-unavailable',
-        retryable: true,
-        guidance:
-          'Check browser storage settings, then retry. Current slot data has not been replaced.',
+        retryable: initial.retryStorage !== undefined,
+        guidance: initial.retryStorage
+          ? 'Check browser storage settings, then retry. Current slot data has not been replaced.'
+          : 'Check browser storage settings. Current slot data has not been replaced.',
       });
     if (storageCapability === 'limited')
       failures.push({
         code: 'storage-limited',
-        retryable: true,
-        guidance: 'Free browser storage or export data before retrying offline setup.',
+        retryable: initial.retryStorage !== undefined,
+        guidance: initial.retryStorage
+          ? 'Free browser storage or export data before retrying offline setup.'
+          : 'Free browser storage or export data before reopening offline setup.',
       });
     if (lifecycleStatus.updateStatus === 'failed')
       failures.push({
@@ -235,6 +239,18 @@ export function createPwaUpdateCoordinator(
       if (closed) return false;
       if (code === 'cache-check-failed') return lifecycle.retryReadiness();
       if (code === 'update-failed') return lifecycle.retryUpdate();
+      if (code === 'storage-unavailable' || code === 'storage-limited') {
+        if (!initial.retryStorage) return false;
+        try {
+          storageCapability = await initial.retryStorage();
+          publish();
+          return storageCapability === 'available';
+        } catch {
+          storageCapability = 'unavailable';
+          publish();
+          return false;
+        }
+      }
       return false;
     },
     subscribe(listener) {

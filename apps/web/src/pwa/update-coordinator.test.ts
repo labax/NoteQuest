@@ -30,7 +30,7 @@ function lifecycleFixture(
     getStatus: () => status,
     register: vi.fn(),
     requestActivation,
-    retryReadiness: vi.fn(() => true),
+    retryReadiness: vi.fn(async () => true),
     retryUpdate: vi.fn(async () => true),
     subscribe(listener) {
       listeners.add(listener);
@@ -340,7 +340,7 @@ describe('PWA update coordinator', () => {
       updateState: 'failed',
       failures: [
         { code: 'cache-check-failed', retryable: true },
-        { code: 'storage-limited', retryable: true },
+        { code: 'storage-limited', retryable: false },
         { code: 'update-failed', retryable: true },
       ],
     });
@@ -362,6 +362,41 @@ describe('PWA update coordinator', () => {
 
     await expect(coordinator.retryFailure(code)).resolves.toBe(true);
     expect(fixture.lifecycle[method]).toHaveBeenCalledOnce();
+    expect(fixture.requestActivation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['storage-unavailable', 'unavailable'],
+    ['storage-limited', 'limited'],
+  ] as const)('rechecks %s through the composition-owned storage probe', async (code, initial) => {
+    const retryStorage = vi.fn().mockResolvedValueOnce('available');
+    const fixture = lifecycleFixture();
+    const coordinator = createPwaUpdateCoordinator(fixture.lifecycle, {
+      storageCapability: initial,
+      retryStorage,
+    });
+
+    await expect(coordinator.retryFailure(code)).resolves.toBe(true);
+    expect(retryStorage).toHaveBeenCalledOnce();
+    expect(coordinator.getStatus().storageCapability).toBe('available');
+    expect(
+      coordinator.getStatus().failures.map(({ code: failureCode }) => failureCode),
+    ).not.toContain(code);
+    expect(fixture.requestActivation).not.toHaveBeenCalled();
+  });
+
+  it('contains a rejected storage recheck and retains truthful retryable failure', async () => {
+    const fixture = lifecycleFixture();
+    const coordinator = createPwaUpdateCoordinator(fixture.lifecycle, {
+      storageCapability: 'limited',
+      retryStorage: vi.fn().mockRejectedValue(new Error('storage rejected')),
+    });
+
+    await expect(coordinator.retryFailure('storage-limited')).resolves.toBe(false);
+    expect(coordinator.getStatus()).toMatchObject({
+      storageCapability: 'unavailable',
+      failures: [expect.objectContaining({ code: 'storage-unavailable', retryable: true })],
+    });
     expect(fixture.requestActivation).not.toHaveBeenCalled();
   });
 });

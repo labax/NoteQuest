@@ -8,14 +8,28 @@ describe('storage capability check', () => {
     ).resolves.toBe('unavailable');
   });
 
-  it('accepts verified IndexedDB when optional estimate support is absent or fails', async () => {
+  it('accepts verified IndexedDB when optional estimate support is absent', async () => {
     const verified = vi.fn().mockResolvedValue(undefined);
     await expect(checkStorageCapability(verified)).resolves.toBe('available');
+  });
+
+  it('contains rejected and non-resolving storage checks as unavailable', async () => {
+    const verified = vi.fn().mockResolvedValue(undefined);
     await expect(
       checkStorageCapability(verified, {
         estimate: vi.fn().mockRejectedValue(new Error('restricted')),
       }),
-    ).resolves.toBe('available');
+    ).resolves.toBe('unavailable');
+
+    vi.useFakeTimers();
+    const pending = checkStorageCapability(
+      verified,
+      { estimate: vi.fn(() => new Promise<{ usage?: number; quota?: number }>(() => undefined)) },
+      { timeoutMs: 10 },
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(pending).resolves.toBe('unavailable');
+    vi.useRealTimers();
   });
 
   it.each([

@@ -22,7 +22,7 @@ export interface PwaLifecycleAdapter {
   register(): Promise<void>;
   subscribe(listener: (status: Readonly<PwaLifecycleStatus>) => void): () => void;
   requestActivation(activationIsSafe: boolean): boolean;
-  retryReadiness(): boolean;
+  retryReadiness(): Promise<boolean>;
   retryUpdate(): Promise<boolean>;
   close(): void;
 }
@@ -71,6 +71,7 @@ export function createPwaLifecycleAdapter(
     : unsupportedStatus;
   let registration: ServiceWorkerRegistration | undefined;
   let registrationRequest: Promise<void> | undefined;
+  let lifecycleListenersAttached = false;
   let closed = false;
   const listeners = new Set<(status: Readonly<PwaLifecycleStatus>) => void>();
   const observedWorkers = new WeakSet<ServiceWorker>();
@@ -164,6 +165,44 @@ export function createPwaLifecycleAdapter(
     });
   };
 
+  const attachLifecycleListeners = () => {
+    if (lifecycleListenersAttached || !registration) return;
+    registration.addEventListener('updatefound', observeInstallingWorker);
+    serviceWorker?.addEventListener?.('controllerchange', controllerChanged);
+    serviceWorker?.addEventListener?.('message', readinessResult);
+    lifecycleListenersAttached = true;
+  };
+
+  const registerLifecycle = (): Promise<void> => {
+    if (!registrationSupported || !serviceWorker || closed) return Promise.resolve();
+    if (registrationRequest) return registrationRequest;
+    registrationRequest = (async () => {
+      publish({ ...status, offlineReadiness: 'installing' });
+      try {
+        registration = await serviceWorker.register!('/sw.js', {
+          scope: '/',
+          type: 'classic',
+        });
+        if (closed) return;
+        attachLifecycleListeners();
+        publish({
+          ...status,
+          offlineReadiness: serviceWorker.controller ? 'not-checked' : 'installing',
+          updateStatus: registration.waiting ? 'waiting' : 'not-checked',
+        });
+        observeInstallingWorker();
+        requestReadinessCheck();
+      } catch {
+        registration = undefined;
+        publish({ ...status, offlineReadiness: 'unavailable', updateStatus: 'not-checked' });
+        throw new Error('service-worker-registration-failed');
+      } finally {
+        if (!registration) registrationRequest = undefined;
+      }
+    })();
+    return registrationRequest;
+  };
+
   return {
     getStatus: () => status,
     subscribe(listener) {
@@ -172,33 +211,8 @@ export function createPwaLifecycleAdapter(
       listener(status);
       return () => listeners.delete(listener);
     },
-    register() {
-      if (!registrationSupported || !serviceWorker || closed) return Promise.resolve();
-      if (registrationRequest) return registrationRequest;
-
-      registrationRequest = (async () => {
-        publish({ ...status, offlineReadiness: 'installing' });
-        try {
-          registration = await serviceWorker.register!('/sw.js', {
-            scope: '/',
-            type: 'classic',
-          });
-          if (closed) return;
-          registration.addEventListener('updatefound', observeInstallingWorker);
-          serviceWorker.addEventListener?.('controllerchange', controllerChanged);
-          serviceWorker.addEventListener?.('message', readinessResult);
-          publish({
-            ...status,
-            offlineReadiness: serviceWorker.controller ? 'not-checked' : 'installing',
-            updateStatus: registration.waiting ? 'waiting' : 'not-checked',
-          });
-          observeInstallingWorker();
-          requestReadinessCheck();
-        } catch {
-          publish({ ...status, offlineReadiness: 'unavailable', updateStatus: 'not-checked' });
-        }
-      })();
-      return registrationRequest;
+    register: async () => {
+      await registerLifecycle().catch(() => undefined);
     },
     requestActivation(activationIsSafe) {
       if (closed || !activationIsSafe || !registration?.waiting) return false;
@@ -206,7 +220,16 @@ export function createPwaLifecycleAdapter(
       publish({ ...status, updateStatus: 'activation-requested' });
       return true;
     },
-    retryReadiness: requestReadinessCheck,
+    async retryReadiness() {
+      if (closed || !registrationSupported || !serviceWorker) return false;
+      if (serviceWorker.controller && registration) return requestReadinessCheck();
+      try {
+        await registerLifecycle();
+        return registration !== undefined;
+      } catch {
+        return false;
+      }
+    },
     async retryUpdate() {
       if (closed || !registration || typeof registration.update !== 'function') return false;
       try {
@@ -225,9 +248,11 @@ export function createPwaLifecycleAdapter(
       if (closed) return;
       closed = true;
       clearReadiness();
-      serviceWorker?.removeEventListener?.('controllerchange', controllerChanged);
-      serviceWorker?.removeEventListener?.('message', readinessResult);
-      registration?.removeEventListener('updatefound', observeInstallingWorker);
+      if (lifecycleListenersAttached) {
+        serviceWorker?.removeEventListener?.('controllerchange', controllerChanged);
+        serviceWorker?.removeEventListener?.('message', readinessResult);
+        registration?.removeEventListener('updatefound', observeInstallingWorker);
+      }
       listeners.clear();
     },
   };
