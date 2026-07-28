@@ -71,3 +71,12 @@ The final PR #160 follow-up additionally exercised retryable first-install regis
 storage rechecks, and rejected save-slot promises. `test:ci` passed 380 Vitest tests and 3 release-ID
 tests; the production build passed with release ID `pr-160-follow-up`. These checks do not replace the
 manual browser evidence above.
+
+The storage-capability follow-up keeps the app-owned write/delete transaction authoritative and
+independently bounded. Once that transaction succeeds, a missing, rejected, inconclusive, or timed-out
+optional quota estimate preserves `available`; only a completed valid estimate in an approved warning
+band reports `limited`. A rejected or timed-out mandatory write continues to report `unavailable`.
+The focused storage/coordinator/shell suite passed 74 tests, `test:ci` passed 386 Vitest tests and 3
+release-ID tests, and the production artifact checks passed with release ID
+`pr-160-storage-truthfulness`. Dependency installation and the final audit reported zero
+vulnerabilities.

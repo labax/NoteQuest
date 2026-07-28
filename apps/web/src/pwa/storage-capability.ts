@@ -7,6 +7,26 @@ interface StorageManagerLike {
   estimate?(): Promise<{ readonly usage?: number; readonly quota?: number }>;
 }
 
+type BoundedResult<T> =
+  { readonly completed: true; readonly value: T } | { readonly completed: false };
+
+async function settleWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<BoundedResult<T>> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise.then(
+        (value): BoundedResult<T> => ({ completed: true, value }),
+        (): BoundedResult<T> => ({ completed: false }),
+      ),
+      new Promise<BoundedResult<T>>((resolve) => {
+        timeout = setTimeout(() => resolve({ completed: false }), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 /**
  * Classifies browser storage only after the caller has completed a real app-owned
  * IndexedDB write transaction. Estimate support is optional and never overrides
@@ -18,26 +38,28 @@ export async function checkStorageCapability(
   options: { readonly timeoutMs?: number } = {},
 ): Promise<StorageCapability> {
   const timeoutMs = options.timeoutMs ?? 5_000;
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      (async () => {
-        await verifyApplicationWrite();
-        if (typeof storage?.estimate !== 'function') return 'available' as const;
-        const { usage, quota } = await storage.estimate();
-        if (usage === undefined || quota === undefined || quota <= 0) return 'available' as const;
-        if (usage / quota >= WARNING_USAGE_RATIO || quota - usage < WARNING_REMAINING_BYTES) {
-          return 'limited' as const;
-        }
-        return 'available' as const;
-      })(),
-      new Promise<StorageCapability>((resolve) => {
-        timeout = setTimeout(() => resolve('unavailable'), timeoutMs);
-      }),
-    ]);
-  } catch {
-    return 'unavailable';
-  } finally {
-    if (timeout) clearTimeout(timeout);
+  const write = await settleWithin(Promise.resolve().then(verifyApplicationWrite), timeoutMs);
+  if (!write.completed) return 'unavailable';
+
+  if (typeof storage?.estimate !== 'function') return 'available';
+  const estimate = await settleWithin(
+    Promise.resolve().then(() => storage.estimate!()),
+    timeoutMs,
+  );
+  if (!estimate.completed) return 'available';
+
+  const { usage, quota } = estimate.value;
+  if (
+    typeof usage !== 'number' ||
+    !Number.isFinite(usage) ||
+    usage < 0 ||
+    typeof quota !== 'number' ||
+    !Number.isFinite(quota) ||
+    quota <= 0
+  )
+    return 'available';
+  if (usage / quota >= WARNING_USAGE_RATIO || quota - usage < WARNING_REMAINING_BYTES) {
+    return 'limited';
   }
+  return 'available';
 }

@@ -7,6 +7,7 @@ import { NOTEQUEST_SLOT_IDS } from '@notequest/infrastructure';
 import { createUpdateSafetyState } from '@notequest/application';
 import { createPwaStatusAdapter, type AppComposition } from './composition';
 import { createPwaUpdateCoordinator } from './pwa/update-coordinator';
+import { checkStorageCapability } from './pwa/storage-capability';
 import { App, RootErrorBoundary } from './App.tsx';
 import {
   routeMetadata,
@@ -356,6 +357,28 @@ describe('App shell', () => {
       }
     },
   );
+
+  it('clears a storage failure after a verified write when optional estimate evidence rejects', async () => {
+    const verifyApplicationWrite = vi.fn().mockResolvedValue(undefined);
+    const estimate = vi.fn().mockRejectedValue(new Error('estimate unavailable'));
+    const retryStorage = vi.fn(() =>
+      checkStorageCapability(verifyApplicationWrite, { estimate }, { timeoutMs: 10 }),
+    );
+    const composition = fixtureComposition(undefined, undefined, undefined, retryStorage);
+    composition.updates.updateStorageCapability('unavailable');
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry check' }));
+
+    expect(retryStorage).toHaveBeenCalledOnce();
+    expect(verifyApplicationWrite).toHaveBeenCalledOnce();
+    expect(estimate).toHaveBeenCalledOnce();
+    expect(composition.updates.getStatus().storageCapability).toBe('available');
+    expect(screen.queryByText(/Check browser storage settings/)).not.toBeInTheDocument();
+    expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+    expect(composition.reload).not.toHaveBeenCalled();
+  });
 
   it('reports verified offline play without treating network availability as a prerequisite', async () => {
     let messageReceived:
