@@ -48,6 +48,26 @@ describe('custom service worker', () => {
     expect(workbox.registerRoute).toHaveBeenCalledOnce();
   });
 
+  it('uses distinct cache suffixes for distinct production releases', async () => {
+    vi.stubGlobal('self', {
+      __WB_MANIFEST: [],
+      addEventListener: vi.fn(),
+      skipWaiting: vi.fn(),
+    });
+    vi.stubGlobal('__NOTEQUEST_RELEASE_ID__', 'release-one');
+    await import('./sw');
+    const first = workbox.setCacheNameDetails.mock.calls.at(-1)?.[0];
+
+    vi.resetModules();
+    vi.stubGlobal('__NOTEQUEST_RELEASE_ID__', 'release-two');
+    await import('./sw');
+    const second = workbox.setCacheNameDetails.mock.calls.at(-1)?.[0];
+
+    expect(first).toMatchObject({ suffix: 'release-one' });
+    expect(second).toMatchObject({ suffix: 'release-two' });
+    expect(first).not.toEqual(second);
+  });
+
   it('only activates for the controlled project message', async () => {
     let onMessage: ((event: { readonly data: unknown }) => void) | undefined;
     const skipWaiting = vi.fn().mockResolvedValue(undefined);

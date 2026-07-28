@@ -27,17 +27,24 @@ Run the checks that match the change before opening a PR. For implementation sto
 - `npm run typecheck` — run TypeScript with the repository strict settings and no emit.
 - `npm test` — run the Vitest unit and architecture tests.
 - `npm run test:ci` — run the Vitest suite using the CI alias.
-- `npm run build` — run the strict typecheck and build the production Vite web app.
-- `npm run verify:pwa-artifact` — inspect the built worker for release metadata, approved precache
-  entries, complete HTML shell coverage, controlled activation, and absent public source maps.
-- `npm run verify` — run the baseline local verification sequence expected before review.
+- `NOTEQUEST_RELEASE_ID=local-<unique-id> npm run build` — run the strict typecheck and build the
+  production Vite web app with a truthful local release/cache identity.
+- `NOTEQUEST_RELEASE_ID=<same-build-id> npm run verify:pwa-artifact` — inspect the built worker for
+  matching release metadata, approved precache entries, complete HTML shell coverage, controlled
+  activation, and absent public source maps.
+- `NOTEQUEST_RELEASE_ID=local-<unique-id> npm run verify` — run the baseline local verification
+  sequence, including a production build, with the same truthful release identity contract.
+- `npm run security:audit` — query the full dependency audit and fail for High/Critical findings;
+  see `docs/pwa-dependency-security-assessment-2026-07-28.md` for the reviewed PWA paths.
 
 Keep these command names stable for M1 CI and future implementation stories unless a replacement is documented in the relevant issue.
 
 ## Service-worker smoke verification
 
-The development server does not register the production service worker. To verify the generated
-precache and the repeat-launch boundary, run `npm run build` followed by `npm run preview`, then:
+The development server may use the reserved `development` identity and does not register the
+production service worker. Production builds reject that identity. To verify the generated precache
+and repeat-launch boundary, choose a unique local ID and run
+`NOTEQUEST_RELEASE_ID=local-smoke-<unique-id> npm run build`, followed by `npm run preview`, then:
 
 1. Open the preview URL in a fresh browser profile and confirm that `sw.js` is registered and that
    the Workbox precache contains the emitted HTML and hashed JavaScript/CSS shell files.

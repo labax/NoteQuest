@@ -22,7 +22,8 @@ export interface UpdateSafetySnapshot {
 }
 
 export interface UpdateCoordinatorStatus {
-  readonly state: 'current' | 'waiting' | 'blocked' | 'ready' | 'activation-requested';
+  readonly state:
+    'current' | 'waiting' | 'blocked' | 'ready' | 'activation-requested' | 'reload-required';
   readonly blockers: readonly UpdateSafetyBlocker[];
 }
 
@@ -77,6 +78,9 @@ export function createPwaUpdateCoordinator(lifecycle: PwaLifecycleAdapter): PwaU
   const project = (): UpdateCoordinatorStatus => {
     if (lifecycleStatus.updateStatus === 'activation-requested') {
       return { state: 'activation-requested', blockers: [] };
+    }
+    if (lifecycleStatus.updateStatus === 'reload-required') {
+      return { state: 'reload-required', blockers: [] };
     }
     if (lifecycleStatus.updateStatus !== 'waiting') return { state: 'current', blockers: [] };
     const blockers = evaluateUpdateSafety(safety);

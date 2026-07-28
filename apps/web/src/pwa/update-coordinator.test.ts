@@ -20,7 +20,7 @@ function lifecycleFixture() {
   let status: PwaLifecycleStatus = {
     serviceWorkerSupport: 'supported',
     offlineReadiness: 'ready',
-    updateStatus: 'current',
+    updateStatus: 'not-checked',
   };
   const listeners = new Set<(status: Readonly<PwaLifecycleStatus>) => void>();
   const requestActivation = vi.fn(() => true);
@@ -106,6 +106,22 @@ describe('PWA update coordinator', () => {
     expect(coordinator.requestActivation()).toEqual({ ok: true });
     expect(fixture.requestActivation).toHaveBeenCalledOnce();
     expect(fixture.requestActivation).toHaveBeenCalledWith(true);
+  });
+
+  it('reports reload required without claiming the activated release is current', () => {
+    const fixture = lifecycleFixture();
+    const coordinator = createPwaUpdateCoordinator(fixture.lifecycle);
+    fixture.publish({
+      serviceWorkerSupport: 'supported',
+      offlineReadiness: 'not-checked',
+      updateStatus: 'reload-required',
+    });
+
+    expect(coordinator.getStatus()).toEqual({ state: 'reload-required', blockers: [] });
+    expect(coordinator.requestActivation()).toMatchObject({
+      ok: false,
+      reason: 'no-waiting-update',
+    });
   });
 
   it.each([

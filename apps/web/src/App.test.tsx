@@ -248,6 +248,32 @@ describe('App shell', () => {
     expect(screen.getAllByRole('button', { name: 'Start new game' })[0]).toBeEnabled();
   });
 
+  it('labels a controller change as reload required without claiming offline readiness', async () => {
+    let controllerChanged: (() => void) | undefined;
+    const pwa = createPwaStatusAdapter({
+      serviceWorker: {
+        controller: {},
+        register: vi.fn().mockResolvedValue({
+          waiting: null,
+          installing: null,
+          addEventListener: vi.fn(),
+        }),
+        addEventListener: vi.fn((_type, listener) => {
+          controllerChanged = listener;
+        }),
+      },
+    });
+    render(<App compose={() => Promise.resolve(fixtureComposition(undefined, pwa))} />);
+    await act(async () => pwa.register());
+
+    act(() => controllerChanged?.());
+
+    const status = screen.getByLabelText('Application status');
+    expect(status).toHaveTextContent('Updates: reload required');
+    expect(status).toHaveTextContent('Offline readiness: not checked');
+    expect(status).not.toHaveTextContent('Offline readiness: ready');
+  });
+
   it('retries a failed slot result, returns to loading, and renders recovered slots', async () => {
     const retry = deferred<{ ok: true; value: typeof emptySlots }>();
     const list = vi

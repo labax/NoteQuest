@@ -4,7 +4,7 @@ export { ACTIVATE_UPDATE_MESSAGE } from './protocol';
 
 export type ServiceWorkerSupport = 'supported' | 'unsupported';
 export type OfflineReadiness = 'not-checked' | 'installing' | 'ready' | 'unavailable';
-export type UpdateStatus = 'not-checked' | 'current' | 'waiting' | 'activation-requested';
+export type UpdateStatus = 'not-checked' | 'waiting' | 'activation-requested' | 'reload-required';
 
 export interface PwaLifecycleStatus {
   readonly serviceWorkerSupport: ServiceWorkerSupport;
@@ -62,7 +62,7 @@ export function createPwaLifecycleAdapter(
   };
 
   const controllerChanged = () => {
-    publish({ ...status, offlineReadiness: 'ready', updateStatus: 'current' });
+    publish({ ...status, offlineReadiness: 'not-checked', updateStatus: 'reload-required' });
   };
 
   const observeInstallingWorker = () => {
@@ -104,8 +104,8 @@ export function createPwaLifecycleAdapter(
           serviceWorker.addEventListener?.('controllerchange', controllerChanged);
           publish({
             ...status,
-            offlineReadiness: serviceWorker.controller ? 'ready' : 'installing',
-            updateStatus: registration.waiting ? 'waiting' : 'current',
+            offlineReadiness: serviceWorker.controller ? 'not-checked' : 'installing',
+            updateStatus: registration.waiting ? 'waiting' : 'not-checked',
           });
           observeInstallingWorker();
         } catch {

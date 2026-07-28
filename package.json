@@ -21,9 +21,11 @@
     "format:check": "prettier . --check",
     "lint": "eslint . --max-warnings=0",
     "static-check": "npm run lint",
-    "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:pwa-release-id && npm run build && npm run security:audit",
     "verify:production-fault-boundary": "node scripts/verify-production-fault-boundary.mjs",
     "verify:pwa-artifact": "node scripts/verify-pwa-artifact.mjs",
+    "test:pwa-release-id": "node --test scripts/pwa-release-id.test.mjs",
+    "security:audit": "npm audit --audit-level=high",
     "test:ci": "vitest run",
     "simulation:cli": "node --experimental-strip-types packages/simulation/src/cli.ts",
     "simulation:palace-smoke": "npm run simulation:cli -- --dungeon palace --runs 2 --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --rules-version digital-rules-specification-v0.1 --content-version 0.1.0 --rng-version 1 --workers 1 --json-output .tmp/simulation-palace-smoke.json --markdown-output .tmp/simulation-palace-smoke.md"
@@ -47,10 +49,15 @@
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.64.0",
     "vite": "^7.0.0",
-    "vite-plugin-pwa": "^1.3.0",
+    "vite-plugin-pwa": "1.2.0",
     "vitest": "^3.2.0",
-    "workbox-core": "^7.4.1",
-    "workbox-precaching": "^7.4.1",
-    "workbox-routing": "^7.4.1"
+    "workbox-core": "7.4.0",
+    "workbox-precaching": "7.4.0",
+    "workbox-routing": "7.4.0"
+  },
+  "overrides": {
+    "workbox-build": "7.4.0",
+    "brace-expansion": "5.0.8",
+    "serialize-javascript": "7.0.5"
   }
 }

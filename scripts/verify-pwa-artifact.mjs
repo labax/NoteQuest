@@ -2,9 +2,10 @@ import { readdir, readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { env, stdout } from 'node:process';
 import { fileURLToPath, URL } from 'node:url';
+import { resolvePwaReleaseId } from './pwa-release-id.mjs';
 
 const outputDirectory = fileURLToPath(new URL('../dist/apps/web/', import.meta.url));
-const releaseId = env.NOTEQUEST_RELEASE_ID ?? env.GITHUB_SHA ?? 'development';
+const releaseId = resolvePwaReleaseId(env);
 const approvedStaticExtensions = new Set([
   '.css',
   '.html',

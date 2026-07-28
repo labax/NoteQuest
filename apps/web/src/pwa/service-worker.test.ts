@@ -76,7 +76,7 @@ describe('PWA lifecycle adapter', () => {
     expect(listener).toHaveBeenLastCalledWith({
       serviceWorkerSupport: 'supported',
       offlineReadiness: 'installing',
-      updateStatus: 'current',
+      updateStatus: 'not-checked',
     });
   });
 
@@ -118,8 +118,21 @@ describe('PWA lifecycle adapter', () => {
 
     controllerChanged?.();
     expect(adapter.getStatus()).toMatchObject({
-      offlineReadiness: 'ready',
-      updateStatus: 'current',
+      offlineReadiness: 'not-checked',
+      updateStatus: 'reload-required',
+    });
+  });
+
+  it('does not infer readiness or currency from an existing controller', async () => {
+    const environment = serviceWorkerEnvironment(vi.fn().mockResolvedValue(registration()), {});
+    const adapter = createPwaLifecycleAdapter(environment);
+
+    await adapter.register();
+
+    expect(adapter.getStatus()).toEqual({
+      serviceWorkerSupport: 'supported',
+      offlineReadiness: 'not-checked',
+      updateStatus: 'not-checked',
     });
   });
 
