@@ -33,6 +33,10 @@ export type SaveSlotCapabilityState =
   | 'recoverable'
   | 'invalid'
   | 'incompatible'
+  | 'creating'
+  | 'importing'
+  | 'resetting'
+  | 'unchecked'
   | 'migrating'
   | 'saving'
   | 'saved'
@@ -53,6 +57,11 @@ export interface SaveSlotCapability {
   readonly summary: string;
 }
 
+/** Read-only operation signal boundary; absence means no transient claim can be made. */
+export interface SaveSlotOperationStatusPort {
+  get(slotId: SaveSlotId): SaveSlotOperationalState | undefined;
+}
+
 /**
  * Application-owned projection for shell decisions. UI callers never infer safety from raw rows.
  * Operational state is optional until the persistence operation-status port is implemented.
@@ -62,19 +71,14 @@ export function describeSaveSlotCapability(
   operationalState?: SaveSlotOperationalState,
   supportedSchemaVersion = 1,
 ): SaveSlotCapability {
+  const durableState = durableCapabilityState(slot, supportedSchemaVersion);
+  // Operational signals may make a safe slot temporarily less capable, never make unsafe data safe.
   const state: SaveSlotCapabilityState =
-    operationalState ??
-    (slot.status === 'migrating'
-      ? 'migrating'
-      : slot.schemaVersion !== null && slot.schemaVersion > supportedSchemaVersion
-        ? 'incompatible'
-        : slot.recoveryAvailable && slot.integrityStatus === 'invalid'
-          ? 'recoverable'
-          : slot.integrityStatus === 'invalid' || slot.status === 'isolated'
-            ? 'invalid'
-            : slot.status === 'empty'
-              ? 'empty'
-              : 'valid');
+    operationalState !== undefined && (durableState === 'valid' || durableState === 'empty')
+      ? operationalState === 'saved' && durableState === 'empty'
+        ? durableState
+        : operationalState
+      : durableState;
 
   const presentations: Record<SaveSlotCapabilityState, Omit<SaveSlotCapability, 'state'>> = {
     empty: {
@@ -126,6 +130,34 @@ export function describeSaveSlotCapability(
       actionLabel: 'Review compatibility',
       summary: 'Incompatible — this app cannot safely open the slot.',
     },
+    creating: {
+      usable: false,
+      recoveryAvailable: slot.recoveryAvailable,
+      destination: 'data',
+      actionLabel: 'Review blocked slot',
+      summary: 'Creating — setup is incomplete and play remains blocked.',
+    },
+    importing: {
+      usable: false,
+      recoveryAvailable: slot.recoveryAvailable,
+      destination: 'data',
+      actionLabel: 'Review blocked slot',
+      summary: 'Importing — validation is incomplete and play remains blocked.',
+    },
+    resetting: {
+      usable: false,
+      recoveryAvailable: slot.recoveryAvailable,
+      destination: 'data',
+      actionLabel: 'Review blocked slot',
+      summary: 'Resetting — the administrative operation is incomplete.',
+    },
+    unchecked: {
+      usable: false,
+      recoveryAvailable: slot.recoveryAvailable,
+      destination: 'data',
+      actionLabel: 'Review blocked slot',
+      summary: 'Not checked — this non-empty slot is not verified safe to open.',
+    },
     migrating: {
       usable: false,
       recoveryAvailable: slot.recoveryAvailable,
@@ -149,6 +181,36 @@ export function describeSaveSlotCapability(
     },
   };
   return { state, ...presentations[state] };
+}
+
+function durableCapabilityState(
+  slot: SlotRecord,
+  supportedSchemaVersion: number,
+): Exclude<SaveSlotCapabilityState, SaveSlotOperationalState> {
+  if (slot.status === 'empty') {
+    const genuinelyEmpty =
+      slot.revision === 0 &&
+      slot.schemaVersion === null &&
+      slot.rulesVersion === null &&
+      slot.contentVersion === null &&
+      slot.currentSnapshotId === null &&
+      slot.lastValidSnapshotId === null &&
+      !slot.recoveryAvailable &&
+      slot.integrityStatus === 'not_checked';
+    return genuinelyEmpty ? 'empty' : 'invalid';
+  }
+  if (slot.status === 'creating') return 'creating';
+  if (slot.status === 'importing') return 'importing';
+  if (slot.status === 'resetting') return 'resetting';
+  if (slot.status === 'migrating') return 'migrating';
+  if (slot.schemaVersion !== supportedSchemaVersion) return 'incompatible';
+  if (slot.recoveryAvailable && slot.integrityStatus === 'invalid') return 'recoverable';
+  if (slot.status === 'isolated' || slot.integrityStatus === 'invalid') return 'invalid';
+  if (slot.integrityStatus !== 'valid') return 'unchecked';
+  if ((slot.status === 'ready' || slot.status === 'active') && slot.currentSnapshotId !== null) {
+    return 'valid';
+  }
+  return 'invalid';
 }
 
 /** Application-facing boundary for the future save-selection shell. */

@@ -84,6 +84,66 @@ function statusLabel(status: 'not-checked'): string {
   return status.replace('-', ' ');
 }
 
+function recorded(value: string | null): string {
+  return value ?? 'Not recorded';
+}
+
+function SlotMetadata({ slot }: { readonly slot: SlotRecord }) {
+  return (
+    <dl className="slot-metadata">
+      <div>
+        <dt>Last updated</dt>
+        <dd>
+          <time dateTime={slot.updatedAt}>{slot.updatedAt || 'Unknown'}</time>
+        </dd>
+      </div>
+      <div>
+        <dt>Rules version</dt>
+        <dd>{recorded(slot.rulesVersion)}</dd>
+      </div>
+      <div>
+        <dt>Content version</dt>
+        <dd>{recorded(slot.contentVersion)}</dd>
+      </div>
+    </dl>
+  );
+}
+
+function DataSlotReview({
+  slot,
+  composition,
+}: {
+  readonly slot: SlotRecord;
+  readonly composition: AppComposition;
+}) {
+  const capability = describeSaveSlotCapability(
+    slot,
+    composition.services.saveSlotOperations.get(slot.slotId),
+  );
+  return (
+    <section className="slot-review" aria-labelledby="slot-review-title">
+      <p className="eyebrow">Selected local slot</p>
+      <h3 id="slot-review-title">
+        Slot {slot.slotIndex}: {slot.displayName}
+      </h3>
+      <p>
+        <strong>State:</strong> <span aria-label="Capability state">{capability.state}</span>
+      </p>
+      <p>{capability.summary}</p>
+      <p>
+        <strong>Recovery:</strong>{' '}
+        {capability.recoveryAvailable
+          ? 'Last-known-valid data is available.'
+          : 'No recovery snapshot is recorded.'}
+      </p>
+      <p role="status">
+        No reset or data mutation occurred. This view only explains the selected slot.
+      </p>
+      <SlotMetadata slot={slot} />
+    </section>
+  );
+}
+
 function ApplicationShell({ composition }: { readonly composition: AppComposition }) {
   const [route, setRoute] = useState<RouteState>(() => composition.route.current());
   const destinationHeading = useRef<HTMLHeadingElement>(null);
@@ -124,18 +184,39 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
   };
 
   const chooseSlot = async (slot: SlotRecord) => {
-    const capability = describeSaveSlotCapability(slot);
+    const capability = describeSaveSlotCapability(
+      slot,
+      composition.services.saveSlotOperations.get(slot.slotId),
+    );
     if (!capability.usable) {
       composition.route.navigate({ destination: 'data', slotId: slot.slotId });
       return;
     }
+    const listedSlots = slotRequest.status === 'ready' ? slotRequest.slots : [];
     setSlotRequest({ status: 'loading' });
-    const selected = await composition.services.saveSlots.select(slot.slotId);
-    if (!selected.ok) {
+    const selected = await composition.services.saveSlots.select(slot.slotId).catch(() => null);
+    if (selected === null || !selected.ok) {
       setSlotRequest({ status: 'failed' });
       return;
     }
-    composition.route.navigate({ destination: capability.destination, slotId: slot.slotId });
+    const selectedCapability = describeSaveSlotCapability(
+      selected.value.slot,
+      composition.services.saveSlotOperations.get(slot.slotId),
+    );
+    if (!selectedCapability.usable) {
+      setSlotRequest({
+        status: 'ready',
+        slots: listedSlots.map((listed) =>
+          listed.slotId === slot.slotId ? selected.value.slot : listed,
+        ),
+      });
+      composition.route.navigate({ destination: 'data', slotId: slot.slotId });
+      return;
+    }
+    composition.route.navigate({
+      destination: selectedCapability.destination,
+      slotId: slot.slotId,
+    });
   };
 
   return (
@@ -230,7 +311,10 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           {route.destination === 'save-slots' && slotRequest.status === 'ready' ? (
             <div className="slot-grid">
               {slotRequest.slots.map((slot) => {
-                const capability = describeSaveSlotCapability(slot);
+                const capability = describeSaveSlotCapability(
+                  slot,
+                  composition.services.saveSlotOperations.get(slot.slotId),
+                );
                 return (
                   <article className={`slot-card slot-${capability.state}`} key={slot.slotId}>
                     <div className="slot-heading">
@@ -239,6 +323,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
                     </div>
                     <p className="slot-name">{slot.displayName}</p>
                     <p>{capability.summary}</p>
+                    <SlotMetadata slot={slot} />
                     {capability.recoveryAvailable ? (
                       <p>Last-known-valid data is available.</p>
                     ) : null}
@@ -250,6 +335,18 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
               })}
             </div>
           ) : null}
+          {route.destination === 'data' &&
+          route.slotId !== undefined &&
+          slotRequest.status === 'ready'
+            ? (() => {
+                const slot = slotRequest.slots.find(
+                  (candidate) => candidate.slotId === route.slotId,
+                );
+                return slot === undefined ? null : (
+                  <DataSlotReview slot={slot} composition={composition} />
+                );
+              })()
+            : null}
           {route.destination === 'save-slots' ? (
             <section className="local-guidance" aria-labelledby="local-guidance-title">
               <h3 id="local-guidance-title">Local data and safety</h3>

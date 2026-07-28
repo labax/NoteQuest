@@ -156,6 +156,29 @@ h2 {
 .slot-name {
   font-weight: 700;
 }
+.slot-metadata {
+  display: grid;
+  gap: 0.45rem;
+  margin-block: 1rem;
+}
+.slot-metadata div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.slot-metadata dt {
+  color: #536174;
+}
+.slot-metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.slot-review {
+  border-left: 0.3rem solid #8a5b20;
+  padding: 1rem;
+  background: #fffaf0;
+}
 .slot-recoverable,
 .slot-invalid,
 .slot-incompatible,

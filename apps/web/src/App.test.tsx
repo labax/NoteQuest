@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { NOTEQUEST_SLOT_IDS } from '@notequest/infrastructure';
@@ -43,6 +43,7 @@ function fixtureComposition(
         select: vi.fn(),
         updateMetadata: vi.fn(),
       },
+      saveSlotOperations: { get: vi.fn(() => undefined) },
     },
     route,
     pwa,
@@ -286,5 +287,137 @@ describe('App shell', () => {
       destination: 'data',
       slotId: recoverable.slotId,
     });
+    expect(await screen.findByRole('heading', { name: 'Slot 2: Slot 2' })).toBeInTheDocument();
+    expect(screen.getByText(/Recovery available — current data will not be reset/)).toBeVisible();
+    expect(screen.getByText(/No reset or data mutation occurred/)).toBeVisible();
+  });
+
+  it('revalidates the selected row and safely refuses a newly blocked slot', async () => {
+    const route = fixtureRoute();
+    const listed = {
+      ...emptySlots[0]!,
+      revision: 1,
+      status: 'ready' as const,
+      schemaVersion: 1,
+      rulesVersion: 'rules.1',
+      contentVersion: 'content.1',
+      currentSnapshotId: 'current',
+      integrityStatus: 'valid' as const,
+    };
+    const newlyBlocked = { ...listed, integrityStatus: 'invalid' as const };
+    const slots = [listed, emptySlots[1]!, emptySlots[2]!];
+    const composition = fixtureComposition(
+      vi.fn().mockResolvedValue({ ok: true, value: slots }),
+      undefined,
+      route,
+    );
+    vi.mocked(composition.services.saveSlots.select).mockResolvedValue({
+      ok: true,
+      value: { selectedSlotId: listed.slotId, selectedAt: listed.updatedAt, slot: newlyBlocked },
+    });
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+
+    expect(route.navigate).toHaveBeenCalledWith({ destination: 'data', slotId: listed.slotId });
+    expect(route.navigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ destination: 'town' }),
+    );
+    expect(route.navigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ destination: 'adventurer-creation' }),
+    );
+  });
+
+  it('exits loading and offers retry when selection rejects', async () => {
+    const composition = fixtureComposition();
+    vi.mocked(composition.services.saveSlots.select).mockRejectedValue(new Error('storage lost'));
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    const startButtons = await screen.findAllByRole('button', { name: 'Start new game' });
+    await userEvent.click(startButtons[0]!);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Local slots could not be read');
+    expect(screen.getByRole('button', { name: 'Retry local slots' })).toBeEnabled();
+    expect(screen.queryByLabelText('Loading local slots')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['Review compatibility', { schemaVersion: 2 }, undefined, 'incompatible'],
+    ['Review migration', { status: 'migrating' }, undefined, 'migrating'],
+    [
+      'Review blocked slot',
+      { status: 'isolated', integrityStatus: 'invalid', recoveryAvailable: false },
+      undefined,
+      'invalid',
+    ],
+    ['Review save failure', {}, 'failed', 'failed'],
+    ['Review storage options', {}, 'storage-limited', 'storage-limited'],
+  ] as const)(
+    'retains slot scope and no-mutation guidance for %s',
+    async (action, changes, operation, state) => {
+      const route = fixtureRoute();
+      const slot = {
+        ...emptySlots[1]!,
+        revision: 1,
+        status: 'ready' as const,
+        schemaVersion: 1,
+        rulesVersion: 'rules.review',
+        contentVersion: 'content.review',
+        currentSnapshotId: 'current',
+        integrityStatus: 'valid' as const,
+        ...changes,
+      };
+      const composition = fixtureComposition(
+        vi.fn().mockResolvedValue({
+          ok: true,
+          value: [emptySlots[0]!, slot, emptySlots[2]!],
+        }),
+        undefined,
+        route,
+      );
+      vi.mocked(composition.services.saveSlotOperations.get).mockImplementation((slotId) =>
+        slotId === slot.slotId ? operation : undefined,
+      );
+      render(<App compose={() => Promise.resolve(composition)} />);
+
+      await userEvent.click(await screen.findByRole('button', { name: action }));
+
+      const review = await screen.findByRole('heading', { name: 'Slot 2: Slot 2' });
+      expect(review).toBeInTheDocument();
+      expect(screen.getByLabelText('Capability state')).toHaveTextContent(state);
+      expect(screen.getByText(/No reset or data mutation occurred/)).toBeVisible();
+      expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+      expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+    },
+  );
+
+  it('renders APP-003 metadata and neutral missing-value fallbacks on every slot card', async () => {
+    const known = {
+      ...emptySlots[0]!,
+      updatedAt: '2026-07-28T12:34:56.000Z',
+      rulesVersion: 'rules.known',
+      contentVersion: 'content.known',
+    };
+    render(
+      <App
+        compose={() =>
+          Promise.resolve(
+            fixtureComposition(
+              vi.fn().mockResolvedValue({
+                ok: true,
+                value: [known, emptySlots[1]!, emptySlots[2]!],
+              }),
+            ),
+          )
+        }
+      />,
+    );
+
+    const first = (await screen.findByRole('heading', { name: 'Slot 1' })).closest('article')!;
+    expect(within(first).getByText(known.updatedAt)).toHaveAttribute('datetime', known.updatedAt);
+    expect(within(first).getByText('rules.known')).toBeVisible();
+    expect(within(first).getByText('content.known')).toBeVisible();
+    const second = screen.getByRole('heading', { name: 'Slot 2' }).closest('article')!;
+    expect(within(second).getAllByText('Not recorded')).toHaveLength(2);
   });
 });

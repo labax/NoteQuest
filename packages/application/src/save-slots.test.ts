@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { SaveSlotId } from '@notequest/domain';
 import type { SlotRecord } from './repositories';
-import { describeSaveSlotCapability } from './save-slots';
+import { describeSaveSlotCapability, type SaveSlotOperationalState } from './save-slots';
 
-const base: SlotRecord = {
+const valid: SlotRecord = {
   slotId: '00000000-0000-4000-8000-000000000001' as SaveSlotId,
   slotIndex: 1,
   displayName: 'Slot 1',
@@ -12,39 +12,94 @@ const base: SlotRecord = {
   updatedAt: '2026-07-28T00:00:00.000Z',
   status: 'ready',
   schemaVersion: 1,
-  rulesVersion: 'test',
-  contentVersion: 'test',
+  rulesVersion: 'rules.test',
+  contentVersion: 'content.test',
   currentSnapshotId: 'current',
   lastValidSnapshotId: 'last-valid',
   recoveryAvailable: true,
   integrityStatus: 'valid',
 };
 
+const empty: SlotRecord = {
+  ...valid,
+  revision: 0,
+  status: 'empty',
+  schemaVersion: null,
+  rulesVersion: null,
+  contentVersion: null,
+  currentSnapshotId: null,
+  lastValidSnapshotId: null,
+  recoveryAvailable: false,
+  integrityStatus: 'not_checked',
+};
+
+const unsafeFixtures = [
+  ['creating', { ...valid, status: 'creating' }],
+  ['importing', { ...valid, status: 'importing' }],
+  ['resetting', { ...valid, status: 'resetting' }],
+  ['migrating', { ...valid, status: 'migrating' }],
+  ['isolated', { ...valid, status: 'isolated' }],
+  ['invalid', { ...valid, integrityStatus: 'invalid', recoveryAvailable: false }],
+  ['recoverable', { ...valid, status: 'isolated', integrityStatus: 'invalid' }],
+  ['incompatible', { ...valid, schemaVersion: 2 }],
+  ['unchecked', { ...valid, integrityStatus: 'not_checked' }],
+  ['ready without snapshot', { ...valid, currentSnapshotId: null }],
+] as const satisfies ReadonlyArray<readonly [string, SlotRecord]>;
+
+const operationalSignals: readonly SaveSlotOperationalState[] = [
+  'saving',
+  'saved',
+  'failed',
+  'storage-limited',
+];
+
 describe('save-slot shell capability projection', () => {
-  it.each([
-    ['empty', { status: 'empty', schemaVersion: null, integrityStatus: 'not_checked' }],
-    ['valid', {}],
-    ['recoverable', { status: 'isolated', integrityStatus: 'invalid' }],
-    ['invalid', { status: 'isolated', integrityStatus: 'invalid', recoveryAvailable: false }],
-    ['incompatible', { schemaVersion: 2 }],
-    ['migrating', { status: 'migrating' }],
-  ] as const)('derives the %s fixture without UI-owned safety logic', (state, changes) => {
-    expect(describeSaveSlotCapability({ ...base, ...changes }).state).toBe(state);
+  it('allows only genuinely empty and durable compatible integrity-valid playable slots', () => {
+    expect(describeSaveSlotCapability(empty)).toMatchObject({ state: 'empty', usable: true });
+    expect(describeSaveSlotCapability(valid)).toMatchObject({ state: 'valid', usable: true });
+    expect(describeSaveSlotCapability({ ...valid, status: 'active' })).toMatchObject({
+      state: 'valid',
+      usable: true,
+    });
   });
 
-  it.each(['saving', 'saved', 'failed', 'storage-limited'] as const)(
-    'represents the transient %s signal when a persistence status adapter supplies it',
-    (state) => {
-      expect(describeSaveSlotCapability(base, state).state).toBe(state);
+  it.each(unsafeFixtures)('fails closed for the %s durable fixture', (_name, slot) => {
+    expect(describeSaveSlotCapability(slot).usable).toBe(false);
+  });
+
+  it.each(
+    unsafeFixtures.flatMap(([name, slot]) =>
+      operationalSignals.map((signal) => [name, slot, signal] as const),
+    ),
+  )('does not let %s durable data become usable under a %s signal', (_name, slot, signal) => {
+    expect(describeSaveSlotCapability(slot, signal).usable).toBe(false);
+  });
+
+  it('especially does not let saved upgrade unsafe durable data', () => {
+    for (const [, slot] of unsafeFixtures) {
+      expect(describeSaveSlotCapability(slot, 'saved').state).not.toBe('saved');
+    }
+  });
+
+  it.each([
+    ['saving', false],
+    ['saved', true],
+    ['failed', false],
+    ['storage-limited', false],
+  ] as const)(
+    'overlays a safe playable slot with %s without optimistic usability',
+    (state, usable) => {
+      expect(describeSaveSlotCapability(valid, state)).toMatchObject({ state, usable });
     },
   );
 
-  it('only marks empty and valid states as directly usable', () => {
-    expect(describeSaveSlotCapability(base).usable).toBe(true);
-    expect(describeSaveSlotCapability({ ...base, status: 'empty' }).usable).toBe(true);
+  it('preserves recovery availability for every blocked presentation', () => {
+    expect(describeSaveSlotCapability({ ...valid, status: 'migrating' })).toMatchObject({
+      state: 'migrating',
+      recoveryAvailable: true,
+    });
     expect(
-      describeSaveSlotCapability({ ...base, status: 'isolated', integrityStatus: 'invalid' })
-        .usable,
-    ).toBe(false);
+      describeSaveSlotCapability({ ...valid, status: 'isolated', integrityStatus: 'invalid' }),
+    ).toMatchObject({ state: 'recoverable', recoveryAvailable: true });
   });
 });
