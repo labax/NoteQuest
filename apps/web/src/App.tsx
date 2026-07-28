@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode, useEffect, useRef, useState } from 'react';
-import type { SlotRecord } from '@notequest/application';
+import { describeSaveSlotCapability, type SlotRecord } from '@notequest/application';
 import { routeMetadata, shellDestinations, type RouteState } from '@notequest/ui';
 import { createWebComposition, type AppComposition } from './composition';
 
@@ -80,10 +80,6 @@ function RenderErrorState({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
-function slotLabel(slot: SlotRecord): string {
-  return slot.status === 'empty' ? 'Empty — ready for a future adventure' : 'Local data available';
-}
-
 function statusLabel(status: 'not-checked'): string {
   return status.replace('-', ' ');
 }
@@ -125,6 +121,21 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
   const retrySlots = () => {
     setSlotRequest({ status: 'loading' });
     setSlotRequestAttempt((value) => value + 1);
+  };
+
+  const chooseSlot = async (slot: SlotRecord) => {
+    const capability = describeSaveSlotCapability(slot);
+    if (!capability.usable) {
+      composition.route.navigate({ destination: 'data', slotId: slot.slotId });
+      return;
+    }
+    setSlotRequest({ status: 'loading' });
+    const selected = await composition.services.saveSlots.select(slot.slotId);
+    if (!selected.ok) {
+      setSlotRequest({ status: 'failed' });
+      return;
+    }
+    composition.route.navigate({ destination: capability.destination, slotId: slot.slotId });
   };
 
   return (
@@ -193,7 +204,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           ) : null}
           <p className="intro">
             {route.destination === 'save-slots'
-              ? 'Choose a local workspace. Opening a destination does not perform a game action.'
+              ? 'Choose one of three independent local workspaces. Your data stays in this browser unless you deliberately export it.'
               : 'This destination is represented in the shell. Its gameplay features are not available yet.'}
           </p>
           {slotRequest.status === 'failed' ? (
@@ -205,20 +216,54 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
             </div>
           ) : null}
           {route.destination === 'save-slots' && slotRequest.status === 'loading' ? (
-            <p role="status">Loading local slots…</p>
+            <div className="slot-grid" role="status" aria-label="Loading local slots">
+              {[1, 2, 3].map((index) => (
+                <article className="slot-card slot-skeleton" key={index} aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </article>
+              ))}
+              <span className="visually-hidden">Loading local slots…</span>
+            </div>
           ) : null}
           {route.destination === 'save-slots' && slotRequest.status === 'ready' ? (
             <div className="slot-grid">
-              {slotRequest.slots.map((slot) => (
-                <article className="slot-card" key={slot.slotId}>
-                  <h3>Slot {slot.slotIndex}</h3>
-                  <p>{slotLabel(slot)}</p>
-                  <button type="button" disabled>
-                    Gameplay coming later
-                  </button>
-                </article>
-              ))}
+              {slotRequest.slots.map((slot) => {
+                const capability = describeSaveSlotCapability(slot);
+                return (
+                  <article className={`slot-card slot-${capability.state}`} key={slot.slotId}>
+                    <div className="slot-heading">
+                      <h3>Slot {slot.slotIndex}</h3>
+                      <span className="state-badge">{capability.state}</span>
+                    </div>
+                    <p className="slot-name">{slot.displayName}</p>
+                    <p>{capability.summary}</p>
+                    {capability.recoveryAvailable ? (
+                      <p>Last-known-valid data is available.</p>
+                    ) : null}
+                    <button type="button" onClick={() => void chooseSlot(slot)}>
+                      {capability.actionLabel}
+                    </button>
+                  </article>
+                );
+              })}
             </div>
+          ) : null}
+          {route.destination === 'save-slots' ? (
+            <section className="local-guidance" aria-labelledby="local-guidance-title">
+              <h3 id="local-guidance-title">Local data and safety</h3>
+              <p>
+                Browser storage is local to this browser profile. Clearing site data can remove all
+                three slots.
+              </p>
+              <button
+                type="button"
+                onClick={() => composition.route.navigate({ destination: 'data' })}
+              >
+                Learn about local storage
+              </button>
+            </section>
           ) : null}
         </main>
         <aside className="context-panel" aria-labelledby="context-title">

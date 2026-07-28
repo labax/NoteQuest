@@ -6,6 +6,7 @@ export const uiDependsOn = [applicationLayerName] as const;
 
 export const shellDestinations = [
   'save-slots',
+  'adventurer-creation',
   'town',
   'expedition',
   'inventory',
@@ -50,6 +51,13 @@ export const routeMetadata: Readonly<Record<ShellDestination, RouteMetadata>> = 
     path: '/',
     requiresSelectedSlot: false,
     showInNavigation: true,
+  },
+  'adventurer-creation': {
+    title: 'Create Adventurer · NoteQuest',
+    heading: 'Create adventurer',
+    path: '/create',
+    requiresSelectedSlot: true,
+    showInNavigation: false,
   },
   town: {
     title: 'Town · NoteQuest',

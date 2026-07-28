@@ -234,4 +234,57 @@ describe('App shell', () => {
     expect(await screen.findByRole('heading', { name: 'Slot 1' })).toBeInTheDocument();
     expect(list).toHaveBeenCalledTimes(2);
   });
+
+  it('selects only the chosen usable slot and starts its creation destination', async () => {
+    const route = fixtureRoute();
+    const composition = fixtureComposition(undefined, undefined, route);
+    vi.mocked(composition.services.saveSlots.select).mockResolvedValue({
+      ok: true,
+      value: {
+        selectedSlotId: emptySlots[0]!.slotId,
+        selectedAt: '2026-07-28T00:00:00.000Z',
+        slot: emptySlots[0]!,
+      },
+    });
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    const startButtons = await screen.findAllByRole('button', { name: 'Start new game' });
+    await userEvent.click(startButtons[0]!);
+
+    expect(composition.services.saveSlots.select).toHaveBeenCalledTimes(1);
+    expect(composition.services.saveSlots.select).toHaveBeenCalledWith(emptySlots[0]!.slotId);
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+    expect(route.navigate).toHaveBeenCalledWith({
+      destination: 'adventurer-creation',
+      slotId: emptySlots[0]!.slotId,
+    });
+  });
+
+  it('routes a recoverable slot to safe data explanation without selecting or resetting it', async () => {
+    const route = fixtureRoute();
+    const recoverable = {
+      ...emptySlots[1]!,
+      status: 'isolated' as const,
+      schemaVersion: 1,
+      integrityStatus: 'invalid' as const,
+      recoveryAvailable: true,
+      lastValidSnapshotId: 'last-valid',
+    };
+    const slots = [emptySlots[0]!, recoverable, emptySlots[2]!];
+    const composition = fixtureComposition(
+      vi.fn().mockResolvedValue({ ok: true, value: slots }),
+      undefined,
+      route,
+    );
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Review recovery' }));
+
+    expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+    expect(route.navigate).toHaveBeenCalledWith({
+      destination: 'data',
+      slotId: recoverable.slotId,
+    });
+  });
 });
