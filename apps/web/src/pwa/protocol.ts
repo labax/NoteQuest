@@ -8,11 +8,13 @@ export interface ActivateUpdateMessage {
 
 export interface CheckOfflineReadinessMessage {
   readonly type: typeof CHECK_OFFLINE_READINESS_MESSAGE;
+  readonly requestId: string;
 }
 
 export interface OfflineReadinessResultMessage {
   readonly type: typeof OFFLINE_READINESS_RESULT_MESSAGE;
   readonly ready: boolean;
+  readonly requestId: string;
 }
 
 export function isCheckOfflineReadinessMessage(
@@ -21,7 +23,8 @@ export function isCheckOfflineReadinessMessage(
   return (
     typeof value === 'object' &&
     value !== null &&
-    Reflect.get(value, 'type') === CHECK_OFFLINE_READINESS_MESSAGE
+    Reflect.get(value, 'type') === CHECK_OFFLINE_READINESS_MESSAGE &&
+    typeof Reflect.get(value, 'requestId') === 'string'
   );
 }
 
@@ -32,7 +35,8 @@ export function isOfflineReadinessResultMessage(
     typeof value === 'object' &&
     value !== null &&
     Reflect.get(value, 'type') === OFFLINE_READINESS_RESULT_MESSAGE &&
-    typeof Reflect.get(value, 'ready') === 'boolean'
+    typeof Reflect.get(value, 'ready') === 'boolean' &&
+    typeof Reflect.get(value, 'requestId') === 'string'
   );
 }
 

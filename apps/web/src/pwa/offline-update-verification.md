@@ -52,3 +52,17 @@ These gaps do not justify optimistic runtime claims: the coordinator remains unv
 restricted, deferred, or failed until the applicable runtime evidence exists. The real-browser cases
 are already enumerated by the M7 browser persistence gate and must not be represented as completed
 release evidence by this M5 verification note.
+
+## PR #160 review hardening
+
+Review follow-up checks on 2026-07-28 additionally verify release-scoped cache lookup, correlated
+controller/request evidence, the post-controller-change reload boundary, bounded readiness timeout,
+explicit cache/update retries, and production safety-state transitions. The focused review suite
+passed 90 tests across the PWA, shell, composition, and architecture files. The required
+`format:check`, `lint`, `typecheck`, `test:ci`, and production build commands also passed with release
+ID `pr-160-review`.
+
+No browser offline/repeat-launch/update smoke test was run during this review follow-up because the
+repository does not configure a browser E2E runner or disposable multi-release service-worker test
+host. That evidence remains manual/deferred and is not implied by the successful Workbox/jsdom unit
+checks.

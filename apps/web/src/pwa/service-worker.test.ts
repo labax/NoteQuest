@@ -158,7 +158,8 @@ describe('PWA lifecycle adapter', () => {
 
   it('does not infer readiness or currency from an existing controller', async () => {
     const postMessage = vi.fn();
-    let messageReceived: ((event: { readonly data: unknown }) => void) | undefined;
+    let messageReceived:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
     const environment = serviceWorkerEnvironment(vi.fn().mockResolvedValue(registration()), {
       postMessage,
     });
@@ -169,33 +170,275 @@ describe('PWA lifecycle adapter', () => {
 
     await adapter.register();
 
-    expect(postMessage).toHaveBeenCalledWith({ type: 'NOTEQUEST_CHECK_OFFLINE_READINESS' });
+    const request = postMessage.mock.calls[0]?.[0] as { requestId: string };
+    expect(request).toMatchObject({ type: 'NOTEQUEST_CHECK_OFFLINE_READINESS' });
     expect(adapter.getStatus()).toEqual({
       serviceWorkerSupport: 'supported',
       offlineReadiness: 'installing',
       updateStatus: 'not-checked',
     });
     messageReceived?.({
-      data: { type: 'NOTEQUEST_OFFLINE_READINESS_RESULT', ready: true },
+      source: environment.serviceWorker.controller,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: request.requestId,
+        ready: true,
+      },
     });
     expect(adapter.getStatus().offlineReadiness).toBe('ready');
   });
 
   it('rejects malformed readiness messages and reports a verified cache failure', async () => {
-    let messageReceived: ((event: { readonly data: unknown }) => void) | undefined;
-    const environment = serviceWorkerEnvironment(vi.fn().mockResolvedValue(registration()), {
-      postMessage: vi.fn(),
-    });
+    let messageReceived:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
+    const controller = { postMessage: vi.fn() };
+    const environment = serviceWorkerEnvironment(
+      vi.fn().mockResolvedValue(registration()),
+      controller,
+    );
     environment.serviceWorker.addEventListener.mockImplementation((type, listener) => {
       if (type === 'message') messageReceived = listener;
     });
     const adapter = createPwaLifecycleAdapter(environment);
     await adapter.register();
 
-    messageReceived?.({ data: { type: 'NOTEQUEST_OFFLINE_READINESS_RESULT', ready: 'yes' } });
+    const request = controller.postMessage.mock.calls[0]?.[0] as { requestId: string };
+    messageReceived?.({
+      source: controller,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: request.requestId,
+        ready: 'yes',
+      },
+    });
     expect(adapter.getStatus().offlineReadiness).toBe('installing');
-    messageReceived?.({ data: { type: 'NOTEQUEST_OFFLINE_READINESS_RESULT', ready: false } });
+    messageReceived?.({
+      source: controller,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: request.requestId,
+        ready: false,
+      },
+    });
     expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
+  });
+
+  it('ignores unsolicited, foreign, stale, and duplicate readiness responses', async () => {
+    let messageReceived:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
+    const controller = { postMessage: vi.fn() };
+    const environment = serviceWorkerEnvironment(
+      vi.fn().mockResolvedValue(registration()),
+      controller,
+    );
+    environment.serviceWorker.addEventListener.mockImplementation((type, listener) => {
+      if (type === 'message') messageReceived = listener;
+    });
+    const adapter = createPwaLifecycleAdapter(environment);
+    await adapter.register();
+    const request = controller.postMessage.mock.calls[0]?.[0] as { requestId: string };
+
+    messageReceived?.({
+      source: controller,
+      data: { type: 'NOTEQUEST_OFFLINE_READINESS_RESULT', requestId: 'stale', ready: true },
+    });
+    messageReceived?.({
+      source: { postMessage: vi.fn() },
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: request.requestId,
+        ready: true,
+      },
+    });
+    expect(adapter.getStatus().offlineReadiness).toBe('installing');
+
+    messageReceived?.({
+      source: controller,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: request.requestId,
+        ready: false,
+      },
+    });
+    expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
+    messageReceived?.({
+      source: controller,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: request.requestId,
+        ready: true,
+      },
+    });
+    expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
+  });
+
+  it('keeps controller-change readiness neutral until a fresh reloaded adapter verifies it', async () => {
+    let oldMessage:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
+    let controllerChanged: (() => void) | undefined;
+    const oldController = { postMessage: vi.fn() };
+    const environment = serviceWorkerEnvironment(
+      vi.fn().mockResolvedValue(registration()),
+      oldController,
+    );
+    environment.serviceWorker.addEventListener.mockImplementation((type, listener) => {
+      if (type === 'message') oldMessage = listener;
+      if (type === 'controllerchange') controllerChanged = listener as () => void;
+    });
+    const adapter = createPwaLifecycleAdapter(environment);
+    await adapter.register();
+    const oldRequest = oldController.postMessage.mock.calls[0]?.[0] as { requestId: string };
+
+    controllerChanged?.();
+    const newlyActivatedController = { postMessage: vi.fn() };
+    environment.serviceWorker.controller = newlyActivatedController;
+    oldMessage?.({
+      source: oldController,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: oldRequest.requestId,
+        ready: true,
+      },
+    });
+    oldMessage?.({
+      source: newlyActivatedController,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: oldRequest.requestId,
+        ready: false,
+      },
+    });
+    expect(adapter.getStatus()).toMatchObject({
+      offlineReadiness: 'not-checked',
+      updateStatus: 'reload-required',
+    });
+    expect(adapter.retryReadiness()).toBe(false);
+
+    const freshController = { postMessage: vi.fn() };
+    const freshEnvironment = serviceWorkerEnvironment(
+      vi.fn().mockResolvedValue(registration()),
+      freshController,
+    );
+    let freshMessage:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
+    freshEnvironment.serviceWorker.addEventListener.mockImplementation((type, listener) => {
+      if (type === 'message') freshMessage = listener;
+    });
+    const reloaded = createPwaLifecycleAdapter(freshEnvironment);
+    await reloaded.register();
+    const freshRequest = freshController.postMessage.mock.calls[0]?.[0] as { requestId: string };
+    expect(freshRequest.requestId).not.toBe(oldRequest.requestId);
+    freshMessage?.({
+      source: freshController,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: freshRequest.requestId,
+        ready: true,
+      },
+    });
+    expect(reloaded.getStatus().offlineReadiness).toBe('ready');
+  });
+
+  it('times out a readiness check and succeeds after an explicit scoped retry', async () => {
+    vi.useFakeTimers();
+    const controller = { postMessage: vi.fn() };
+    let messageReceived:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
+    const environment = serviceWorkerEnvironment(
+      vi.fn().mockResolvedValue(registration()),
+      controller,
+    );
+    environment.serviceWorker.addEventListener.mockImplementation((type, listener) => {
+      if (type === 'message') messageReceived = listener;
+    });
+    const adapter = createPwaLifecycleAdapter(environment, { readinessTimeoutMs: 10 });
+    await adapter.register();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
+
+    expect(adapter.retryReadiness()).toBe(true);
+    const retry = controller.postMessage.mock.calls[1]?.[0] as { requestId: string };
+    messageReceived?.({
+      source: controller,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: retry.requestId,
+        ready: true,
+      },
+    });
+    expect(adapter.getStatus().offlineReadiness).toBe('ready');
+    vi.useRealTimers();
+  });
+
+  it('retries a false readiness result with a new request and can then succeed', async () => {
+    const controller = { postMessage: vi.fn() };
+    let messageReceived:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
+    const environment = serviceWorkerEnvironment(
+      vi.fn().mockResolvedValue(registration()),
+      controller,
+    );
+    environment.serviceWorker.addEventListener.mockImplementation((type, listener) => {
+      if (type === 'message') messageReceived = listener;
+    });
+    const adapter = createPwaLifecycleAdapter(environment);
+    await adapter.register();
+    const first = controller.postMessage.mock.calls[0]?.[0] as { requestId: string };
+    messageReceived?.({
+      source: controller,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: first.requestId,
+        ready: false,
+      },
+    });
+    expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
+
+    expect(adapter.retryReadiness()).toBe(true);
+    const second = controller.postMessage.mock.calls[1]?.[0] as { requestId: string };
+    expect(second.requestId).not.toBe(first.requestId);
+    messageReceived?.({
+      source: controller,
+      data: {
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: second.requestId,
+        ready: true,
+      },
+    });
+    expect(adapter.getStatus().offlineReadiness).toBe('ready');
+  });
+
+  it('contains a rejected readiness message and remains retryable', async () => {
+    const controller = {
+      postMessage: vi.fn(() => {
+        throw new Error('detached');
+      }),
+    };
+    const adapter = createPwaLifecycleAdapter(
+      serviceWorkerEnvironment(vi.fn().mockResolvedValue(registration()), controller),
+    );
+    await expect(adapter.register()).resolves.toBeUndefined();
+    expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
+    expect(adapter.retryReadiness()).toBe(false);
+    expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
+  });
+
+  it('retries update checks without activation and contains rejected browser promises', async () => {
+    const update = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce(undefined);
+    const registered = { ...registration(), update } as ServiceWorkerRegistration;
+    const adapter = createPwaLifecycleAdapter(
+      serviceWorkerEnvironment(vi.fn().mockResolvedValue(registered)),
+    );
+    await adapter.register();
+
+    await expect(adapter.retryUpdate()).resolves.toBe(false);
+    expect(adapter.getStatus().updateStatus).toBe('failed');
+    await expect(adapter.retryUpdate()).resolves.toBe(true);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(registered.waiting).toBeNull();
   });
 
   it('stops lifecycle publication and removes owned listeners when closed', async () => {

@@ -30,6 +30,8 @@ function lifecycleFixture(
     getStatus: () => status,
     register: vi.fn(),
     requestActivation,
+    retryReadiness: vi.fn(() => true),
+    retryUpdate: vi.fn(async () => true),
     subscribe(listener) {
       listeners.add(listener);
       listener(status);
@@ -345,5 +347,21 @@ describe('PWA update coordinator', () => {
     expect(JSON.stringify(coordinator.getStatus().failures)).not.toMatch(
       /slotId|name|history|seed/i,
     );
+  });
+
+  it.each([
+    ['cache-check-failed', 'retryReadiness'],
+    ['update-failed', 'retryUpdate'],
+  ] as const)('routes %s retry through the lifecycle without activation', async (code, method) => {
+    const fixture = lifecycleFixture({
+      serviceWorkerSupport: 'supported',
+      offlineReadiness: code === 'cache-check-failed' ? 'unavailable' : 'ready',
+      updateStatus: code === 'update-failed' ? 'failed' : 'not-checked',
+    });
+    const coordinator = createPwaUpdateCoordinator(fixture.lifecycle);
+
+    await expect(coordinator.retryFailure(code)).resolves.toBe(true);
+    expect(fixture.lifecycle[method]).toHaveBeenCalledOnce();
+    expect(fixture.requestActivation).not.toHaveBeenCalled();
   });
 });

@@ -8,7 +8,6 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { describeSaveSlotCapability, type SlotRecord } from '@notequest/application';
-import type { SaveSlotId } from '@notequest/domain';
 import { routeMetadata, shellDestinations, type RouteState } from '@notequest/ui';
 import { createWebComposition, type AppComposition } from './composition';
 import { presentPwaShellStatus } from './pwa/status-presentation';
@@ -170,6 +169,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
   >({ status: 'idle' });
   const selectionPending = useRef<string | null>(null);
   const [activationFailure, setActivationFailure] = useState(false);
+  const [retryPending, setRetryPending] = useState<string | null>(null);
   const pwa = useSyncExternalStore(
     composition.updates.subscribe,
     composition.updates.getStatus,
@@ -189,28 +189,6 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
       window.removeEventListener('offline', offline);
     };
   }, [composition]);
-
-  useEffect(() => {
-    const operation = route.slotId
-      ? composition.services.saveSlotOperations.get(route.slotId as SaveSlotId)
-      : undefined;
-    composition.updates.updateSafety({
-      safePoint:
-        route.slotId === undefined || operation === 'saved'
-          ? 'durable'
-          : operation === 'saving'
-            ? 'saving'
-            : operation === 'failed' || operation === 'storage-limited'
-              ? 'failed'
-              : 'unverified',
-      commandPending: selectionRequest.status === 'pending',
-      migrationActive: false,
-      importActive: false,
-      recoveryActive: false,
-      blockingWorkflowActive: false,
-      unsavedWork: false,
-    });
-  }, [composition, route, selectionRequest]);
 
   useEffect(() => {
     document.title = route.metadata.title;
@@ -310,7 +288,21 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           {pwaPresentation.updateMessage ? <span>{pwaPresentation.updateMessage}</span> : null}
           {pwa.failures.map((failure) => (
             <span key={failure.code} data-diagnostic-code={failure.code}>
-              {failure.guidance}
+              {failure.guidance}{' '}
+              {failure.retryable &&
+              (failure.code === 'cache-check-failed' || failure.code === 'update-failed') ? (
+                <button
+                  type="button"
+                  disabled={retryPending !== null}
+                  onClick={async () => {
+                    setRetryPending(failure.code);
+                    await composition.updates.retryFailure(failure.code);
+                    setRetryPending(null);
+                  }}
+                >
+                  {retryPending === failure.code ? 'Retrying…' : 'Retry check'}
+                </button>
+              ) : null}
             </span>
           ))}
           {pwa.updateState === 'ready' ? (

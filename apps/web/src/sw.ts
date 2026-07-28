@@ -1,4 +1,4 @@
-import { setCacheNameDetails } from 'workbox-core';
+import { cacheNames, setCacheNameDetails } from 'workbox-core';
 import {
   createHandlerBoundToURL,
   getCacheKeyForURL,
@@ -43,13 +43,14 @@ async function requiredPrecacheIsReady(): Promise<boolean> {
     typeof entry === 'string' ? entry : entry.url,
   );
   if (requiredUrls.length === 0) return false;
+  const cache = await caches.open(cacheNames.precache);
   const matches = await Promise.all(
     requiredUrls.map((url) => {
       const cacheKey = getCacheKeyForURL(url);
-      return cacheKey === undefined ? undefined : caches.match(cacheKey);
+      return cacheKey === undefined ? undefined : cache.match(cacheKey);
     }),
   );
-  return matches.every((response) => response !== undefined);
+  return matches.every((response) => response !== undefined && response.ok);
 }
 
 // Do not call skipWaiting during installation. A new release must remain waiting until
@@ -59,10 +60,21 @@ self.addEventListener('message', (event) => {
     void self.skipWaiting();
   }
   if (isCheckOfflineReadinessMessage(event.data)) {
+    const { requestId } = event.data;
     void requiredPrecacheIsReady()
-      .then((ready) => event.source?.postMessage({ type: OFFLINE_READINESS_RESULT_MESSAGE, ready }))
+      .then((ready) =>
+        event.source?.postMessage({
+          type: OFFLINE_READINESS_RESULT_MESSAGE,
+          requestId,
+          ready,
+        }),
+      )
       .catch(() =>
-        event.source?.postMessage({ type: OFFLINE_READINESS_RESULT_MESSAGE, ready: false }),
+        event.source?.postMessage({
+          type: OFFLINE_READINESS_RESULT_MESSAGE,
+          requestId,
+          ready: false,
+        }),
       );
   }
 });

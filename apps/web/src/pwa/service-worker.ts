@@ -22,16 +22,28 @@ export interface PwaLifecycleAdapter {
   register(): Promise<void>;
   subscribe(listener: (status: Readonly<PwaLifecycleStatus>) => void): () => void;
   requestActivation(activationIsSafe: boolean): boolean;
+  retryReadiness(): boolean;
+  retryUpdate(): Promise<boolean>;
   close(): void;
 }
 
+interface ServiceWorkerLike {
+  postMessage(message: unknown): void;
+}
+
 interface ServiceWorkerContainerLike {
-  readonly controller: { postMessage(message: unknown): void } | null;
+  readonly controller: ServiceWorkerLike | null;
   register(scriptURL: string, options?: RegistrationOptions): Promise<ServiceWorkerRegistration>;
   addEventListener(type: 'controllerchange', listener: () => void): void;
   removeEventListener(type: 'controllerchange', listener: () => void): void;
-  addEventListener(type: 'message', listener: (event: { readonly data: unknown }) => void): void;
-  removeEventListener(type: 'message', listener: (event: { readonly data: unknown }) => void): void;
+  addEventListener(
+    type: 'message',
+    listener: (event: { readonly data: unknown; readonly source?: unknown }) => void,
+  ): void;
+  removeEventListener(
+    type: 'message',
+    listener: (event: { readonly data: unknown; readonly source?: unknown }) => void,
+  ): void;
 }
 
 interface PwaEnvironment {
@@ -46,6 +58,7 @@ const unsupportedStatus: PwaLifecycleStatus = {
 
 export function createPwaLifecycleAdapter(
   environment: PwaEnvironment = navigator,
+  options: { readonly readinessTimeoutMs?: number } = {},
 ): PwaLifecycleAdapter {
   const serviceWorker = environment.serviceWorker;
   const registrationSupported = typeof serviceWorker?.register === 'function';
@@ -61,6 +74,19 @@ export function createPwaLifecycleAdapter(
   let closed = false;
   const listeners = new Set<(status: Readonly<PwaLifecycleStatus>) => void>();
   const observedWorkers = new WeakSet<ServiceWorker>();
+  const readinessTimeoutMs = options.readinessTimeoutMs ?? 5_000;
+  const readinessClientId =
+    typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let readinessSequence = 0;
+  let pendingReadiness:
+    | {
+        readonly requestId: string;
+        readonly controller: ServiceWorkerLike;
+        timeout: ReturnType<typeof setTimeout>;
+      }
+    | undefined;
 
   const publish = (next: PwaLifecycleStatus) => {
     if (closed) return;
@@ -68,14 +94,43 @@ export function createPwaLifecycleAdapter(
     listeners.forEach((listener) => listener(status));
   };
 
-  const requestReadinessCheck = () => {
-    if (!serviceWorker?.controller) return;
-    publish({ ...status, offlineReadiness: 'installing' });
-    serviceWorker.controller.postMessage({ type: CHECK_OFFLINE_READINESS_MESSAGE });
+  const clearReadiness = () => {
+    if (pendingReadiness) clearTimeout(pendingReadiness.timeout);
+    pendingReadiness = undefined;
   };
 
-  const readinessResult = (event: { readonly data: unknown }) => {
+  const requestReadinessCheck = (): boolean => {
+    if (!serviceWorker?.controller || status.updateStatus === 'reload-required') return false;
+    clearReadiness();
+    const controller = serviceWorker.controller;
+    const requestId = `${readinessClientId}:${++readinessSequence}`;
+    publish({ ...status, offlineReadiness: 'installing' });
+    const timeout = setTimeout(() => {
+      if (pendingReadiness?.requestId !== requestId) return;
+      pendingReadiness = undefined;
+      publish({ ...status, offlineReadiness: 'unavailable' });
+    }, readinessTimeoutMs);
+    pendingReadiness = { requestId, controller, timeout };
+    try {
+      controller.postMessage({ type: CHECK_OFFLINE_READINESS_MESSAGE, requestId });
+    } catch {
+      clearReadiness();
+      publish({ ...status, offlineReadiness: 'unavailable' });
+      return false;
+    }
+    return true;
+  };
+
+  const readinessResult = (event: { readonly data: unknown; readonly source?: unknown }) => {
     if (!isOfflineReadinessResultMessage(event.data)) return;
+    if (
+      !pendingReadiness ||
+      status.updateStatus === 'reload-required' ||
+      event.source !== pendingReadiness.controller ||
+      event.data.requestId !== pendingReadiness.requestId
+    )
+      return;
+    clearReadiness();
     publish({
       ...status,
       offlineReadiness: event.data.ready ? 'ready' : 'unavailable',
@@ -83,8 +138,8 @@ export function createPwaLifecycleAdapter(
   };
 
   const controllerChanged = () => {
+    clearReadiness();
     publish({ ...status, offlineReadiness: 'not-checked', updateStatus: 'reload-required' });
-    requestReadinessCheck();
   };
 
   const observeInstallingWorker = () => {
@@ -151,9 +206,25 @@ export function createPwaLifecycleAdapter(
       publish({ ...status, updateStatus: 'activation-requested' });
       return true;
     },
+    retryReadiness: requestReadinessCheck,
+    async retryUpdate() {
+      if (closed || !registration || typeof registration.update !== 'function') return false;
+      try {
+        publish({ ...status, updateStatus: 'pending' });
+        await registration.update();
+        if (!registration.installing && !registration.waiting) {
+          publish({ ...status, updateStatus: 'not-checked' });
+        }
+        return true;
+      } catch {
+        publish({ ...status, updateStatus: 'failed' });
+        return false;
+      }
+    },
     close() {
       if (closed) return;
       closed = true;
+      clearReadiness();
       serviceWorker?.removeEventListener?.('controllerchange', controllerChanged);
       serviceWorker?.removeEventListener?.('message', readinessResult);
       registration?.removeEventListener('updatefound', observeInstallingWorker);

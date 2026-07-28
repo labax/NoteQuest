@@ -6,9 +6,13 @@ const workbox = vi.hoisted(() => ({
   precacheAndRoute: vi.fn(),
   registerRoute: vi.fn(),
   setCacheNameDetails: vi.fn(),
+  cacheNames: { precache: 'nq-shell-release-test' },
 }));
 
-vi.mock('workbox-core', () => ({ setCacheNameDetails: workbox.setCacheNameDetails }));
+vi.mock('workbox-core', () => ({
+  cacheNames: workbox.cacheNames,
+  setCacheNameDetails: workbox.setCacheNameDetails,
+}));
 vi.mock('workbox-precaching', () => ({
   createHandlerBoundToURL: workbox.createHandlerBoundToURL,
   getCacheKeyForURL: workbox.getCacheKeyForURL,
@@ -92,7 +96,18 @@ describe('custom service worker', () => {
     expect(skipWaiting).toHaveBeenCalledOnce();
   });
 
-  it('reports readiness only when every injected precache entry can be read', async () => {
+  it.each([
+    [
+      'an old cache has all entries but the active cache is incomplete',
+      ['cache:index.html'],
+      false,
+    ],
+    [
+      'the active release cache has every readable entry',
+      ['cache:index.html', 'cache:assets/app.js'],
+      true,
+    ],
+  ] as const)('scopes readiness when %s', async (_name, currentKeys, expected) => {
     let onMessage:
       | ((event: {
           readonly data: unknown;
@@ -101,9 +116,17 @@ describe('custom service worker', () => {
       | undefined;
     const postMessage = vi.fn();
     vi.stubGlobal('__NOTEQUEST_RELEASE_ID__', 'release-test');
-    vi.stubGlobal('caches', {
+    const currentCache = {
       match: vi.fn((key: string) =>
-        Promise.resolve(key === 'cache:index.html' ? new Response('shell') : undefined),
+        Promise.resolve(
+          (currentKeys as readonly string[]).includes(key) ? new Response('current') : undefined,
+        ),
+      ),
+    };
+    const oldCache = { match: vi.fn(() => Promise.resolve(new Response('old'))) };
+    vi.stubGlobal('caches', {
+      open: vi.fn((name: string) =>
+        Promise.resolve(name === 'nq-shell-release-test' ? currentCache : oldCache),
       ),
     });
     vi.stubGlobal('self', {
@@ -124,14 +147,17 @@ describe('custom service worker', () => {
 
     await import('./sw');
     onMessage?.({
-      data: { type: 'NOTEQUEST_CHECK_OFFLINE_READINESS' },
+      data: { type: 'NOTEQUEST_CHECK_OFFLINE_READINESS', requestId: 'request-1' },
       source: { postMessage },
     });
     await vi.waitFor(() =>
       expect(postMessage).toHaveBeenCalledWith({
         type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
-        ready: false,
+        requestId: 'request-1',
+        ready: expected,
       }),
     );
+    expect(currentCache.match).toHaveBeenCalledTimes(2);
+    expect(oldCache.match).not.toHaveBeenCalled();
   });
 });

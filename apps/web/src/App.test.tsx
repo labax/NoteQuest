@@ -4,6 +4,7 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { NOTEQUEST_SLOT_IDS } from '@notequest/infrastructure';
+import { createUpdateSafetyState } from '@notequest/application';
 import { createPwaStatusAdapter, type AppComposition } from './composition';
 import { createPwaUpdateCoordinator } from './pwa/update-coordinator';
 import { App, RootErrorBoundary } from './App.tsx';
@@ -41,6 +42,16 @@ function fixtureComposition(
   route: RouteAdapter = fixtureRoute(),
 ): AppComposition {
   const updates = createPwaUpdateCoordinator(pwa);
+  const updateSafety = createUpdateSafetyState();
+  updates.updateSafety({
+    safePoint: 'durable',
+    commandPending: false,
+    migrationActive: false,
+    importActive: false,
+    recoveryActive: false,
+    blockingWorkflowActive: false,
+    unsavedWork: false,
+  });
   return {
     services: {
       saveSlots: {
@@ -50,6 +61,7 @@ function fixtureComposition(
         updateMetadata: vi.fn(),
       },
       saveSlotOperations: { get: vi.fn(() => undefined) },
+      updateSafety,
     },
     route,
     pwa,
@@ -206,7 +218,8 @@ describe('App shell', () => {
     ],
     ['unsupported service-worker API', createPwaStatusAdapter({}), 'unsupported'],
   ])('keeps PWA claims neutral for a %s', async (_name, pwa, support) => {
-    render(<App compose={() => Promise.resolve(fixtureComposition(undefined, pwa))} />);
+    const composition = fixtureComposition(undefined, pwa);
+    render(<App compose={() => Promise.resolve(composition)} />);
     const status = await screen.findByLabelText('Application status');
     expect(status).toHaveTextContent(`Service worker${support}`);
     expect(status).toHaveTextContent(
@@ -229,7 +242,8 @@ describe('App shell', () => {
         register: vi.fn().mockRejectedValue(new Error('registration disabled')),
       },
     });
-    render(<App compose={() => Promise.resolve(fixtureComposition(undefined, pwa))} />);
+    const composition = fixtureComposition(undefined, pwa);
+    render(<App compose={() => Promise.resolve(composition)} />);
     expect(
       await screen.findByRole('heading', { name: 'Choose a local save slot' }),
     ).toBeInTheDocument();
@@ -246,14 +260,21 @@ describe('App shell', () => {
         'Retry the offline readiness check while online. Current local data is unchanged.',
       ),
     ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry check' }));
+    expect(screen.getByText('Offline capability restricted')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reload updated app' })).not.toBeInTheDocument();
+    expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
     expect(screen.getAllByRole('button', { name: 'Start new game' })[0]).toBeEnabled();
   });
 
   it('reports verified offline play without treating network availability as a prerequisite', async () => {
-    let messageReceived: ((event: { readonly data: unknown }) => void) | undefined;
+    let messageReceived:
+      ((event: { readonly data: unknown; readonly source?: unknown }) => void) | undefined;
+    const controller = { postMessage: vi.fn() };
     const pwa = createPwaStatusAdapter({
       serviceWorker: {
-        controller: { postMessage: vi.fn() },
+        controller,
         register: vi.fn().mockResolvedValue({
           waiting: null,
           installing: null,
@@ -261,7 +282,7 @@ describe('App shell', () => {
           removeEventListener: vi.fn(),
         }),
         addEventListener: vi.fn((type, listener) => {
-          if (type === 'message') messageReceived = listener as (event: { data: unknown }) => void;
+          if (type === 'message') messageReceived = listener;
         }),
         removeEventListener: vi.fn(),
       },
@@ -271,9 +292,15 @@ describe('App shell', () => {
     composition.updates.updateStorageCapability('available');
     render(<App compose={() => Promise.resolve(composition)} />);
 
+    const request = controller.postMessage.mock.calls[0]?.[0] as { requestId: string };
     act(() =>
       messageReceived?.({
-        data: { type: 'NOTEQUEST_OFFLINE_READINESS_RESULT', ready: true },
+        source: controller,
+        data: {
+          type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+          requestId: request.requestId,
+          ready: true,
+        },
       }),
     );
     expect(await screen.findByText('Offline ready')).toBeInTheDocument();
@@ -306,8 +333,8 @@ describe('App shell', () => {
 
     const status = screen.getByLabelText('Application status');
     expect(status).toHaveTextContent('Reload needed');
-    expect(status).toHaveTextContent('Preparing offline use');
-    expect(status).toHaveTextContent('Cache checkpreparing');
+    expect(status).toHaveTextContent('Offline readiness not verified');
+    expect(status).toHaveTextContent('Cache checknot checked');
     expect(status).not.toHaveTextContent('Offline ready');
   });
 
@@ -368,6 +395,15 @@ describe('App shell', () => {
       fallback: null,
     });
     const composition = fixtureComposition(undefined, pwa, route);
+    composition.updates.updateSafety({
+      safePoint: 'unverified',
+      commandPending: false,
+      migrationActive: false,
+      importActive: false,
+      recoveryActive: false,
+      blockingWorkflowActive: false,
+      unsavedWork: false,
+    });
     render(<App compose={() => Promise.resolve(composition)} />);
 
     expect(
@@ -385,6 +421,7 @@ describe('App shell', () => {
         stateChanged = listener;
       }),
     };
+    const update = vi.fn().mockResolvedValue(undefined);
     const pwa = createPwaStatusAdapter({
       serviceWorker: {
         controller: { postMessage: vi.fn() },
@@ -393,6 +430,7 @@ describe('App shell', () => {
           installing,
           addEventListener: vi.fn(),
           removeEventListener: vi.fn(),
+          update,
         }),
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
@@ -411,6 +449,11 @@ describe('App shell', () => {
     expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
     expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
     expect(screen.getAllByRole('button', { name: 'Start new game' })[0]).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry check' }));
+    expect(update).toHaveBeenCalledOnce();
+    expect(composition.reload).not.toHaveBeenCalled();
+    expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
   });
 
   it('retries a failed slot result, returns to loading, and renders recovered slots', async () => {

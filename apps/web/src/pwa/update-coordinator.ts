@@ -74,6 +74,7 @@ export interface PwaUpdateCoordinator {
   updateStorageCapability(capability: StorageCapability): void;
   updateSafety(snapshot: Readonly<UpdateSafetySnapshot>): void;
   requestActivation(): UpdateActivationResult;
+  retryFailure(code: OfflineUpdateFailureCode): Promise<boolean>;
   subscribe(listener: (status: Readonly<OfflineUpdateCoordinatorStatus>) => void): () => void;
   close(): void;
 }
@@ -229,6 +230,12 @@ export function createPwaUpdateCoordinator(
       if (!lifecycle.requestActivation(true))
         return { ok: false, reason: 'activation-unavailable', blockers: [] };
       return { ok: true };
+    },
+    async retryFailure(code) {
+      if (closed) return false;
+      if (code === 'cache-check-failed') return lifecycle.retryReadiness();
+      if (code === 'update-failed') return lifecycle.retryUpdate();
+      return false;
     },
     subscribe(listener) {
       if (closed) return () => undefined;
