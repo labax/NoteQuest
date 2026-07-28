@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { NOTEQUEST_SLOT_IDS } from '@notequest/infrastructure';
 import { createPwaStatusAdapter, type AppComposition } from './composition';
+import { createPwaUpdateCoordinator } from './pwa/update-coordinator';
 import { App, RootErrorBoundary } from './App.tsx';
 import {
   routeMetadata,
@@ -32,9 +33,14 @@ const emptySlots = [1, 2, 3].map((slotIndex) => ({
 
 function fixtureComposition(
   list = vi.fn().mockResolvedValue({ ok: true, value: emptySlots }),
-  pwa = createPwaStatusAdapter({ serviceWorker: {} }),
+  pwa = createPwaStatusAdapter({
+    serviceWorker: {
+      register: vi.fn(),
+    },
+  }),
   route: RouteAdapter = fixtureRoute(),
 ): AppComposition {
+  const updates = createPwaUpdateCoordinator(pwa);
   return {
     services: {
       saveSlots: {
@@ -47,6 +53,7 @@ function fixtureComposition(
     },
     route,
     pwa,
+    updates,
     version: 'test-version',
     close: vi.fn(),
   };
@@ -193,7 +200,7 @@ describe('App shell', () => {
   it.each([
     [
       'supported browser without evidence',
-      createPwaStatusAdapter({ serviceWorker: {} }),
+      createPwaStatusAdapter({ serviceWorker: { register: vi.fn() } }),
       'supported',
     ],
     ['unsupported service-worker API', createPwaStatusAdapter({}), 'unsupported'],
@@ -201,9 +208,44 @@ describe('App shell', () => {
     render(<App compose={() => Promise.resolve(fixtureComposition(undefined, pwa))} />);
     const status = await screen.findByLabelText('Application status');
     expect(status).toHaveTextContent(`Service workers: ${support}`);
-    expect(status).toHaveTextContent('Offline readiness: not checked');
+    expect(status).toHaveTextContent(
+      support === 'unsupported'
+        ? 'Offline readiness: unavailable'
+        : 'Offline readiness: not checked',
+    );
     expect(status).toHaveTextContent('Updates: not checked');
     expect(status).not.toHaveTextContent(/offline support available|app up to date/i);
+    if (support === 'unsupported') {
+      expect(status).toHaveTextContent(
+        'Offline relaunch is unavailable; browser play can continue.',
+      );
+    } else {
+      expect(status).not.toHaveTextContent('Offline relaunch is unavailable');
+    }
+  });
+
+  it('reports disabled service-worker registration without blocking ordinary play', async () => {
+    const pwa = createPwaStatusAdapter({
+      serviceWorker: {
+        register: vi.fn().mockRejectedValue(new Error('registration disabled')),
+      },
+    });
+    render(<App compose={() => Promise.resolve(fixtureComposition(undefined, pwa))} />);
+    expect(
+      await screen.findByRole('heading', { name: 'Choose a local save slot' }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      await pwa.register();
+    });
+
+    expect(screen.getByLabelText('Application status')).toHaveTextContent(
+      'Offline readiness: unavailable',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Offline relaunch is unavailable; browser play can continue.',
+    );
+    expect(screen.getAllByRole('button', { name: 'Start new game' })[0]).toBeEnabled();
   });
 
   it('retries a failed slot result, returns to loading, and renders recovered slots', async () => {

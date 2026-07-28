@@ -28,9 +28,48 @@ Run the checks that match the change before opening a PR. For implementation sto
 - `npm test` — run the Vitest unit and architecture tests.
 - `npm run test:ci` — run the Vitest suite using the CI alias.
 - `npm run build` — run the strict typecheck and build the production Vite web app.
+- `npm run verify:pwa-artifact` — inspect the built worker for release metadata, approved precache
+  entries, complete HTML shell coverage, controlled activation, and absent public source maps.
 - `npm run verify` — run the baseline local verification sequence expected before review.
 
 Keep these command names stable for M1 CI and future implementation stories unless a replacement is documented in the relevant issue.
+
+## Service-worker smoke verification
+
+The development server does not register the production service worker. To verify the generated
+precache and the repeat-launch boundary, run `npm run build` followed by `npm run preview`, then:
+
+1. Open the preview URL in a fresh browser profile and confirm that `sw.js` is registered and that
+   the Workbox precache contains the emitted HTML and hashed JavaScript/CSS shell files.
+2. Reload once while online so the installed worker controls the page, switch the browser network
+   setting to offline, and reload. The existing static shell should launch without a network request.
+3. Build a different `NOTEQUEST_RELEASE_ID`, reload online, and confirm the new worker remains in
+   the waiting state. It must not replace the controlling worker until project-owned code sends the
+   activation message after an explicit safe-state decision.
+   The previous release cache is intentionally retained; cache retirement belongs to the later
+   post-activation compatibility/smoke boundary rather than worker installation or activation.
+4. Reset only the PWA layer with the browser Application panel: close every other tab or installed
+   app window for the origin, unregister each service-worker registration, and delete Cache Storage
+   entries prefixed `nq-`. Reload while online and confirm a fresh worker and shell cache are created.
+   Do **not** use “Clear site data” for a routine worker reset: it also removes IndexedDB saves.
+5. If a full origin reset is specifically required, first export any needed synthetic save, use a
+   disposable browser profile, clear site data, and confirm IndexedDB and Cache Storage are empty.
+   Never perform destructive reset verification in a real play profile.
+
+The worker precaches build-owned static bytes only. IndexedDB saves, exports, player-authored notes,
+and other private play data are not Cache Storage inputs.
+
+Waiting workers start in the update coordinator's conservative `safe-point-unverified` state. The
+coordinator never activates automatically when safety later becomes ready: project-owned code must
+provide a durable save-point snapshot with no pending command, migration, import, recovery,
+blocking workflow, or unsaved work, and a separate explicit activation request is still required.
+Connecting those live operation signals and the user-facing reload choice belongs to the remaining
+service-worker story subtasks; do not replace the conservative default with UI inference.
+
+The build-time artifact verifier is programmatic evidence only; it cannot prove browser-controlled
+registration, Cache Storage writes, or an offline reload. This repository does not yet configure a
+browser runner, so perform steps 1–3 above in the required browser matrix and retain the result as
+manual smoke evidence until browser automation is added by a separately scoped issue.
 
 ## Code and content boundary
 

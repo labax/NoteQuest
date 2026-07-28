@@ -6,16 +6,13 @@ import {
   initializeSaveSlotFoundation,
 } from '@notequest/infrastructure';
 import { createBrowserRouteAdapter } from '../routing';
+import { createPwaLifecycleAdapter, type PwaLifecycleAdapter } from '../pwa/service-worker';
+import { createPwaUpdateCoordinator, type PwaUpdateCoordinator } from '../pwa/update-coordinator';
 
 export const compositionRootName = 'web-composition' as const;
 
-export interface PwaStatusAdapter {
-  getStatus(): Readonly<{
-    serviceWorkerSupport: 'supported' | 'unsupported';
-    offlineReadiness: 'not-checked';
-    updateStatus: 'not-checked';
-  }>;
-}
+/** Read-only lifecycle view exposed to presentation code; activation stays coordinator-owned. */
+export type PwaStatusAdapter = Pick<PwaLifecycleAdapter, 'getStatus' | 'subscribe'>;
 
 export interface AppServices {
   readonly saveSlots: SaveSlotService;
@@ -26,19 +23,12 @@ export interface AppComposition {
   readonly services: AppServices;
   readonly route: RouteAdapter;
   readonly pwa: PwaStatusAdapter;
+  readonly updates: PwaUpdateCoordinator;
   readonly version: string;
   close(): void;
 }
 
-export function createPwaStatusAdapter(environment: object = navigator): PwaStatusAdapter {
-  return {
-    getStatus: () => ({
-      serviceWorkerSupport: 'serviceWorker' in environment ? 'supported' : 'unsupported',
-      offlineReadiness: 'not-checked',
-      updateStatus: 'not-checked',
-    }),
-  };
-}
+export const createPwaStatusAdapter = createPwaLifecycleAdapter;
 
 /** The only production location that constructs application-level adapters. */
 export async function createWebComposition(): Promise<AppComposition> {
@@ -50,14 +40,23 @@ export async function createWebComposition(): Promise<AppComposition> {
     throw new Error(initialized.error.message);
   }
 
+  const pwa = createPwaLifecycleAdapter();
+  const updates = createPwaUpdateCoordinator(pwa);
+  if (import.meta.env.PROD) void pwa.register();
+
   return {
     services: {
       saveSlots: createDexieSaveSlotService(database),
       saveSlotOperations: { get: () => undefined },
     },
     route: createBrowserRouteAdapter(initialized.value.catalogue.slotIds),
-    pwa: createPwaStatusAdapter(),
+    pwa,
+    updates,
     version: import.meta.env.VITE_APP_VERSION ?? 'development',
-    close: () => database.close(),
+    close: () => {
+      updates.close();
+      pwa.close();
+      database.close();
+    },
   };
 }

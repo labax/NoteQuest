@@ -13,7 +13,7 @@
   },
   "scripts": {
     "dev": "npm run dev -w @notequest/web",
-    "build": "npm run typecheck && npm run build -w @notequest/web && npm run verify:production-fault-boundary",
+    "build": "npm run typecheck && npm run build -w @notequest/web && npm run verify:pwa-artifact && npm run verify:production-fault-boundary",
     "preview": "npm run preview -w @notequest/web",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
@@ -23,6 +23,7 @@
     "static-check": "npm run lint",
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "verify:production-fault-boundary": "node scripts/verify-production-fault-boundary.mjs",
+    "verify:pwa-artifact": "node scripts/verify-pwa-artifact.mjs",
     "test:ci": "vitest run",
     "simulation:cli": "node --experimental-strip-types packages/simulation/src/cli.ts",
     "simulation:palace-smoke": "npm run simulation:cli -- --dungeon palace --runs 2 --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --rules-version digital-rules-specification-v0.1 --content-version 0.1.0 --rng-version 1 --workers 1 --json-output .tmp/simulation-palace-smoke.json --markdown-output .tmp/simulation-palace-smoke.md"
@@ -46,6 +47,10 @@
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.64.0",
     "vite": "^7.0.0",
-    "vitest": "^3.2.0"
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^3.2.0",
+    "workbox-core": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1"
   }
 }
