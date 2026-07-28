@@ -16,12 +16,14 @@ const durableSafety: UpdateSafetySnapshot = {
   unsavedWork: false,
 };
 
-function lifecycleFixture() {
-  let status: PwaLifecycleStatus = {
+function lifecycleFixture(
+  initialStatus: PwaLifecycleStatus = {
     serviceWorkerSupport: 'supported',
-    offlineReadiness: 'ready',
+    offlineReadiness: 'not-checked',
     updateStatus: 'not-checked',
-  };
+  },
+) {
+  let status = initialStatus;
   const listeners = new Set<(status: Readonly<PwaLifecycleStatus>) => void>();
   const requestActivation = vi.fn(() => true);
   const lifecycle: PwaLifecycleAdapter = {
@@ -46,6 +48,49 @@ function lifecycleFixture() {
 }
 
 describe('PWA update coordinator', () => {
+  it.each([
+    [
+      'initial state',
+      {
+        serviceWorkerSupport: 'supported' as const,
+        offlineReadiness: 'not-checked' as const,
+        updateStatus: 'not-checked' as const,
+      },
+    ],
+    [
+      'unsupported service workers',
+      {
+        serviceWorkerSupport: 'unsupported' as const,
+        offlineReadiness: 'unavailable' as const,
+        updateStatus: 'not-checked' as const,
+      },
+    ],
+    [
+      'registration failure',
+      {
+        serviceWorkerSupport: 'supported' as const,
+        offlineReadiness: 'unavailable' as const,
+        updateStatus: 'not-checked' as const,
+      },
+    ],
+    [
+      'existing controller without verified evidence',
+      {
+        serviceWorkerSupport: 'supported' as const,
+        offlineReadiness: 'not-checked' as const,
+        updateStatus: 'not-checked' as const,
+      },
+    ],
+  ])('keeps %s neutral', (_name, lifecycleStatus) => {
+    const coordinator = createPwaUpdateCoordinator(lifecycleFixture(lifecycleStatus).lifecycle);
+
+    expect(coordinator.getStatus()).toEqual({ state: 'not-checked', blockers: [] });
+    expect(coordinator.requestActivation()).toMatchObject({
+      ok: false,
+      reason: 'no-waiting-update',
+    });
+  });
+
   it('enumerates every unresolved-work blocker', () => {
     expect(
       evaluateUpdateSafety({
@@ -73,7 +118,7 @@ describe('PWA update coordinator', () => {
     const coordinator = createPwaUpdateCoordinator(fixture.lifecycle);
     fixture.publish({
       serviceWorkerSupport: 'supported',
-      offlineReadiness: 'ready',
+      offlineReadiness: 'not-checked',
       updateStatus: 'waiting',
     });
 
@@ -99,7 +144,7 @@ describe('PWA update coordinator', () => {
     coordinator.updateSafety(durableSafety);
     fixture.publish({
       serviceWorkerSupport: 'supported',
-      offlineReadiness: 'ready',
+      offlineReadiness: 'not-checked',
       updateStatus: 'waiting',
     });
 
@@ -124,6 +169,18 @@ describe('PWA update coordinator', () => {
     });
   });
 
+  it('preserves activation-requested lifecycle status', () => {
+    const fixture = lifecycleFixture();
+    const coordinator = createPwaUpdateCoordinator(fixture.lifecycle);
+    fixture.publish({
+      serviceWorkerSupport: 'supported',
+      offlineReadiness: 'not-checked',
+      updateStatus: 'activation-requested',
+    });
+
+    expect(coordinator.getStatus()).toEqual({ state: 'activation-requested', blockers: [] });
+  });
+
   it.each([
     ['command', { commandPending: true }],
     ['saving', { safePoint: 'saving' as const }],
@@ -138,7 +195,7 @@ describe('PWA update coordinator', () => {
     coordinator.updateSafety({ ...durableSafety, ...unsafeChange });
     fixture.publish({
       serviceWorkerSupport: 'supported',
-      offlineReadiness: 'ready',
+      offlineReadiness: 'not-checked',
       updateStatus: 'waiting',
     });
 

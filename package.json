@@ -26,7 +26,7 @@
     "verify:pwa-artifact": "node scripts/verify-pwa-artifact.mjs",
     "test:pwa-release-id": "node --test scripts/pwa-release-id.test.mjs",
     "security:audit": "npm audit --audit-level=high",
-    "test:ci": "vitest run",
+    "test:ci": "npm run test && npm run test:pwa-release-id",
     "simulation:cli": "node --experimental-strip-types packages/simulation/src/cli.ts",
     "simulation:palace-smoke": "npm run simulation:cli -- --dungeon palace --runs 2 --seed-manifest tests/fixtures/simulation/palace-seed-manifest-small.json --rules-version digital-rules-specification-v0.1 --content-version 0.1.0 --rng-version 1 --workers 1 --json-output .tmp/simulation-palace-smoke.json --markdown-output .tmp/simulation-palace-smoke.md"
   },
