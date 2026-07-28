@@ -139,6 +139,83 @@ h2 {
   padding: 1rem;
   background: #fff;
 }
+.slot-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.state-badge {
+  align-self: start;
+  border-radius: 99rem;
+  padding: 0.2rem 0.55rem;
+  background: #e7ebef;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+.slot-name {
+  font-weight: 700;
+}
+.slot-metadata {
+  display: grid;
+  gap: 0.45rem;
+  margin-block: 1rem;
+}
+.slot-metadata div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.slot-metadata dt {
+  color: #536174;
+}
+.slot-metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.slot-review {
+  border-left: 0.3rem solid #8a5b20;
+  padding: 1rem;
+  background: #fffaf0;
+}
+.slot-recoverable,
+.slot-invalid,
+.slot-incompatible,
+.slot-migrating {
+  border-color: #9b682c;
+  background: #fffaf0;
+}
+.local-guidance {
+  margin-top: 1.5rem;
+  border-top: 1px solid #d4ccbb;
+  padding-top: 1.25rem;
+}
+.slot-skeleton span {
+  display: block;
+  height: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 0.3rem;
+  background: #e5e1d8;
+}
+.slot-skeleton span:first-child {
+  width: 45%;
+}
+.slot-skeleton span:last-child {
+  width: 70%;
+  height: 2.75rem;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .slot-card button {
   width: 100%;
 }

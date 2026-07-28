@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode, useEffect, useRef, useState } from 'react';
-import type { SlotRecord } from '@notequest/application';
+import { describeSaveSlotCapability, type SlotRecord } from '@notequest/application';
 import { routeMetadata, shellDestinations, type RouteState } from '@notequest/ui';
 import { createWebComposition, type AppComposition } from './composition';
 
@@ -80,12 +80,68 @@ function RenderErrorState({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
-function slotLabel(slot: SlotRecord): string {
-  return slot.status === 'empty' ? 'Empty — ready for a future adventure' : 'Local data available';
-}
-
 function statusLabel(status: 'not-checked'): string {
   return status.replace('-', ' ');
+}
+
+function recorded(value: string | null): string {
+  return value ?? 'Not recorded';
+}
+
+function SlotMetadata({ slot }: { readonly slot: SlotRecord }) {
+  return (
+    <dl className="slot-metadata">
+      <div>
+        <dt>Last updated</dt>
+        <dd>
+          <time dateTime={slot.updatedAt}>{slot.updatedAt || 'Unknown'}</time>
+        </dd>
+      </div>
+      <div>
+        <dt>Rules version</dt>
+        <dd>{recorded(slot.rulesVersion)}</dd>
+      </div>
+      <div>
+        <dt>Content version</dt>
+        <dd>{recorded(slot.contentVersion)}</dd>
+      </div>
+    </dl>
+  );
+}
+
+function DataSlotReview({
+  slot,
+  composition,
+}: {
+  readonly slot: SlotRecord;
+  readonly composition: AppComposition;
+}) {
+  const capability = describeSaveSlotCapability(
+    slot,
+    composition.services.saveSlotOperations.get(slot.slotId),
+  );
+  return (
+    <section className="slot-review" aria-labelledby="slot-review-title">
+      <p className="eyebrow">Selected local slot</p>
+      <h3 id="slot-review-title">
+        Slot {slot.slotIndex}: {slot.displayName}
+      </h3>
+      <p>
+        <strong>State:</strong> <span aria-label="Capability state">{capability.state}</span>
+      </p>
+      <p>{capability.summary}</p>
+      <p>
+        <strong>Recovery:</strong>{' '}
+        {capability.recoveryAvailable
+          ? 'Last-known-valid data is available.'
+          : 'No recovery snapshot is recorded.'}
+      </p>
+      <p role="status">
+        No reset or data mutation occurred. This view only explains the selected slot.
+      </p>
+      <SlotMetadata slot={slot} />
+    </section>
+  );
 }
 
 function ApplicationShell({ composition }: { readonly composition: AppComposition }) {
@@ -97,6 +153,12 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
     | { readonly status: 'ready'; readonly slots: readonly SlotRecord[] }
   >({ status: 'loading' });
   const [slotRequestAttempt, setSlotRequestAttempt] = useState(0);
+  const [selectionRequest, setSelectionRequest] = useState<
+    | { readonly status: 'idle' }
+    | { readonly status: 'pending'; readonly slotId: string }
+    | { readonly status: 'failed'; readonly slotId: string }
+  >({ status: 'idle' });
+  const selectionPending = useRef<string | null>(null);
   const pwa = composition.pwa.getStatus();
 
   useEffect(() => composition.route.subscribe(setRoute), [composition]);
@@ -125,6 +187,60 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
   const retrySlots = () => {
     setSlotRequest({ status: 'loading' });
     setSlotRequestAttempt((value) => value + 1);
+  };
+
+  const chooseSlot = async (slot: SlotRecord) => {
+    if (selectionPending.current !== null) return;
+    const capability = describeSaveSlotCapability(
+      slot,
+      composition.services.saveSlotOperations.get(slot.slotId),
+    );
+    if (!capability.usable) {
+      composition.route.navigate({ destination: 'data', slotId: slot.slotId });
+      return;
+    }
+    selectionPending.current = slot.slotId;
+    setSelectionRequest({ status: 'pending', slotId: slot.slotId });
+    const selected = await composition.services.saveSlots.select(slot.slotId).catch(() => null);
+    selectionPending.current = null;
+    if (selected === null || !selected.ok) {
+      setSelectionRequest({ status: 'failed', slotId: slot.slotId });
+      return;
+    }
+    const selectedCapability = describeSaveSlotCapability(
+      selected.value.slot,
+      composition.services.saveSlotOperations.get(slot.slotId),
+    );
+    if (!selectedCapability.usable) {
+      setSlotRequest((current) =>
+        current.status === 'ready'
+          ? {
+              status: 'ready',
+              slots: current.slots.map((listed) =>
+                listed.slotId === slot.slotId ? selected.value.slot : listed,
+              ),
+            }
+          : current,
+      );
+      setSelectionRequest({ status: 'idle' });
+      composition.route.navigate({ destination: 'data', slotId: slot.slotId });
+      return;
+    }
+    setSlotRequest((current) =>
+      current.status === 'ready'
+        ? {
+            status: 'ready',
+            slots: current.slots.map((listed) =>
+              listed.slotId === slot.slotId ? selected.value.slot : listed,
+            ),
+          }
+        : current,
+    );
+    setSelectionRequest({ status: 'idle' });
+    composition.route.navigate({
+      destination: selectedCapability.destination,
+      slotId: slot.slotId,
+    });
   };
 
   return (
@@ -193,7 +309,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           ) : null}
           <p className="intro">
             {route.destination === 'save-slots'
-              ? 'Choose a local workspace. Opening a destination does not perform a game action.'
+              ? 'Choose one of three independent local workspaces. Your data stays in this browser unless you deliberately export it.'
               : 'This destination is represented in the shell. Its gameplay features are not available yet.'}
           </p>
           {slotRequest.status === 'failed' ? (
@@ -204,21 +320,98 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
               </button>
             </div>
           ) : null}
+          {selectionRequest.status === 'failed' ? (
+            <div className="inline-error" role="alert">
+              <p>The chosen slot could not be selected. The loaded slots were not changed.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (slotRequest.status !== 'ready') return;
+                  const slot = slotRequest.slots.find(
+                    (candidate) => candidate.slotId === selectionRequest.slotId,
+                  );
+                  if (slot !== undefined) void chooseSlot(slot);
+                }}
+              >
+                Retry slot selection
+              </button>
+            </div>
+          ) : null}
           {route.destination === 'save-slots' && slotRequest.status === 'loading' ? (
-            <p role="status">Loading local slots…</p>
+            <div className="slot-grid" role="status" aria-label="Loading local slots">
+              {[1, 2, 3].map((index) => (
+                <article className="slot-card slot-skeleton" key={index} aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </article>
+              ))}
+              <span className="visually-hidden">Loading local slots…</span>
+            </div>
           ) : null}
           {route.destination === 'save-slots' && slotRequest.status === 'ready' ? (
             <div className="slot-grid">
-              {slotRequest.slots.map((slot) => (
-                <article className="slot-card" key={slot.slotId}>
-                  <h3>Slot {slot.slotIndex}</h3>
-                  <p>{slotLabel(slot)}</p>
-                  <button type="button" disabled>
-                    Gameplay coming later
-                  </button>
-                </article>
-              ))}
+              {slotRequest.slots.map((slot) => {
+                const capability = describeSaveSlotCapability(
+                  slot,
+                  composition.services.saveSlotOperations.get(slot.slotId),
+                );
+                return (
+                  <article className={`slot-card slot-${capability.state}`} key={slot.slotId}>
+                    <div className="slot-heading">
+                      <h3>Slot {slot.slotIndex}</h3>
+                      <span className="state-badge">{capability.state}</span>
+                    </div>
+                    <p className="slot-name">{slot.displayName}</p>
+                    <p>{capability.summary}</p>
+                    <SlotMetadata slot={slot} />
+                    {capability.recoveryAvailable ? (
+                      <p>Last-known-valid data is available.</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={
+                        selectionRequest.status === 'pending' &&
+                        selectionRequest.slotId === slot.slotId
+                      }
+                      onClick={() => void chooseSlot(slot)}
+                    >
+                      {selectionRequest.status === 'pending' &&
+                      selectionRequest.slotId === slot.slotId
+                        ? 'Selecting…'
+                        : capability.actionLabel}
+                    </button>
+                  </article>
+                );
+              })}
             </div>
+          ) : null}
+          {route.destination === 'data' &&
+          route.slotId !== undefined &&
+          slotRequest.status === 'ready'
+            ? (() => {
+                const slot = slotRequest.slots.find(
+                  (candidate) => candidate.slotId === route.slotId,
+                );
+                return slot === undefined ? null : (
+                  <DataSlotReview slot={slot} composition={composition} />
+                );
+              })()
+            : null}
+          {route.destination === 'save-slots' ? (
+            <section className="local-guidance" aria-labelledby="local-guidance-title">
+              <h3 id="local-guidance-title">Local data and safety</h3>
+              <p>
+                Browser storage is local to this browser profile. Clearing site data can remove all
+                three slots.
+              </p>
+              <button
+                type="button"
+                onClick={() => composition.route.navigate({ destination: 'data' })}
+              >
+                Learn about local storage
+              </button>
+            </section>
           ) : null}
         </main>
         <aside className="context-panel" aria-labelledby="context-title">

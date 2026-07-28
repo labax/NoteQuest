@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { NOTEQUEST_SLOT_IDS } from '@notequest/infrastructure';
@@ -43,6 +43,7 @@ function fixtureComposition(
         select: vi.fn(),
         updateMetadata: vi.fn(),
       },
+      saveSlotOperations: { get: vi.fn(() => undefined) },
     },
     route,
     pwa,
@@ -233,5 +234,286 @@ describe('App shell', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry local slots' }));
     expect(await screen.findByRole('heading', { name: 'Slot 1' })).toBeInTheDocument();
     expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('selects only the chosen usable slot and starts its creation destination', async () => {
+    const route = fixtureRoute();
+    const composition = fixtureComposition(undefined, undefined, route);
+    vi.mocked(composition.services.saveSlots.select).mockResolvedValue({
+      ok: true,
+      value: {
+        selectedSlotId: emptySlots[0]!.slotId,
+        selectedAt: '2026-07-28T00:00:00.000Z',
+        slot: emptySlots[0]!,
+      },
+    });
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    const startButtons = await screen.findAllByRole('button', { name: 'Start new game' });
+    await userEvent.click(startButtons[0]!);
+
+    expect(composition.services.saveSlots.select).toHaveBeenCalledTimes(1);
+    expect(composition.services.saveSlots.select).toHaveBeenCalledWith(emptySlots[0]!.slotId);
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+    expect(route.navigate).toHaveBeenCalledWith({
+      destination: 'adventurer-creation',
+      slotId: emptySlots[0]!.slotId,
+    });
+  });
+
+  it('routes a recoverable slot to safe data explanation without selecting or resetting it', async () => {
+    const route = fixtureRoute();
+    const recoverable = {
+      ...emptySlots[1]!,
+      status: 'isolated' as const,
+      schemaVersion: 1,
+      integrityStatus: 'invalid' as const,
+      recoveryAvailable: true,
+      lastValidSnapshotId: 'last-valid',
+    };
+    const slots = [emptySlots[0]!, recoverable, emptySlots[2]!];
+    const composition = fixtureComposition(
+      vi.fn().mockResolvedValue({ ok: true, value: slots }),
+      undefined,
+      route,
+    );
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Review recovery' }));
+
+    expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+    expect(route.navigate).toHaveBeenCalledWith({
+      destination: 'data',
+      slotId: recoverable.slotId,
+    });
+    expect(await screen.findByRole('heading', { name: 'Slot 2: Slot 2' })).toBeInTheDocument();
+    expect(screen.getByText(/Recovery available — current data will not be reset/)).toBeVisible();
+    expect(screen.getByText(/No reset or data mutation occurred/)).toBeVisible();
+  });
+
+  it('revalidates the selected row and safely refuses a newly blocked slot', async () => {
+    const route = fixtureRoute();
+    const listed = {
+      ...emptySlots[0]!,
+      revision: 1,
+      status: 'ready' as const,
+      schemaVersion: 1,
+      rulesVersion: 'rules.1',
+      contentVersion: 'content.1',
+      currentSnapshotId: 'current',
+      integrityStatus: 'valid' as const,
+    };
+    const newlyBlocked = { ...listed, integrityStatus: 'invalid' as const };
+    const slots = [listed, emptySlots[1]!, emptySlots[2]!];
+    const composition = fixtureComposition(
+      vi.fn().mockResolvedValue({ ok: true, value: slots }),
+      undefined,
+      route,
+    );
+    vi.mocked(composition.services.saveSlots.select).mockResolvedValue({
+      ok: true,
+      value: { selectedSlotId: listed.slotId, selectedAt: listed.updatedAt, slot: newlyBlocked },
+    });
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+
+    expect(route.navigate).toHaveBeenCalledWith({ destination: 'data', slotId: listed.slotId });
+    expect(route.navigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ destination: 'town' }),
+    );
+    expect(route.navigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ destination: 'adventurer-creation' }),
+    );
+  });
+
+  it('exits loading and offers retry when selection rejects', async () => {
+    const composition = fixtureComposition();
+    vi.mocked(composition.services.saveSlots.select).mockRejectedValue(new Error('storage lost'));
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    const startButtons = await screen.findAllByRole('button', { name: 'Start new game' });
+    await userEvent.click(startButtons[0]!);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The chosen slot could not be selected',
+    );
+    expect(screen.getByRole('button', { name: 'Retry slot selection' })).toBeEnabled();
+    expect(screen.queryByLabelText('Loading local slots')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Slot 3' })).toBeVisible();
+  });
+
+  it('retains and selectively updates the three slots across successful navigation and return', async () => {
+    const route = fixtureRoute();
+    const listed = {
+      ...emptySlots[0]!,
+      revision: 1,
+      displayName: 'Before selection',
+      status: 'ready' as const,
+      schemaVersion: 1,
+      rulesVersion: 'rules.before',
+      contentVersion: 'content.before',
+      currentSnapshotId: 'current',
+      integrityStatus: 'valid' as const,
+    };
+    const returned = {
+      ...listed,
+      revision: 2,
+      displayName: 'After selection',
+      updatedAt: '2026-07-28T13:00:00.000Z',
+    };
+    const list = vi.fn().mockResolvedValue({
+      ok: true,
+      value: [listed, emptySlots[1]!, emptySlots[2]!],
+    });
+    const selection = deferred<{
+      ok: true;
+      value: { selectedSlotId: typeof listed.slotId; selectedAt: string; slot: typeof returned };
+    }>();
+    const composition = fixtureComposition(list, undefined, route);
+    vi.mocked(composition.services.saveSlots.select).mockReturnValue(selection.promise);
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    expect(screen.getByRole('button', { name: 'Selecting…' })).toBeDisabled();
+    expect(screen.getByRole('heading', { name: 'Slot 2' })).toBeVisible();
+    await act(async () => {
+      selection.resolve({
+        ok: true,
+        value: { selectedSlotId: listed.slotId, selectedAt: returned.updatedAt, slot: returned },
+      });
+    });
+    expect(await screen.findByRole('heading', { name: 'Town' })).toBeInTheDocument();
+
+    act(() => route.navigate({ destination: 'save-slots', slotId: listed.slotId }));
+
+    expect(await screen.findByRole('heading', { name: 'Slot 3' })).toBeVisible();
+    expect(screen.queryByLabelText('Loading local slots')).not.toBeInTheDocument();
+    expect(screen.getByText('After selection')).toBeVisible();
+    expect(screen.queryByText('Before selection')).not.toBeInTheDocument();
+    const secondCard = screen.getByRole('heading', { name: 'Slot 2' }).closest('article')!;
+    expect(within(secondCard).getByRole('button', { name: 'Start new game' })).toBeEnabled();
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(composition.services.saveSlots.select).toHaveBeenCalledTimes(1);
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [true, null],
+    [true, 'wrong-pointer'],
+    [false, 'last-valid'],
+  ] as const)(
+    'does not advertise inconsistent recovery evidence %s / %s',
+    async (recoveryAvailable, lastValidSnapshotId) => {
+      const inconsistent = {
+        ...emptySlots[1]!,
+        revision: 1,
+        status: 'isolated' as const,
+        schemaVersion: 1,
+        integrityStatus: 'invalid' as const,
+        recoveryAvailable,
+        lastValidSnapshotId,
+      };
+      render(
+        <App
+          compose={() =>
+            Promise.resolve(
+              fixtureComposition(
+                vi.fn().mockResolvedValue({
+                  ok: true,
+                  value: [emptySlots[0]!, inconsistent, emptySlots[2]!],
+                }),
+              ),
+            )
+          }
+        />,
+      );
+
+      await screen.findByRole('heading', { name: 'Slot 2' });
+      expect(screen.queryByRole('button', { name: 'Review recovery' })).not.toBeInTheDocument();
+      expect(screen.queryByText('Last-known-valid data is available.')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Recovery available/)).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['Review compatibility', { schemaVersion: 2 }, undefined, 'incompatible'],
+    ['Review migration', { status: 'migrating' }, undefined, 'migrating'],
+    [
+      'Review blocked slot',
+      { status: 'isolated', integrityStatus: 'invalid', recoveryAvailable: false },
+      undefined,
+      'invalid',
+    ],
+    ['Review save failure', {}, 'failed', 'failed'],
+    ['Review storage options', {}, 'storage-limited', 'storage-limited'],
+  ] as const)(
+    'retains slot scope and no-mutation guidance for %s',
+    async (action, changes, operation, state) => {
+      const route = fixtureRoute();
+      const slot = {
+        ...emptySlots[1]!,
+        revision: 1,
+        status: 'ready' as const,
+        schemaVersion: 1,
+        rulesVersion: 'rules.review',
+        contentVersion: 'content.review',
+        currentSnapshotId: 'current',
+        integrityStatus: 'valid' as const,
+        ...changes,
+      };
+      const composition = fixtureComposition(
+        vi.fn().mockResolvedValue({
+          ok: true,
+          value: [emptySlots[0]!, slot, emptySlots[2]!],
+        }),
+        undefined,
+        route,
+      );
+      vi.mocked(composition.services.saveSlotOperations.get).mockImplementation((slotId) =>
+        slotId === slot.slotId ? operation : undefined,
+      );
+      render(<App compose={() => Promise.resolve(composition)} />);
+
+      await userEvent.click(await screen.findByRole('button', { name: action }));
+
+      const review = await screen.findByRole('heading', { name: 'Slot 2: Slot 2' });
+      expect(review).toBeInTheDocument();
+      expect(screen.getByLabelText('Capability state')).toHaveTextContent(state);
+      expect(screen.getByText(/No reset or data mutation occurred/)).toBeVisible();
+      expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+      expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+    },
+  );
+
+  it('renders APP-003 metadata and neutral missing-value fallbacks on every slot card', async () => {
+    const known = {
+      ...emptySlots[0]!,
+      updatedAt: '2026-07-28T12:34:56.000Z',
+      rulesVersion: 'rules.known',
+      contentVersion: 'content.known',
+    };
+    render(
+      <App
+        compose={() =>
+          Promise.resolve(
+            fixtureComposition(
+              vi.fn().mockResolvedValue({
+                ok: true,
+                value: [known, emptySlots[1]!, emptySlots[2]!],
+              }),
+            ),
+          )
+        }
+      />,
+    );
+
+    const first = (await screen.findByRole('heading', { name: 'Slot 1' })).closest('article')!;
+    expect(within(first).getByText(known.updatedAt)).toHaveAttribute('datetime', known.updatedAt);
+    expect(within(first).getByText('rules.known')).toBeVisible();
+    expect(within(first).getByText('content.known')).toBeVisible();
+    const second = screen.getByRole('heading', { name: 'Slot 2' }).closest('article')!;
+    expect(within(second).getAllByText('Not recorded')).toHaveLength(2);
   });
 });

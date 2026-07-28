@@ -1,4 +1,4 @@
-import type { SaveSlotService } from '@notequest/application';
+import type { SaveSlotOperationStatusPort, SaveSlotService } from '@notequest/application';
 import type { RouteAdapter } from '@notequest/ui';
 import {
   createDexieSaveSlotService,
@@ -19,6 +19,7 @@ export interface PwaStatusAdapter {
 
 export interface AppServices {
   readonly saveSlots: SaveSlotService;
+  readonly saveSlotOperations: SaveSlotOperationStatusPort;
 }
 
 export interface AppComposition {
@@ -50,7 +51,10 @@ export async function createWebComposition(): Promise<AppComposition> {
   }
 
   return {
-    services: { saveSlots: createDexieSaveSlotService(database) },
+    services: {
+      saveSlots: createDexieSaveSlotService(database),
+      saveSlotOperations: { get: () => undefined },
+    },
     route: createBrowserRouteAdapter(initialized.value.catalogue.slotIds),
     pwa: createPwaStatusAdapter(),
     version: import.meta.env.VITE_APP_VERSION ?? 'development',
