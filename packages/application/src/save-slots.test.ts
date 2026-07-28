@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { SaveSlotId } from '@notequest/domain';
 import type { SlotRecord } from './repositories';
-import { describeSaveSlotCapability, type SaveSlotOperationalState } from './save-slots';
+import {
+  describeSaveSlotCapability,
+  hasProtectedLastValidRecovery,
+  type SaveSlotOperationalState,
+} from './save-slots';
 
 const valid: SlotRecord = {
   slotId: '00000000-0000-4000-8000-000000000001' as SaveSlotId,
@@ -102,4 +106,46 @@ describe('save-slot shell capability projection', () => {
       describeSaveSlotCapability({ ...valid, status: 'isolated', integrityStatus: 'invalid' }),
     ).toMatchObject({ state: 'recoverable', recoveryAvailable: true });
   });
+
+  it.each([
+    [true, 'last-valid', true],
+    [true, null, false],
+    [true, 'wrong-pointer', false],
+    [false, 'last-valid', false],
+  ] as const)(
+    'requires recovery flag %s and pointer %s together',
+    (recoveryAvailable, lastValidSnapshotId, expected) => {
+      const slot = { ...valid, recoveryAvailable, lastValidSnapshotId };
+      expect(hasProtectedLastValidRecovery(slot)).toBe(expected);
+      expect(describeSaveSlotCapability(slot).recoveryAvailable).toBe(expected);
+    },
+  );
+
+  it.each([
+    [true, null],
+    [true, 'wrong-pointer'],
+    [false, 'last-valid'],
+  ] as const)(
+    'does not classify invalid data as recoverable with inconsistent evidence %s / %s',
+    (recoveryAvailable, lastValidSnapshotId) => {
+      const capability = describeSaveSlotCapability(
+        {
+          ...valid,
+          status: 'isolated',
+          integrityStatus: 'invalid',
+          recoveryAvailable,
+          lastValidSnapshotId,
+        },
+        'saved',
+      );
+      expect(capability).toMatchObject({
+        state: 'invalid',
+        usable: false,
+        recoveryAvailable: false,
+      });
+      expect(
+        describeSaveSlotCapability({ ...valid, recoveryAvailable, lastValidSnapshotId }, 'failed'),
+      ).toMatchObject({ actionLabel: 'Review save failure', recoveryAvailable: false });
+    },
+  );
 });

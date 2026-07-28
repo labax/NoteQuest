@@ -153,6 +153,12 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
     | { readonly status: 'ready'; readonly slots: readonly SlotRecord[] }
   >({ status: 'loading' });
   const [slotRequestAttempt, setSlotRequestAttempt] = useState(0);
+  const [selectionRequest, setSelectionRequest] = useState<
+    | { readonly status: 'idle' }
+    | { readonly status: 'pending'; readonly slotId: string }
+    | { readonly status: 'failed'; readonly slotId: string }
+  >({ status: 'idle' });
+  const selectionPending = useRef<string | null>(null);
   const pwa = composition.pwa.getStatus();
 
   useEffect(() => composition.route.subscribe(setRoute), [composition]);
@@ -184,6 +190,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
   };
 
   const chooseSlot = async (slot: SlotRecord) => {
+    if (selectionPending.current !== null) return;
     const capability = describeSaveSlotCapability(
       slot,
       composition.services.saveSlotOperations.get(slot.slotId),
@@ -192,11 +199,12 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
       composition.route.navigate({ destination: 'data', slotId: slot.slotId });
       return;
     }
-    const listedSlots = slotRequest.status === 'ready' ? slotRequest.slots : [];
-    setSlotRequest({ status: 'loading' });
+    selectionPending.current = slot.slotId;
+    setSelectionRequest({ status: 'pending', slotId: slot.slotId });
     const selected = await composition.services.saveSlots.select(slot.slotId).catch(() => null);
+    selectionPending.current = null;
     if (selected === null || !selected.ok) {
-      setSlotRequest({ status: 'failed' });
+      setSelectionRequest({ status: 'failed', slotId: slot.slotId });
       return;
     }
     const selectedCapability = describeSaveSlotCapability(
@@ -204,15 +212,31 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
       composition.services.saveSlotOperations.get(slot.slotId),
     );
     if (!selectedCapability.usable) {
-      setSlotRequest({
-        status: 'ready',
-        slots: listedSlots.map((listed) =>
-          listed.slotId === slot.slotId ? selected.value.slot : listed,
-        ),
-      });
+      setSlotRequest((current) =>
+        current.status === 'ready'
+          ? {
+              status: 'ready',
+              slots: current.slots.map((listed) =>
+                listed.slotId === slot.slotId ? selected.value.slot : listed,
+              ),
+            }
+          : current,
+      );
+      setSelectionRequest({ status: 'idle' });
       composition.route.navigate({ destination: 'data', slotId: slot.slotId });
       return;
     }
+    setSlotRequest((current) =>
+      current.status === 'ready'
+        ? {
+            status: 'ready',
+            slots: current.slots.map((listed) =>
+              listed.slotId === slot.slotId ? selected.value.slot : listed,
+            ),
+          }
+        : current,
+    );
+    setSelectionRequest({ status: 'idle' });
     composition.route.navigate({
       destination: selectedCapability.destination,
       slotId: slot.slotId,
@@ -296,6 +320,23 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
               </button>
             </div>
           ) : null}
+          {selectionRequest.status === 'failed' ? (
+            <div className="inline-error" role="alert">
+              <p>The chosen slot could not be selected. The loaded slots were not changed.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (slotRequest.status !== 'ready') return;
+                  const slot = slotRequest.slots.find(
+                    (candidate) => candidate.slotId === selectionRequest.slotId,
+                  );
+                  if (slot !== undefined) void chooseSlot(slot);
+                }}
+              >
+                Retry slot selection
+              </button>
+            </div>
+          ) : null}
           {route.destination === 'save-slots' && slotRequest.status === 'loading' ? (
             <div className="slot-grid" role="status" aria-label="Loading local slots">
               {[1, 2, 3].map((index) => (
@@ -327,8 +368,18 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
                     {capability.recoveryAvailable ? (
                       <p>Last-known-valid data is available.</p>
                     ) : null}
-                    <button type="button" onClick={() => void chooseSlot(slot)}>
-                      {capability.actionLabel}
+                    <button
+                      type="button"
+                      disabled={
+                        selectionRequest.status === 'pending' &&
+                        selectionRequest.slotId === slot.slotId
+                      }
+                      onClick={() => void chooseSlot(slot)}
+                    >
+                      {selectionRequest.status === 'pending' &&
+                      selectionRequest.slotId === slot.slotId
+                        ? 'Selecting…'
+                        : capability.actionLabel}
                     </button>
                   </article>
                 );

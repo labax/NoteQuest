@@ -62,6 +62,15 @@ export interface SaveSlotOperationStatusPort {
   get(slotId: SaveSlotId): SaveSlotOperationalState | undefined;
 }
 
+export const PROTECTED_LAST_VALID_SNAPSHOT_ID = 'last-valid';
+
+/** Recovery is advertised only when both M4 slot signals identify the protected snapshot. */
+export function hasProtectedLastValidRecovery(slot: SlotRecord): boolean {
+  return (
+    slot.recoveryAvailable === true && slot.lastValidSnapshotId === PROTECTED_LAST_VALID_SNAPSHOT_ID
+  );
+}
+
 /**
  * Application-owned projection for shell decisions. UI callers never infer safety from raw rows.
  * Operational state is optional until the persistence operation-status port is implemented.
@@ -71,6 +80,7 @@ export function describeSaveSlotCapability(
   operationalState?: SaveSlotOperationalState,
   supportedSchemaVersion = 1,
 ): SaveSlotCapability {
+  const recoveryAvailable = hasProtectedLastValidRecovery(slot);
   const durableState = durableCapabilityState(slot, supportedSchemaVersion);
   // Operational signals may make a safe slot temporarily less capable, never make unsafe data safe.
   const state: SaveSlotCapabilityState =
@@ -90,91 +100,91 @@ export function describeSaveSlotCapability(
     },
     valid: {
       usable: true,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'town',
       actionLabel: 'Continue',
       summary: 'Ready — local data is valid.',
     },
     saved: {
       usable: true,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'town',
       actionLabel: 'Continue',
       summary: 'Saved — the latest write is durable.',
     },
     saving: {
       usable: false,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Saving…',
       summary: 'Saving — wait for the durable result.',
     },
     recoverable: {
       usable: false,
-      recoveryAvailable: true,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Review recovery',
       summary: 'Recovery available — current data will not be reset.',
     },
     invalid: {
       usable: false,
-      recoveryAvailable: false,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Review blocked slot',
       summary: 'Invalid — this slot is isolated to protect its data.',
     },
     incompatible: {
       usable: false,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Review compatibility',
       summary: 'Incompatible — this app cannot safely open the slot.',
     },
     creating: {
       usable: false,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Review blocked slot',
       summary: 'Creating — setup is incomplete and play remains blocked.',
     },
     importing: {
       usable: false,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Review blocked slot',
       summary: 'Importing — validation is incomplete and play remains blocked.',
     },
     resetting: {
       usable: false,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Review blocked slot',
       summary: 'Resetting — the administrative operation is incomplete.',
     },
     unchecked: {
       usable: false,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Review blocked slot',
       summary: 'Not checked — this non-empty slot is not verified safe to open.',
     },
     migrating: {
       usable: false,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Review migration',
       summary: 'Migrating — gameplay remains blocked until validation completes.',
     },
     failed: {
       usable: false,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'data',
-      actionLabel: slot.recoveryAvailable ? 'Review recovery' : 'Review save failure',
+      actionLabel: recoveryAvailable ? 'Review recovery' : 'Review save failure',
       summary: 'Save failed — no successful write is being claimed.',
     },
     'storage-limited': {
       usable: false,
-      recoveryAvailable: slot.recoveryAvailable,
+      recoveryAvailable,
       destination: 'data',
       actionLabel: 'Review storage options',
       summary: 'Storage limited — further writes may be unsafe.',
@@ -204,7 +214,9 @@ function durableCapabilityState(
   if (slot.status === 'resetting') return 'resetting';
   if (slot.status === 'migrating') return 'migrating';
   if (slot.schemaVersion !== supportedSchemaVersion) return 'incompatible';
-  if (slot.recoveryAvailable && slot.integrityStatus === 'invalid') return 'recoverable';
+  if (hasProtectedLastValidRecovery(slot) && slot.integrityStatus === 'invalid') {
+    return 'recoverable';
+  }
   if (slot.status === 'isolated' || slot.integrityStatus === 'invalid') return 'invalid';
   if (slot.integrityStatus !== 'valid') return 'unchecked';
   if ((slot.status === 'ready' || slot.status === 'active') && slot.currentSnapshotId !== null) {

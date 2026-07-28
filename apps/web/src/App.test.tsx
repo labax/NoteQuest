@@ -336,10 +336,106 @@ describe('App shell', () => {
     const startButtons = await screen.findAllByRole('button', { name: 'Start new game' });
     await userEvent.click(startButtons[0]!);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Local slots could not be read');
-    expect(screen.getByRole('button', { name: 'Retry local slots' })).toBeEnabled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The chosen slot could not be selected',
+    );
+    expect(screen.getByRole('button', { name: 'Retry slot selection' })).toBeEnabled();
     expect(screen.queryByLabelText('Loading local slots')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Slot 3' })).toBeVisible();
   });
+
+  it('retains and selectively updates the three slots across successful navigation and return', async () => {
+    const route = fixtureRoute();
+    const listed = {
+      ...emptySlots[0]!,
+      revision: 1,
+      displayName: 'Before selection',
+      status: 'ready' as const,
+      schemaVersion: 1,
+      rulesVersion: 'rules.before',
+      contentVersion: 'content.before',
+      currentSnapshotId: 'current',
+      integrityStatus: 'valid' as const,
+    };
+    const returned = {
+      ...listed,
+      revision: 2,
+      displayName: 'After selection',
+      updatedAt: '2026-07-28T13:00:00.000Z',
+    };
+    const list = vi.fn().mockResolvedValue({
+      ok: true,
+      value: [listed, emptySlots[1]!, emptySlots[2]!],
+    });
+    const selection = deferred<{
+      ok: true;
+      value: { selectedSlotId: typeof listed.slotId; selectedAt: string; slot: typeof returned };
+    }>();
+    const composition = fixtureComposition(list, undefined, route);
+    vi.mocked(composition.services.saveSlots.select).mockReturnValue(selection.promise);
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    expect(screen.getByRole('button', { name: 'Selecting…' })).toBeDisabled();
+    expect(screen.getByRole('heading', { name: 'Slot 2' })).toBeVisible();
+    await act(async () => {
+      selection.resolve({
+        ok: true,
+        value: { selectedSlotId: listed.slotId, selectedAt: returned.updatedAt, slot: returned },
+      });
+    });
+    expect(await screen.findByRole('heading', { name: 'Town' })).toBeInTheDocument();
+
+    act(() => route.navigate({ destination: 'save-slots', slotId: listed.slotId }));
+
+    expect(await screen.findByRole('heading', { name: 'Slot 3' })).toBeVisible();
+    expect(screen.queryByLabelText('Loading local slots')).not.toBeInTheDocument();
+    expect(screen.getByText('After selection')).toBeVisible();
+    expect(screen.queryByText('Before selection')).not.toBeInTheDocument();
+    const secondCard = screen.getByRole('heading', { name: 'Slot 2' }).closest('article')!;
+    expect(within(secondCard).getByRole('button', { name: 'Start new game' })).toBeEnabled();
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(composition.services.saveSlots.select).toHaveBeenCalledTimes(1);
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [true, null],
+    [true, 'wrong-pointer'],
+    [false, 'last-valid'],
+  ] as const)(
+    'does not advertise inconsistent recovery evidence %s / %s',
+    async (recoveryAvailable, lastValidSnapshotId) => {
+      const inconsistent = {
+        ...emptySlots[1]!,
+        revision: 1,
+        status: 'isolated' as const,
+        schemaVersion: 1,
+        integrityStatus: 'invalid' as const,
+        recoveryAvailable,
+        lastValidSnapshotId,
+      };
+      render(
+        <App
+          compose={() =>
+            Promise.resolve(
+              fixtureComposition(
+                vi.fn().mockResolvedValue({
+                  ok: true,
+                  value: [emptySlots[0]!, inconsistent, emptySlots[2]!],
+                }),
+              ),
+            )
+          }
+        />,
+      );
+
+      await screen.findByRole('heading', { name: 'Slot 2' });
+      expect(screen.queryByRole('button', { name: 'Review recovery' })).not.toBeInTheDocument();
+      expect(screen.queryByText('Last-known-valid data is available.')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Recovery available/)).not.toBeInTheDocument();
+    },
+  );
 
   it.each([
     ['Review compatibility', { schemaVersion: 2 }, undefined, 'incompatible'],
