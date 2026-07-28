@@ -1,5 +1,22 @@
 import { applicationLayerName } from '@notequest/application';
 
+export {
+  AnnouncementRegions,
+  containFocus,
+  createAnnouncementService,
+  focusBlockingError,
+  focusTarget,
+  focusValidationError,
+  useContainedFocus,
+} from './accessibility';
+export type {
+  Announcement,
+  AnnouncementKind,
+  AnnouncementPriority,
+  AnnouncementService,
+  FocusContainment,
+} from './accessibility';
+
 export const uiLayerName = 'ui' as const;
 
 export const uiDependsOn = [applicationLayerName] as const;
