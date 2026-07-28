@@ -55,6 +55,7 @@ function fixtureComposition(
     pwa,
     updates,
     version: 'test-version',
+    reload: vi.fn(),
     close: vi.fn(),
   };
 }
@@ -100,9 +101,9 @@ describe('App shell', () => {
       'Save status: not checked',
     );
     expect(screen.getByLabelText('Application status')).toHaveTextContent(
-      'Offline readiness: not checked',
+      'Offline readiness not verified',
     );
-    expect(screen.getByLabelText('Application status')).toHaveTextContent('Updates: not checked');
+    expect(screen.getByLabelText('Application status')).toHaveTextContent('Updates not checked');
     expect(screen.queryByText(/offline support available|app up to date/i)).not.toBeInTheDocument();
     expect(screen.getByText('Version test-version')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Slot 3' })).toBeInTheDocument();
@@ -207,17 +208,15 @@ describe('App shell', () => {
   ])('keeps PWA claims neutral for a %s', async (_name, pwa, support) => {
     render(<App compose={() => Promise.resolve(fixtureComposition(undefined, pwa))} />);
     const status = await screen.findByLabelText('Application status');
-    expect(status).toHaveTextContent(`Service workers: ${support}`);
+    expect(status).toHaveTextContent(`Service worker${support}`);
     expect(status).toHaveTextContent(
-      support === 'unsupported'
-        ? 'Offline readiness: unavailable'
-        : 'Offline readiness: not checked',
+      support === 'unsupported' ? 'Offline relaunch unavailable' : 'Offline readiness not verified',
     );
-    expect(status).toHaveTextContent('Updates: not checked');
+    expect(status).toHaveTextContent('Updates not checked');
     expect(status).not.toHaveTextContent(/offline support available|app up to date/i);
     if (support === 'unsupported') {
       expect(status).toHaveTextContent(
-        'Offline relaunch is unavailable; browser play can continue.',
+        'Browser play can continue, but offline relaunch is not available.',
       );
     } else {
       expect(status).not.toHaveTextContent('Offline relaunch is unavailable');
@@ -240,11 +239,48 @@ describe('App shell', () => {
     });
 
     expect(screen.getByLabelText('Application status')).toHaveTextContent(
-      'Offline readiness: unavailable',
+      'Offline capability restricted',
     );
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Offline relaunch is unavailable; browser play can continue.',
+    expect(
+      screen.getByText(
+        'Retry the offline readiness check while online. Current local data is unchanged.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Start new game' })[0]).toBeEnabled();
+  });
+
+  it('reports verified offline play without treating network availability as a prerequisite', async () => {
+    let messageReceived: ((event: { readonly data: unknown }) => void) | undefined;
+    const pwa = createPwaStatusAdapter({
+      serviceWorker: {
+        controller: { postMessage: vi.fn() },
+        register: vi.fn().mockResolvedValue({
+          waiting: null,
+          installing: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }),
+        addEventListener: vi.fn((type, listener) => {
+          if (type === 'message') messageReceived = listener as (event: { data: unknown }) => void;
+        }),
+        removeEventListener: vi.fn(),
+      },
+    });
+    await pwa.register();
+    const composition = fixtureComposition(undefined, pwa);
+    composition.updates.updateStorageCapability('available');
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    act(() =>
+      messageReceived?.({
+        data: { type: 'NOTEQUEST_OFFLINE_READINESS_RESULT', ready: true },
+      }),
     );
+    expect(await screen.findByText('Offline ready')).toBeInTheDocument();
+
+    act(() => window.dispatchEvent(new Event('offline')));
+    expect(screen.getByText('Offline active')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('local play can continue');
     expect(screen.getAllByRole('button', { name: 'Start new game' })[0]).toBeEnabled();
   });
 
@@ -252,14 +288,14 @@ describe('App shell', () => {
     let controllerChanged: (() => void) | undefined;
     const pwa = createPwaStatusAdapter({
       serviceWorker: {
-        controller: {},
+        controller: { postMessage: vi.fn() },
         register: vi.fn().mockResolvedValue({
           waiting: null,
           installing: null,
           addEventListener: vi.fn(),
         }),
-        addEventListener: vi.fn((_type, listener) => {
-          controllerChanged = listener;
+        addEventListener: vi.fn((type, listener) => {
+          if (type === 'controllerchange') controllerChanged = listener as () => void;
         }),
       },
     });
@@ -269,9 +305,112 @@ describe('App shell', () => {
     act(() => controllerChanged?.());
 
     const status = screen.getByLabelText('Application status');
-    expect(status).toHaveTextContent('Updates: reload required');
-    expect(status).toHaveTextContent('Offline readiness: not checked');
-    expect(status).not.toHaveTextContent('Offline readiness: ready');
+    expect(status).toHaveTextContent('Reload needed');
+    expect(status).toHaveTextContent('Preparing offline use');
+    expect(status).toHaveTextContent('Cache checkpreparing');
+    expect(status).not.toHaveTextContent('Offline ready');
+  });
+
+  it('requires an explicit activation and a separate explicit reload at a durable safe point', async () => {
+    let controllerChanged: (() => void) | undefined;
+    const postMessage = vi.fn();
+    const pwa = createPwaStatusAdapter({
+      serviceWorker: {
+        controller: { postMessage: vi.fn() },
+        register: vi.fn().mockResolvedValue({
+          waiting: { postMessage },
+          installing: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }),
+        addEventListener: vi.fn((type, listener) => {
+          if (type === 'controllerchange') controllerChanged = listener as () => void;
+        }),
+        removeEventListener: vi.fn(),
+      },
+    });
+    await pwa.register();
+    const composition = fixtureComposition(undefined, pwa);
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    const activate = await screen.findByRole('button', { name: 'Activate update' });
+    expect(postMessage).not.toHaveBeenCalled();
+    await userEvent.click(activate);
+    expect(postMessage).toHaveBeenCalledWith({ type: 'NOTEQUEST_ACTIVATE_UPDATE' });
+    expect(screen.getByText('Update activation requested')).toBeInTheDocument();
+    expect(composition.reload).not.toHaveBeenCalled();
+
+    act(() => controllerChanged?.());
+    await userEvent.click(screen.getByRole('button', { name: 'Reload updated app' }));
+    expect(composition.reload).toHaveBeenCalledOnce();
+  });
+
+  it('defers activation when the selected slot has no approved durable save point', async () => {
+    const postMessage = vi.fn();
+    const pwa = createPwaStatusAdapter({
+      serviceWorker: {
+        controller: { postMessage: vi.fn() },
+        register: vi.fn().mockResolvedValue({
+          waiting: { postMessage },
+          installing: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      },
+    });
+    await pwa.register();
+    const route = fixtureRoute({
+      destination: 'town',
+      slotId: emptySlots[0]!.slotId,
+      metadata: routeMetadata.town,
+      fallback: null,
+    });
+    const composition = fixtureComposition(undefined, pwa, route);
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    expect(
+      await screen.findByText('Finish or save current work before activating the update.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Activate update' })).not.toBeInTheDocument();
+    expect(postMessage).not.toHaveBeenCalledWith({ type: 'NOTEQUEST_ACTIVATE_UPDATE' });
+  });
+
+  it('presents a failed update without changing, selecting, or disabling local slots', async () => {
+    let stateChanged: (() => void) | undefined;
+    const installing = {
+      state: 'installing',
+      addEventListener: vi.fn((_type: string, listener: () => void) => {
+        stateChanged = listener;
+      }),
+    };
+    const pwa = createPwaStatusAdapter({
+      serviceWorker: {
+        controller: { postMessage: vi.fn() },
+        register: vi.fn().mockResolvedValue({
+          waiting: null,
+          installing,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      },
+    });
+    await pwa.register();
+    const composition = fixtureComposition(undefined, pwa);
+    render(<App compose={() => Promise.resolve(composition)} />);
+    await screen.findByRole('heading', { name: 'Slot 3' });
+
+    installing.state = 'redundant';
+    act(() => stateChanged?.());
+
+    expect(screen.getByText('Update failed')).toBeInTheDocument();
+    expect(screen.getByText('Continue with the current version and retry later.')).toBeVisible();
+    expect(composition.services.saveSlots.select).not.toHaveBeenCalled();
+    expect(composition.services.saveSlots.updateMetadata).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('button', { name: 'Start new game' })[0]).toBeEnabled();
   });
 
   it('retries a failed slot result, returns to loading, and renders recovered slots', async () => {
@@ -283,7 +422,7 @@ describe('App shell', () => {
     render(<App compose={() => Promise.resolve(fixtureComposition(list))} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Local slots could not be read');
     await userEvent.click(screen.getByRole('button', { name: 'Retry local slots' }));
-    expect(screen.getByRole('status')).toHaveTextContent('Loading local slots');
+    expect(screen.getByLabelText('Loading local slots')).toBeInTheDocument();
     expect(screen.queryByText(/progress changed/i)).not.toBeInTheDocument();
     await act(async () => {
       retry.resolve({ ok: true, value: emptySlots });

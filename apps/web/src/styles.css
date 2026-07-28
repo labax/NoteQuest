@@ -72,12 +72,35 @@ h2 {
   justify-content: flex-end;
   gap: 0.5rem;
 }
-.status-cluster span {
+.status-cluster span,
+.status-cluster > strong {
+  display: inline-flex;
+  align-items: center;
   border: 1px solid #c7d1c4;
   border-radius: 99rem;
   padding: 0.35rem 0.65rem;
   background: #eef5eb;
   font-size: 0.8rem;
+}
+.status-cluster details {
+  flex-basis: 100%;
+  font-size: 0.8rem;
+  text-align: right;
+}
+.status-cluster details dl {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0;
+}
+.status-cluster details dt,
+.status-cluster details dd {
+  display: inline;
+  margin: 0;
+}
+.status-cluster details dt::after {
+  content: ': ';
 }
 .shell-layout {
   width: min(100%, 90rem);
@@ -240,6 +263,11 @@ h2 {
     flex-direction: column;
   }
   .status-cluster {
+    justify-content: flex-start;
+  }
+  .status-cluster details,
+  .status-cluster details dl {
+    text-align: left;
     justify-content: flex-start;
   }
   .shell-layout {

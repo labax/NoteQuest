@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workbox = vi.hoisted(() => ({
   createHandlerBoundToURL: vi.fn(() => vi.fn()),
+  getCacheKeyForURL: vi.fn((url: string) => `cache:${url}`),
   precacheAndRoute: vi.fn(),
   registerRoute: vi.fn(),
   setCacheNameDetails: vi.fn(),
@@ -10,6 +11,7 @@ const workbox = vi.hoisted(() => ({
 vi.mock('workbox-core', () => ({ setCacheNameDetails: workbox.setCacheNameDetails }));
 vi.mock('workbox-precaching', () => ({
   createHandlerBoundToURL: workbox.createHandlerBoundToURL,
+  getCacheKeyForURL: workbox.getCacheKeyForURL,
   precacheAndRoute: workbox.precacheAndRoute,
 }));
 vi.mock('workbox-routing', () => ({
@@ -88,5 +90,48 @@ describe('custom service worker', () => {
 
     onMessage?.({ data: { type: 'NOTEQUEST_ACTIVATE_UPDATE' } });
     expect(skipWaiting).toHaveBeenCalledOnce();
+  });
+
+  it('reports readiness only when every injected precache entry can be read', async () => {
+    let onMessage:
+      | ((event: {
+          readonly data: unknown;
+          readonly source?: { postMessage(message: unknown): void } | null;
+        }) => void)
+      | undefined;
+    const postMessage = vi.fn();
+    vi.stubGlobal('__NOTEQUEST_RELEASE_ID__', 'release-test');
+    vi.stubGlobal('caches', {
+      match: vi.fn((key: string) =>
+        Promise.resolve(key === 'cache:index.html' ? new Response('shell') : undefined),
+      ),
+    });
+    vi.stubGlobal('self', {
+      __WB_MANIFEST: ['index.html', { url: 'assets/app.js', revision: 'app' }],
+      addEventListener: vi.fn(
+        (
+          _type: string,
+          listener: (event: {
+            readonly data: unknown;
+            readonly source?: { postMessage(message: unknown): void } | null;
+          }) => void,
+        ) => {
+          onMessage = listener;
+        },
+      ),
+      skipWaiting: vi.fn(),
+    });
+
+    await import('./sw');
+    onMessage?.({
+      data: { type: 'NOTEQUEST_CHECK_OFFLINE_READINESS' },
+      source: { postMessage },
+    });
+    await vi.waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith({
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        ready: false,
+      }),
+    );
   });
 });

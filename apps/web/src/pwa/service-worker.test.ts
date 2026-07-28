@@ -10,7 +10,10 @@ function registration(waiting: ServiceWorker | null = null): ServiceWorkerRegist
   } as unknown as ServiceWorkerRegistration;
 }
 
-function serviceWorkerEnvironment(register = vi.fn(), controller: unknown = null) {
+function serviceWorkerEnvironment(
+  register = vi.fn(),
+  controller: { postMessage(message: unknown): void } | null = null,
+) {
   return {
     serviceWorker: {
       controller,
@@ -43,10 +46,9 @@ describe('PWA lifecycle adapter', () => {
   it('only asks a waiting worker to activate after an explicit safe decision', async () => {
     const postMessage = vi.fn();
     const waiting = { postMessage } as unknown as ServiceWorker;
-    const environment = serviceWorkerEnvironment(
-      vi.fn().mockResolvedValue(registration(waiting)),
-      {},
-    );
+    const environment = serviceWorkerEnvironment(vi.fn().mockResolvedValue(registration(waiting)), {
+      postMessage: vi.fn(),
+    });
     const adapter = createPwaLifecycleAdapter(environment);
     await adapter.register();
 
@@ -103,8 +105,8 @@ describe('PWA lifecycle adapter', () => {
     } as unknown as ServiceWorkerRegistration;
     const environment = serviceWorkerEnvironment(vi.fn().mockResolvedValue(registered));
     environment.serviceWorker.addEventListener.mockImplementation(
-      (_type: string, listener: () => void) => {
-        controllerChanged = listener;
+      (type: string, listener: () => void) => {
+        if (type === 'controllerchange') controllerChanged = listener;
       },
     );
     const adapter = createPwaLifecycleAdapter(environment);
@@ -123,17 +125,77 @@ describe('PWA lifecycle adapter', () => {
     });
   });
 
+  it('wires an updating worker through pending and failed lifecycle states', async () => {
+    let updateFound: (() => void) | undefined;
+    let stateChanged: (() => void) | undefined;
+    const installing = {
+      state: 'installing',
+      addEventListener: vi.fn((_type: string, listener: () => void) => {
+        stateChanged = listener;
+      }),
+    };
+    const registered = {
+      waiting: null,
+      installing,
+      addEventListener: vi.fn((_type: string, listener: () => void) => {
+        updateFound = listener;
+      }),
+      removeEventListener: vi.fn(),
+    } as unknown as ServiceWorkerRegistration;
+    const environment = serviceWorkerEnvironment(vi.fn().mockResolvedValue(registered), {
+      postMessage: vi.fn(),
+    });
+    const adapter = createPwaLifecycleAdapter(environment);
+    await adapter.register();
+
+    updateFound?.();
+    expect(adapter.getStatus().updateStatus).toBe('pending');
+    installing.state = 'redundant';
+    stateChanged?.();
+    expect(adapter.getStatus().updateStatus).toBe('failed');
+    expect(adapter.getStatus().offlineReadiness).not.toBe('ready');
+  });
+
   it('does not infer readiness or currency from an existing controller', async () => {
-    const environment = serviceWorkerEnvironment(vi.fn().mockResolvedValue(registration()), {});
+    const postMessage = vi.fn();
+    let messageReceived: ((event: { readonly data: unknown }) => void) | undefined;
+    const environment = serviceWorkerEnvironment(vi.fn().mockResolvedValue(registration()), {
+      postMessage,
+    });
+    environment.serviceWorker.addEventListener.mockImplementation((type, listener) => {
+      if (type === 'message') messageReceived = listener;
+    });
     const adapter = createPwaLifecycleAdapter(environment);
 
     await adapter.register();
 
+    expect(postMessage).toHaveBeenCalledWith({ type: 'NOTEQUEST_CHECK_OFFLINE_READINESS' });
     expect(adapter.getStatus()).toEqual({
       serviceWorkerSupport: 'supported',
-      offlineReadiness: 'not-checked',
+      offlineReadiness: 'installing',
       updateStatus: 'not-checked',
     });
+    messageReceived?.({
+      data: { type: 'NOTEQUEST_OFFLINE_READINESS_RESULT', ready: true },
+    });
+    expect(adapter.getStatus().offlineReadiness).toBe('ready');
+  });
+
+  it('rejects malformed readiness messages and reports a verified cache failure', async () => {
+    let messageReceived: ((event: { readonly data: unknown }) => void) | undefined;
+    const environment = serviceWorkerEnvironment(vi.fn().mockResolvedValue(registration()), {
+      postMessage: vi.fn(),
+    });
+    environment.serviceWorker.addEventListener.mockImplementation((type, listener) => {
+      if (type === 'message') messageReceived = listener;
+    });
+    const adapter = createPwaLifecycleAdapter(environment);
+    await adapter.register();
+
+    messageReceived?.({ data: { type: 'NOTEQUEST_OFFLINE_READINESS_RESULT', ready: 'yes' } });
+    expect(adapter.getStatus().offlineReadiness).toBe('installing');
+    messageReceived?.({ data: { type: 'NOTEQUEST_OFFLINE_READINESS_RESULT', ready: false } });
+    expect(adapter.getStatus().offlineReadiness).toBe('unavailable');
   });
 
   it('stops lifecycle publication and removes owned listeners when closed', async () => {

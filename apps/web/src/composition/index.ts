@@ -8,6 +8,7 @@ import {
 import { createBrowserRouteAdapter } from '../routing';
 import { createPwaLifecycleAdapter, type PwaLifecycleAdapter } from '../pwa/service-worker';
 import { createPwaUpdateCoordinator, type PwaUpdateCoordinator } from '../pwa/update-coordinator';
+import { checkStorageCapability } from '../pwa/storage-capability';
 
 export const compositionRootName = 'web-composition' as const;
 
@@ -25,6 +26,7 @@ export interface AppComposition {
   readonly pwa: PwaStatusAdapter;
   readonly updates: PwaUpdateCoordinator;
   readonly version: string;
+  reload(): void;
   close(): void;
 }
 
@@ -41,7 +43,18 @@ export async function createWebComposition(): Promise<AppComposition> {
   }
 
   const pwa = createPwaLifecycleAdapter();
-  const updates = createPwaUpdateCoordinator(pwa);
+  const updates = createPwaUpdateCoordinator(pwa, {
+    onlineState: navigator.onLine ? 'online' : 'offline',
+  });
+  updates.updateStorageCapability(
+    await checkStorageCapability(async () => {
+      const key = 'workspace.local.capability-probe';
+      await database.transaction('rw', database.workspace, async () => {
+        await database.workspace.put({ key, value: { probe: true } });
+        await database.workspace.delete(key);
+      });
+    }, navigator.storage),
+  );
   if (import.meta.env.PROD) void pwa.register();
 
   return {
@@ -53,6 +66,7 @@ export async function createWebComposition(): Promise<AppComposition> {
     pwa,
     updates,
     version: import.meta.env.VITE_APP_VERSION ?? 'development',
+    reload: () => window.location.reload(),
     close: () => {
       updates.close();
       pwa.close();

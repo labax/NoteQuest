@@ -1,10 +1,15 @@
-import { ACTIVATE_UPDATE_MESSAGE } from './protocol';
+import {
+  ACTIVATE_UPDATE_MESSAGE,
+  CHECK_OFFLINE_READINESS_MESSAGE,
+  isOfflineReadinessResultMessage,
+} from './protocol';
 
 export { ACTIVATE_UPDATE_MESSAGE } from './protocol';
 
 export type ServiceWorkerSupport = 'supported' | 'unsupported';
 export type OfflineReadiness = 'not-checked' | 'installing' | 'ready' | 'unavailable';
-export type UpdateStatus = 'not-checked' | 'waiting' | 'activation-requested' | 'reload-required';
+export type UpdateStatus =
+  'not-checked' | 'pending' | 'waiting' | 'activation-requested' | 'reload-required' | 'failed';
 
 export interface PwaLifecycleStatus {
   readonly serviceWorkerSupport: ServiceWorkerSupport;
@@ -21,10 +26,12 @@ export interface PwaLifecycleAdapter {
 }
 
 interface ServiceWorkerContainerLike {
-  readonly controller: unknown;
+  readonly controller: { postMessage(message: unknown): void } | null;
   register(scriptURL: string, options?: RegistrationOptions): Promise<ServiceWorkerRegistration>;
   addEventListener(type: 'controllerchange', listener: () => void): void;
   removeEventListener(type: 'controllerchange', listener: () => void): void;
+  addEventListener(type: 'message', listener: (event: { readonly data: unknown }) => void): void;
+  removeEventListener(type: 'message', listener: (event: { readonly data: unknown }) => void): void;
 }
 
 interface PwaEnvironment {
@@ -61,19 +68,41 @@ export function createPwaLifecycleAdapter(
     listeners.forEach((listener) => listener(status));
   };
 
+  const requestReadinessCheck = () => {
+    if (!serviceWorker?.controller) return;
+    publish({ ...status, offlineReadiness: 'installing' });
+    serviceWorker.controller.postMessage({ type: CHECK_OFFLINE_READINESS_MESSAGE });
+  };
+
+  const readinessResult = (event: { readonly data: unknown }) => {
+    if (!isOfflineReadinessResultMessage(event.data)) return;
+    publish({
+      ...status,
+      offlineReadiness: event.data.ready ? 'ready' : 'unavailable',
+    });
+  };
+
   const controllerChanged = () => {
     publish({ ...status, offlineReadiness: 'not-checked', updateStatus: 'reload-required' });
+    requestReadinessCheck();
   };
 
   const observeInstallingWorker = () => {
     const installing = registration?.installing;
     if (!installing) return;
+    if (installing.state === 'installing' && serviceWorker?.controller) {
+      publish({ ...status, updateStatus: 'pending' });
+    }
     if (installing.state === 'installed' && registration?.waiting) {
       publish({ ...status, updateStatus: 'waiting' });
     }
     if (observedWorkers.has(installing)) return;
     observedWorkers.add(installing);
     installing.addEventListener('statechange', () => {
+      if (installing.state === 'redundant') {
+        publish({ ...status, updateStatus: 'failed' });
+        return;
+      }
       if (installing.state === 'installed' && registration?.waiting) {
         publish({ ...status, updateStatus: 'waiting' });
       }
@@ -102,12 +131,14 @@ export function createPwaLifecycleAdapter(
           if (closed) return;
           registration.addEventListener('updatefound', observeInstallingWorker);
           serviceWorker.addEventListener?.('controllerchange', controllerChanged);
+          serviceWorker.addEventListener?.('message', readinessResult);
           publish({
             ...status,
             offlineReadiness: serviceWorker.controller ? 'not-checked' : 'installing',
             updateStatus: registration.waiting ? 'waiting' : 'not-checked',
           });
           observeInstallingWorker();
+          requestReadinessCheck();
         } catch {
           publish({ ...status, offlineReadiness: 'unavailable', updateStatus: 'not-checked' });
         }
@@ -124,6 +155,7 @@ export function createPwaLifecycleAdapter(
       if (closed) return;
       closed = true;
       serviceWorker?.removeEventListener?.('controllerchange', controllerChanged);
+      serviceWorker?.removeEventListener?.('message', readinessResult);
       registration?.removeEventListener('updatefound', observeInstallingWorker);
       listeners.clear();
     },
