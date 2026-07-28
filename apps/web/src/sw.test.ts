@@ -2,14 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workbox = vi.hoisted(() => ({
   createHandlerBoundToURL: vi.fn(() => vi.fn()),
+  getCacheKeyForURL: vi.fn((url: string) => `cache:${url}`),
   precacheAndRoute: vi.fn(),
   registerRoute: vi.fn(),
   setCacheNameDetails: vi.fn(),
+  cacheNames: { precache: 'nq-shell-release-test' },
 }));
 
-vi.mock('workbox-core', () => ({ setCacheNameDetails: workbox.setCacheNameDetails }));
+vi.mock('workbox-core', () => ({
+  cacheNames: workbox.cacheNames,
+  setCacheNameDetails: workbox.setCacheNameDetails,
+}));
 vi.mock('workbox-precaching', () => ({
   createHandlerBoundToURL: workbox.createHandlerBoundToURL,
+  getCacheKeyForURL: workbox.getCacheKeyForURL,
   precacheAndRoute: workbox.precacheAndRoute,
 }));
 vi.mock('workbox-routing', () => ({
@@ -88,5 +94,70 @@ describe('custom service worker', () => {
 
     onMessage?.({ data: { type: 'NOTEQUEST_ACTIVATE_UPDATE' } });
     expect(skipWaiting).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [
+      'an old cache has all entries but the active cache is incomplete',
+      ['cache:index.html'],
+      false,
+    ],
+    [
+      'the active release cache has every readable entry',
+      ['cache:index.html', 'cache:assets/app.js'],
+      true,
+    ],
+  ] as const)('scopes readiness when %s', async (_name, currentKeys, expected) => {
+    let onMessage:
+      | ((event: {
+          readonly data: unknown;
+          readonly source?: { postMessage(message: unknown): void } | null;
+        }) => void)
+      | undefined;
+    const postMessage = vi.fn();
+    vi.stubGlobal('__NOTEQUEST_RELEASE_ID__', 'release-test');
+    const currentCache = {
+      match: vi.fn((key: string) =>
+        Promise.resolve(
+          (currentKeys as readonly string[]).includes(key) ? new Response('current') : undefined,
+        ),
+      ),
+    };
+    const oldCache = { match: vi.fn(() => Promise.resolve(new Response('old'))) };
+    vi.stubGlobal('caches', {
+      open: vi.fn((name: string) =>
+        Promise.resolve(name === 'nq-shell-release-test' ? currentCache : oldCache),
+      ),
+    });
+    vi.stubGlobal('self', {
+      __WB_MANIFEST: ['index.html', { url: 'assets/app.js', revision: 'app' }],
+      addEventListener: vi.fn(
+        (
+          _type: string,
+          listener: (event: {
+            readonly data: unknown;
+            readonly source?: { postMessage(message: unknown): void } | null;
+          }) => void,
+        ) => {
+          onMessage = listener;
+        },
+      ),
+      skipWaiting: vi.fn(),
+    });
+
+    await import('./sw');
+    onMessage?.({
+      data: { type: 'NOTEQUEST_CHECK_OFFLINE_READINESS', requestId: 'request-1' },
+      source: { postMessage },
+    });
+    await vi.waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith({
+        type: 'NOTEQUEST_OFFLINE_READINESS_RESULT',
+        requestId: 'request-1',
+        ready: expected,
+      }),
+    );
+    expect(currentCache.match).toHaveBeenCalledTimes(2);
+    expect(oldCache.match).not.toHaveBeenCalled();
   });
 });

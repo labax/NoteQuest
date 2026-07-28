@@ -10,6 +10,7 @@ import {
 import { describeSaveSlotCapability, type SlotRecord } from '@notequest/application';
 import { routeMetadata, shellDestinations, type RouteState } from '@notequest/ui';
 import { createWebComposition, type AppComposition } from './composition';
+import { presentPwaShellStatus } from './pwa/status-presentation';
 
 interface AppProps {
   readonly compose?: () => Promise<AppComposition>;
@@ -167,13 +168,27 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
     | { readonly status: 'failed'; readonly slotId: string }
   >({ status: 'idle' });
   const selectionPending = useRef<string | null>(null);
+  const [activationFailure, setActivationFailure] = useState(false);
+  const [retryPending, setRetryPending] = useState<string | null>(null);
   const pwa = useSyncExternalStore(
-    composition.pwa.subscribe,
-    composition.pwa.getStatus,
-    composition.pwa.getStatus,
+    composition.updates.subscribe,
+    composition.updates.getStatus,
+    composition.updates.getStatus,
   );
+  const pwaPresentation = presentPwaShellStatus(pwa);
 
   useEffect(() => composition.route.subscribe(setRoute), [composition]);
+
+  useEffect(() => {
+    const online = () => composition.updates.updateOnlineState('online');
+    const offline = () => composition.updates.updateOnlineState('offline');
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+    return () => {
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', offline);
+    };
+  }, [composition]);
 
   useEffect(() => {
     document.title = route.metadata.title;
@@ -264,12 +279,68 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
         </div>
         <div className="status-cluster" aria-label="Application status">
           <span>Save status: not checked</span>
-          <span>Offline readiness: {statusLabel(pwa.offlineReadiness)}</span>
-          <span>Updates: {statusLabel(pwa.updateStatus)}</span>
-          <span>Service workers: {pwa.serviceWorkerSupport}</span>
-          {pwa.offlineReadiness === 'unavailable' ? (
-            <span role="status">Offline relaunch is unavailable; browser play can continue.</span>
+          <span>{pwaPresentation.connectivity}</span>
+          <strong>{pwaPresentation.offlineLabel}</strong>
+          <span role="status" aria-live="polite" aria-atomic="true">
+            {pwaPresentation.offlineMessage}
+          </span>
+          <strong>{pwaPresentation.updateLabel}</strong>
+          {pwaPresentation.updateMessage ? <span>{pwaPresentation.updateMessage}</span> : null}
+          {pwa.failures.map((failure) => (
+            <span key={failure.code} data-diagnostic-code={failure.code}>
+              {failure.guidance}{' '}
+              {failure.retryable ? (
+                <button
+                  type="button"
+                  disabled={retryPending !== null}
+                  onClick={async () => {
+                    setRetryPending(failure.code);
+                    await composition.updates.retryFailure(failure.code);
+                    setRetryPending(null);
+                  }}
+                >
+                  {retryPending === failure.code ? 'Retrying…' : 'Retry check'}
+                </button>
+              ) : null}
+            </span>
+          ))}
+          {pwa.updateState === 'ready' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setActivationFailure(!composition.updates.requestActivation().ok);
+              }}
+            >
+              Activate update
+            </button>
           ) : null}
+          {pwa.updateState === 'reload-needed' ? (
+            <button type="button" onClick={composition.reload}>
+              Reload updated app
+            </button>
+          ) : null}
+          {activationFailure ? (
+            <span role="alert">
+              The update could not be activated. Continue here and retry later.
+            </span>
+          ) : null}
+          <details>
+            <summary>Offline and update details</summary>
+            <dl>
+              <div>
+                <dt>Cache check</dt>
+                <dd>{statusLabel(pwa.cacheReadiness)}</dd>
+              </div>
+              <div>
+                <dt>Local storage</dt>
+                <dd>{statusLabel(pwa.storageCapability)}</dd>
+              </div>
+              <div>
+                <dt>Service worker</dt>
+                <dd>{pwa.serviceWorkerSupport}</dd>
+              </div>
+            </dl>
+          </details>
         </div>
       </header>
       <div className="shell-layout">

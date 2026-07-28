@@ -1,4 +1,31 @@
-import type { PwaLifecycleAdapter, PwaLifecycleStatus } from './service-worker';
+import type {
+  PwaLifecycleAdapter,
+  PwaLifecycleStatus,
+  ServiceWorkerSupport,
+} from './service-worker';
+
+export type OnlineState = 'online' | 'offline';
+export type CacheReadiness = 'not-checked' | 'preparing' | 'ready' | 'failed' | 'unavailable';
+export type StorageCapability = 'not-checked' | 'available' | 'limited' | 'unavailable';
+export type OfflineReadiness = 'not-ready' | 'ready' | 'failed' | 'unavailable';
+export type UpdateState =
+  | 'not-checked'
+  | 'pending'
+  | 'activation-deferred'
+  | 'ready'
+  | 'activation-requested'
+  | 'reload-needed'
+  | 'failed';
+
+export type OfflineUpdateFailureCode =
+  'cache-check-failed' | 'storage-unavailable' | 'storage-limited' | 'update-failed';
+
+export interface OfflineUpdateFailure {
+  /** Stable, privacy-safe support detail; never contains slot or player data. */
+  readonly code: OfflineUpdateFailureCode;
+  readonly retryable: boolean;
+  readonly guidance: string;
+}
 
 export type UpdateSafetyBlocker =
   | 'safe-point-unverified'
@@ -21,12 +48,18 @@ export interface UpdateSafetySnapshot {
   readonly unsavedWork: boolean;
 }
 
-export interface UpdateCoordinatorStatus {
-  readonly state:
-    'not-checked' | 'waiting' | 'blocked' | 'ready' | 'activation-requested' | 'reload-required';
+export interface OfflineUpdateCoordinatorStatus {
+  readonly onlineState: OnlineState;
+  readonly serviceWorkerSupport: ServiceWorkerSupport;
+  readonly cacheReadiness: CacheReadiness;
+  readonly storageCapability: StorageCapability;
+  readonly offlineReadiness: OfflineReadiness;
+  readonly updateState: UpdateState;
   readonly blockers: readonly UpdateSafetyBlocker[];
+  readonly failures: readonly OfflineUpdateFailure[];
 }
 
+export type UpdateCoordinatorStatus = OfflineUpdateCoordinatorStatus;
 export type UpdateActivationResult =
   | { readonly ok: true }
   | {
@@ -36,10 +69,13 @@ export type UpdateActivationResult =
     };
 
 export interface PwaUpdateCoordinator {
-  getStatus(): Readonly<UpdateCoordinatorStatus>;
+  getStatus(): Readonly<OfflineUpdateCoordinatorStatus>;
+  updateOnlineState(state: OnlineState): void;
+  updateStorageCapability(capability: StorageCapability): void;
   updateSafety(snapshot: Readonly<UpdateSafetySnapshot>): void;
   requestActivation(): UpdateActivationResult;
-  subscribe(listener: (status: Readonly<UpdateCoordinatorStatus>) => void): () => void;
+  retryFailure(code: OfflineUpdateFailureCode): Promise<boolean>;
+  subscribe(listener: (status: Readonly<OfflineUpdateCoordinatorStatus>) => void): () => void;
   close(): void;
 }
 
@@ -69,53 +105,153 @@ export function evaluateUpdateSafety(
   return blockers;
 }
 
-export function createPwaUpdateCoordinator(lifecycle: PwaLifecycleAdapter): PwaUpdateCoordinator {
+function cacheState(status: PwaLifecycleStatus): CacheReadiness {
+  if (status.serviceWorkerSupport === 'unsupported') return 'unavailable';
+  if (status.offlineReadiness === 'installing') return 'preparing';
+  if (status.offlineReadiness === 'ready') return 'ready';
+  if (status.offlineReadiness === 'unavailable') return 'failed';
+  return 'not-checked';
+}
+
+export function createPwaUpdateCoordinator(
+  lifecycle: PwaLifecycleAdapter,
+  initial: {
+    readonly onlineState?: OnlineState;
+    readonly storageCapability?: StorageCapability;
+    readonly retryStorage?: () => Promise<StorageCapability>;
+  } = {},
+): PwaUpdateCoordinator {
   let safety = unverifiedSafety;
   let lifecycleStatus = lifecycle.getStatus();
+  let onlineState = initial.onlineState ?? 'online';
+  let storageCapability = initial.storageCapability ?? 'not-checked';
   let closed = false;
-  const listeners = new Set<(status: Readonly<UpdateCoordinatorStatus>) => void>();
+  const listeners = new Set<(status: Readonly<OfflineUpdateCoordinatorStatus>) => void>();
 
-  const project = (): UpdateCoordinatorStatus => {
-    if (lifecycleStatus.updateStatus === 'activation-requested') {
-      return { state: 'activation-requested', blockers: [] };
-    }
-    if (lifecycleStatus.updateStatus === 'reload-required') {
-      return { state: 'reload-required', blockers: [] };
-    }
-    if (lifecycleStatus.updateStatus !== 'waiting') return { state: 'not-checked', blockers: [] };
-    const blockers = evaluateUpdateSafety(safety);
-    return { state: blockers.length === 0 ? 'ready' : 'blocked', blockers };
+  const project = (): OfflineUpdateCoordinatorStatus => {
+    const cacheReadiness = cacheState(lifecycleStatus);
+    const blockers = lifecycleStatus.updateStatus === 'waiting' ? evaluateUpdateSafety(safety) : [];
+    const failures: OfflineUpdateFailure[] = [];
+    if (cacheReadiness === 'failed')
+      failures.push({
+        code: 'cache-check-failed',
+        retryable: true,
+        guidance:
+          'Retry the offline readiness check while online. Current local data is unchanged.',
+      });
+    if (storageCapability === 'unavailable')
+      failures.push({
+        code: 'storage-unavailable',
+        retryable: initial.retryStorage !== undefined,
+        guidance: initial.retryStorage
+          ? 'Check browser storage settings, then retry. Current slot data has not been replaced.'
+          : 'Check browser storage settings. Current slot data has not been replaced.',
+      });
+    if (storageCapability === 'limited')
+      failures.push({
+        code: 'storage-limited',
+        retryable: initial.retryStorage !== undefined,
+        guidance: initial.retryStorage
+          ? 'Free browser storage or export data before retrying offline setup.'
+          : 'Free browser storage or export data before reopening offline setup.',
+      });
+    if (lifecycleStatus.updateStatus === 'failed')
+      failures.push({
+        code: 'update-failed',
+        retryable: true,
+        guidance: 'Continue with the current version and retry the update later.',
+      });
+    const offlineReadiness: OfflineReadiness =
+      cacheReadiness === 'ready' && storageCapability === 'available'
+        ? 'ready'
+        : cacheReadiness === 'unavailable' || storageCapability === 'unavailable'
+          ? 'unavailable'
+          : cacheReadiness === 'failed' || storageCapability === 'limited'
+            ? 'failed'
+            : 'not-ready';
+    const updateState: UpdateState =
+      lifecycleStatus.updateStatus === 'pending'
+        ? 'pending'
+        : lifecycleStatus.updateStatus === 'waiting'
+          ? blockers.length
+            ? 'activation-deferred'
+            : 'ready'
+          : lifecycleStatus.updateStatus === 'activation-requested'
+            ? 'activation-requested'
+            : lifecycleStatus.updateStatus === 'reload-required'
+              ? 'reload-needed'
+              : lifecycleStatus.updateStatus === 'failed'
+                ? 'failed'
+                : 'not-checked';
+    return {
+      onlineState,
+      serviceWorkerSupport: lifecycleStatus.serviceWorkerSupport,
+      cacheReadiness,
+      storageCapability,
+      offlineReadiness,
+      updateState,
+      blockers,
+      failures,
+    };
   };
   let status = project();
-
   const publish = () => {
-    if (closed) return;
-    status = project();
-    listeners.forEach((listener) => listener(status));
+    if (!closed) {
+      status = project();
+      listeners.forEach((listener) => listener(status));
+    }
   };
-  const unsubscribeLifecycle = lifecycle.subscribe((next: Readonly<PwaLifecycleStatus>) => {
+  const unsubscribeLifecycle = lifecycle.subscribe((next) => {
     lifecycleStatus = next;
     publish();
   });
 
   return {
     getStatus: () => status,
+    updateOnlineState(state) {
+      if (!closed) {
+        onlineState = state;
+        publish();
+      }
+    },
+    updateStorageCapability(capability) {
+      if (!closed) {
+        storageCapability = capability;
+        publish();
+      }
+    },
     updateSafety(snapshot) {
-      if (closed) return;
-      safety = { ...snapshot };
-      publish();
+      if (!closed) {
+        safety = { ...snapshot };
+        publish();
+      }
     },
     requestActivation() {
-      if (status.state === 'blocked') {
+      if (status.updateState === 'activation-deferred')
         return { ok: false, reason: 'unsafe-state', blockers: status.blockers };
-      }
-      if (status.state !== 'ready') {
+      if (status.updateState !== 'ready')
         return { ok: false, reason: 'no-waiting-update', blockers: [] };
-      }
-      if (!lifecycle.requestActivation(true)) {
+      if (!lifecycle.requestActivation(true))
         return { ok: false, reason: 'activation-unavailable', blockers: [] };
-      }
       return { ok: true };
+    },
+    async retryFailure(code) {
+      if (closed) return false;
+      if (code === 'cache-check-failed') return lifecycle.retryReadiness();
+      if (code === 'update-failed') return lifecycle.retryUpdate();
+      if (code === 'storage-unavailable' || code === 'storage-limited') {
+        if (!initial.retryStorage) return false;
+        try {
+          storageCapability = await initial.retryStorage();
+          publish();
+          return storageCapability === 'available';
+        } catch {
+          storageCapability = 'unavailable';
+          publish();
+          return false;
+        }
+      }
+      return false;
     },
     subscribe(listener) {
       if (closed) return () => undefined;
@@ -124,10 +260,11 @@ export function createPwaUpdateCoordinator(lifecycle: PwaLifecycleAdapter): PwaU
       return () => listeners.delete(listener);
     },
     close() {
-      if (closed) return;
-      closed = true;
-      unsubscribeLifecycle();
-      listeners.clear();
+      if (!closed) {
+        closed = true;
+        unsubscribeLifecycle();
+        listeners.clear();
+      }
     },
   };
 }
