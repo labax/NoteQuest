@@ -12,7 +12,9 @@ messages, labelled dialogs, or gameplay state.
 - Call `focusBlockingError(summary)` for a visible blocking-error summary.
 - Call `containFocus(dialog, { initialFocus, invoker })` after a labelled dialog or responsive
   sheet opens. Call `deactivate()` when it closes to remove containment and restore the invoker.
-  `useContainedFocus` provides the same lifecycle for React. Always provide an explicit close.
+  `useContainedFocus` provides the same lifecycle for React. Initial targets must be visible,
+  enabled, and in the normal tab sequence; otherwise entry falls back to the first usable control
+  and then the container. Always provide an explicit close.
 
 DOM order remains the keyboard order. Do not use positive `tabindex` values to rearrange it.
 

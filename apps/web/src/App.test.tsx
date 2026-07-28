@@ -417,9 +417,27 @@ describe('App shell', () => {
     );
     expect(await screen.findByText('Offline ready')).toBeInTheDocument();
 
+    const politeRegion = screen.getByLabelText('Polite announcements');
+    expect(politeRegion).toHaveTextContent('Required app files and local storage');
+    expect(
+      screen.getByLabelText('Application status').querySelectorAll('[aria-live], [role="status"]'),
+    ).toHaveLength(0);
+    expect(screen.getByLabelText('Application status')).toHaveTextContent(
+      'Required app files and local storage have been verified.',
+    );
+
     act(() => window.dispatchEvent(new Event('offline')));
     expect(screen.getByText('Offline active')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('local play can continue');
+    expect(politeRegion).toHaveTextContent('local play can continue');
+    expect(screen.getAllByText(/local play can continue/)).toHaveLength(2);
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+
+    const unchangedAnnouncement = politeRegion.textContent;
+    const unchangedAnnouncementNode = politeRegion.firstChild;
+    act(() => window.dispatchEvent(new Event('offline')));
+    expect(politeRegion).toHaveTextContent(unchangedAnnouncement!);
+    expect(politeRegion.firstChild).toBe(unchangedAnnouncementNode);
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
     expect(screen.getAllByRole('button', { name: 'Start new game' })[0]).toBeEnabled();
   });
 

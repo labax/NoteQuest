@@ -3,16 +3,66 @@ import { useEffect, useSyncExternalStore, type RefObject } from 'react';
 
 const FOCUSABLE = [
   'a[href]',
+  'area[href]',
   'button:not([disabled])',
-  'input:not([disabled])',
+  'input:not([type="hidden"]):not([disabled])',
   'select:not([disabled])',
   'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
+  'summary',
+  '[contenteditable="true"]',
+  '[tabindex]',
 ].join(',');
 
+function isHiddenByTree(element: HTMLElement, boundary: HTMLElement): boolean {
+  let current: HTMLElement | null = element;
+  while (current !== null) {
+    if (
+      current.hidden ||
+      current.hasAttribute('inert') ||
+      current.getAttribute('aria-hidden') === 'true'
+    ) {
+      return true;
+    }
+    const style = getComputedStyle(current);
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.visibility === 'collapse' ||
+      style.contentVisibility === 'hidden' ||
+      style.opacity === '0'
+    ) {
+      return true;
+    }
+    if (current instanceof HTMLDetailsElement && !current.open) {
+      const summary = Array.from(current.children).find(
+        (child): child is HTMLElement =>
+          child instanceof HTMLElement && child.tagName === 'SUMMARY',
+      );
+      if (summary === undefined || !summary.contains(element)) return true;
+    }
+    if (current === boundary) break;
+    current = current.parentElement;
+  }
+  return false;
+}
+
+function isTabbable(element: HTMLElement, container: HTMLElement): boolean {
+  if (!element.isConnected || !container.contains(element) || !element.matches(FOCUSABLE)) {
+    return false;
+  }
+  if (
+    element.matches(':disabled') ||
+    element.getAttribute('aria-disabled') === 'true' ||
+    element.tabIndex < 0
+  ) {
+    return false;
+  }
+  return !isHiddenByTree(element, container);
+}
+
 function visibleFocusable(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-    (element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true',
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((element) =>
+    isTabbable(element, container),
   );
 }
 
@@ -71,7 +121,13 @@ export function containFocus(
     }
   };
   container.addEventListener('keydown', keydown);
-  focusTarget(options.initialFocus ?? visibleFocusable(container)[0] ?? container);
+  const initial =
+    options.initialFocus !== null &&
+    options.initialFocus !== undefined &&
+    isTabbable(options.initialFocus, container)
+      ? options.initialFocus
+      : visibleFocusable(container)[0];
+  if (!focusTarget(initial ?? container) && initial !== undefined) focusTarget(container);
   return {
     deactivate: ({ restore = true } = {}) => {
       container.removeEventListener('keydown', keydown);

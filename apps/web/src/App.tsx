@@ -306,7 +306,7 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           <span>Save status: not checked</span>
           <span>{pwaPresentation.connectivity}</span>
           <strong>{pwaPresentation.offlineLabel}</strong>
-          <span role="status">{pwaPresentation.offlineMessage}</span>
+          <span>{pwaPresentation.offlineMessage}</span>
           <strong>{pwaPresentation.updateLabel}</strong>
           {pwaPresentation.updateMessage ? <span>{pwaPresentation.updateMessage}</span> : null}
           {pwa.failures.map((failure) => (
