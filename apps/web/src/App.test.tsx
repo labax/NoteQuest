@@ -166,6 +166,25 @@ describe('App shell', () => {
     expect(screen.getByText(/no in-app submission endpoint is configured/i)).toBeInTheDocument();
   });
 
+  it('preserves an exact production release SHA with the reviewed wrapping hook', async () => {
+    const releaseSha = '06c703731ab7ac39f35207eef4b5ab9a44e7beab';
+    const route = fixtureRoute({
+      destination: 'about',
+      metadata: routeMetadata.about,
+      fallback: null,
+    });
+    const composition = {
+      ...fixtureComposition(undefined, undefined, route),
+      version: releaseSha,
+    };
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    const releaseIdentity = await screen.findByText(releaseSha, { exact: true });
+    expect(releaseIdentity).toHaveTextContent(releaseSha);
+    expect(releaseIdentity).toHaveClass('release-identity');
+    expect(releaseIdentity).toHaveAttribute('data-release-identity', 'exact');
+  });
+
   it('links first-launch storage guidance to storage and privacy details', async () => {
     const route = fixtureRoute();
     render(

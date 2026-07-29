@@ -183,8 +183,11 @@ function AboutAndCredits({ version }: { readonly version: string }) {
         <p className="placeholder-label">Implementation placeholder</p>
         <h3 id="notice-version">Version</h3>
         <p>
-          Application build: <strong>{version}</strong>. Final release and content version details
-          are pending release review.
+          Application build:{' '}
+          <strong className="release-identity" data-release-identity="exact">
+            {version}
+          </strong>
+          . Final release and content version details are pending release review.
         </p>
       </section>
       {shellNotices.slice(3).map((notice) => (

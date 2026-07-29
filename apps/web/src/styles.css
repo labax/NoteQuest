@@ -244,6 +244,9 @@ h2 {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.release-identity {
+  overflow-wrap: anywhere;
+}
 .slot-skeleton span {
   display: block;
   height: 1rem;
