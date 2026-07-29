@@ -192,7 +192,7 @@ describe('AdventurerCreation', () => {
     expect(screen.getByText('3 + 4 = 7')).toBeVisible();
     expect(screen.getByText('Fixture blade')).toBeVisible();
     expect(screen.queryByRole('button', { name: /reroll/i })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Continue to Palace entry' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continue to town' }));
     expect(onContinue).toHaveBeenCalledOnce();
   });
 
@@ -235,5 +235,27 @@ describe('AdventurerCreation', () => {
     );
     expect(await screen.findByRole('alert')).toHaveTextContent('could not be checked');
     expect(screen.queryByText('Creation is saved.')).not.toBeInTheDocument();
+  });
+
+  it('keeps an ambiguous commit neutral and allows only authoritative recheck', async () => {
+    const loadCommitted = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(committed);
+    render(
+      <AdventurerCreation
+        slotId="slot.fixture"
+        port={port({ loadCommitted, create: vi.fn().mockRejectedValue(new Error('receipt lost')) })}
+        onCancel={vi.fn()}
+        onContinue={vi.fn()}
+      />,
+    );
+    await userEvent.type(await screen.findByRole('textbox'), 'Local Hero');
+    await userEvent.click(screen.getByRole('button', { name: 'Create and save adventurer' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('save status could not be confirmed');
+    expect(alert).toHaveFocus();
+    expect(
+      screen.queryByRole('button', { name: 'Create and save adventurer' }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Recheck save status' }));
+    expect(await screen.findByRole('heading', { name: 'Local Hero' })).toBeVisible();
   });
 });

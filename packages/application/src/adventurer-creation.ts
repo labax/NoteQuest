@@ -161,6 +161,38 @@ export interface AdventurerCreationDependencies {
   readonly now: () => string;
 }
 
+function validateCreationContent(content: AdventurerCreationContent): string | null {
+  const totals = Array.from({ length: 11 }, (_, index) => index + 2);
+  const validTable = (rows: readonly AdventurerCreationTableRow[]) =>
+    rows.length === totals.length &&
+    totals.every((total) => rows.filter((row) => row.total === total).length === 1) &&
+    new Set(rows.map((row) => row.id)).size === rows.length;
+  if (
+    !validTable(content.races) ||
+    content.races.some((row) => row.baseHp <= 0 || row.startingSpellCharges < 0)
+  )
+    return 'Approved race creation content is incomplete or invalid.';
+  if (
+    !validTable(content.classes) ||
+    content.classes.some(
+      (row) =>
+        row.startingSpellCharges < 0 ||
+        row.weapon.label.trim() === '' ||
+        row.weapon.hands < 0 ||
+        row.weapon.hands > 2,
+    )
+  )
+    return 'Approved class or equipment creation content is incomplete or invalid.';
+  if (
+    ![1, 2, 3, 4, 5, 6].every(
+      (roll) => content.spells[roll] !== undefined && content.spells[roll]!.label.trim() !== '',
+    ) ||
+    new Set(Object.values(content.spells).map((spell) => spell.id)).size !== 6
+  )
+    return 'Approved spell creation content is incomplete or invalid.';
+  return null;
+}
+
 export const ADVENTURER_NAME_MAX_GRAPHEMES = 40;
 
 export type AdventurerNameValidation =
@@ -196,6 +228,10 @@ export class AdventurerCreationService {
   async prepare(command: CreateAdventurerCommand): Promise<AdventurerCreationPrepareResult> {
     if (command.creationMode !== 'canonical_random') {
       return { ok: false, kind: 'validation', message: 'Only canonical creation is available.' };
+    }
+    const contentFailure = validateCreationContent(this.dependencies.content);
+    if (contentFailure !== null) {
+      return { ok: false, kind: 'unavailable', message: contentFailure };
     }
     const nameValidation = validateAdventurerName(command.playerAuthoredName ?? '');
     if (!nameValidation.ok) {
@@ -553,25 +589,35 @@ export class AdventurerCreationService {
       this.dependencies.records.listByType(slotId, 'adventurer-profile'),
       this.dependencies.records.listByType(slotId, 'adventurer-creation-evidence'),
     ]);
+    if (!slot.ok) throw new Error(`Slot read failed: ${slot.error.message}`);
+    if (slot.value.status === 'empty' && slot.value.revision === 0) return null;
+    if (!states.ok) throw new Error(`Adventurer state read failed: ${states.error.message}`);
+    if (!profiles.ok) throw new Error(`Local profile read failed: ${profiles.error.message}`);
+    if (!evidenceRecords.ok)
+      throw new Error(`Creation evidence read failed: ${evidenceRecords.error.message}`);
     if (
-      !slot.ok ||
       slot.value.status !== 'ready' ||
       slot.value.integrityStatus !== 'valid' ||
       slot.value.currentSnapshotId !== 'last-valid' ||
-      !states.ok ||
-      !profiles.ok ||
-      !evidenceRecords.ok ||
       states.value.length !== 1 ||
       profiles.value.length !== 1 ||
       evidenceRecords.value.length !== 1
     )
-      return null;
+      throw new Error('Committed adventurer records are incomplete or incoherent.');
     const state = states.value[0]!.body as CanonicalAdventurerState;
     const profile = profiles.value[0]!.body as LocalAdventurerProfile;
     const creationEvidence = evidenceRecords.value[0]!.body as {
       evidence: AdventurerCreationEvidence;
       event: AdventurerCreatedEvent;
     };
+    if (
+      state.adventurerId !== profile.adventurerId ||
+      creationEvidence.event.adventurerId !== state.adventurerId ||
+      creationEvidence.event.metadata.stateRevision !== slot.value.revision ||
+      state.rulesVersion !== slot.value.rulesVersion ||
+      state.contentVersion !== slot.value.contentVersion
+    )
+      throw new Error('Committed adventurer identity, revision, or versions are incoherent.');
     return {
       ok: true,
       committed: true,

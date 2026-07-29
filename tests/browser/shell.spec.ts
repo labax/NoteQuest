@@ -153,7 +153,7 @@ test('navigates every top-level destination after a synthetic empty slot is sele
   page,
 }) => {
   await page.getByRole('article').first().getByRole('button', { name: 'Start new game' }).click();
-  await expect(page.getByRole('heading', { name: 'Create adventurer' })).toBeFocused();
+  await expect(page.getByLabel('Adventurer name')).toBeFocused();
 
   for (const destination of shellFixture.unlockedDestinations) {
     const control = page.getByRole('button', { name: destination.heading, exact: true });
@@ -219,6 +219,58 @@ test('reloads the selected route without losing save-slot readiness', async ({ p
   await expect(page.getByRole('article')).toHaveCount(3);
   await expect(page.getByRole('article').first()).toContainText('Empty — no local adventure yet.');
   await expect(page).toHaveTitle('Save Slots · NoteQuest');
+});
+
+test('creates once and reloads identical durable adventurer evidence', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('article').first().getByRole('button', { name: 'Start new game' }).click();
+  await page.getByRole('textbox', { name: 'Adventurer name' }).fill('Browser Hero');
+  await page.getByRole('button', { name: 'Create and save adventurer' }).click();
+  await expect(page.getByRole('heading', { name: 'Browser Hero' })).toBeVisible();
+  const beforeText = await page.locator('.creation-result').innerText();
+  const beforeCounts = await page.evaluate(async () => {
+    const databases = await indexedDB.databases();
+    const name = databases[0]?.name;
+    if (name === undefined) throw new Error('Expected the local NoteQuest database.');
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(name);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const count = (store: string) =>
+      new Promise<number>((resolve, reject) => {
+        const request = database.transaction(store).objectStore(store).count();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    const result = await Promise.all(['records', 'events', 'snapshots'].map(count));
+    database.close();
+    return result;
+  });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Browser Hero' })).toBeVisible();
+  expect(await page.locator('.creation-result').innerText()).toBe(beforeText);
+  const afterCounts = await page.evaluate(async () => {
+    const databases = await indexedDB.databases();
+    const name = databases[0]?.name;
+    if (name === undefined) throw new Error('Expected the local NoteQuest database.');
+    const database = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open(name);
+      request.onsuccess = () => resolve(request.result);
+    });
+    const values = await Promise.all(
+      ['records', 'events', 'snapshots'].map(
+        (store) =>
+          new Promise<number>((resolve) => {
+            const request = database.transaction(store).objectStore(store).count();
+            request.onsuccess = () => resolve(request.result);
+          }),
+      ),
+    );
+    database.close();
+    return values;
+  });
+  expect(afterCounts).toEqual(beforeCounts);
 });
 
 test('falls back safely from an unknown top-level route', async ({ page }) => {

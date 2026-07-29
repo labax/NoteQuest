@@ -4,7 +4,7 @@ import {
   type AdventurerCreationCommitResult,
 } from '@notequest/application';
 
-import { focusTarget, focusValidationError } from './accessibility';
+import { focusBlockingError, focusTarget, focusValidationError } from './accessibility';
 
 export interface AdventurerCreationUiPort {
   loadCommitted(slotId: string): Promise<AdventurerCreationCommitResult | null>;
@@ -24,6 +24,7 @@ type CreationViewState =
   | { readonly kind: 'validation'; readonly message: string }
   | { readonly kind: 'committing' }
   | { readonly kind: 'failure'; readonly message: string }
+  | { readonly kind: 'unknown'; readonly message: string }
   | {
       readonly kind: 'committed';
       readonly result: Extract<AdventurerCreationCommitResult, { ok: true }>;
@@ -40,6 +41,7 @@ export function AdventurerCreation({
   const nameInput = useRef<HTMLInputElement>(null);
   const validationSummary = useRef<HTMLDivElement>(null);
   const stateHeading = useRef<HTMLHeadingElement>(null);
+  const blockingSummary = useRef<HTMLDivElement>(null);
   const submissionPending = useRef(false);
 
   useEffect(() => {
@@ -67,8 +69,9 @@ export function AdventurerCreation({
   useEffect(() => {
     if (view.kind === 'entry') focusTarget(nameInput.current);
     else if (view.kind === 'validation') focusValidationError(document, validationSummary.current);
-    else if (view.kind === 'failure' || view.kind === 'committed')
-      focusTarget(stateHeading.current);
+    else if (view.kind === 'failure' || view.kind === 'unknown')
+      focusBlockingError(blockingSummary.current);
+    else if (view.kind === 'committed') focusTarget(stateHeading.current);
   }, [view.kind]);
 
   const create = async () => {
@@ -84,9 +87,11 @@ export function AdventurerCreation({
     submissionPending.current = false;
     if (result === null) {
       setView({
-        kind: 'failure',
-        message: 'Creation could not be saved. The previous slot state is unchanged.',
+        kind: 'unknown',
+        message: 'The save status could not be confirmed.',
       });
+    } else if (!result.ok && result.committed === 'unknown') {
+      setView({ kind: 'unknown', message: 'The save status could not be confirmed.' });
     } else if (!result.ok) {
       setView({ kind: 'failure', message: result.message });
     } else {
@@ -111,6 +116,40 @@ export function AdventurerCreation({
       >
         <h3 id="creation-saving-title">Saving adventurer</h3>
         <p role="status">Committing the complete adventurer and creation evidence. Please wait.</p>
+      </section>
+    );
+  }
+
+  if (view.kind === 'unknown') {
+    return (
+      <section className="creation-state-card" aria-labelledby="creation-unknown-title">
+        <div ref={blockingSummary} role="alert" tabIndex={-1}>
+          <h3 id="creation-unknown-title">Save status unconfirmed</h3>
+          <p>{view.message} Do not create another adventurer while this is unresolved.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setView({ kind: 'loading' });
+              void port
+                .loadCommitted(slotId)
+                .then((result) => {
+                  setView(
+                    result?.ok
+                      ? { kind: 'committed', result }
+                      : {
+                          kind: 'unknown',
+                          message: 'The save status is still unconfirmed.',
+                        },
+                  );
+                })
+                .catch(() =>
+                  setView({ kind: 'unknown', message: 'The save status is still unconfirmed.' }),
+                );
+            }}
+          >
+            Recheck save status
+          </button>
+        </div>
       </section>
     );
   }
@@ -198,7 +237,7 @@ export function AdventurerCreation({
         </div>
         <div className="creation-actions">
           <button type="button" onClick={onContinue}>
-            Continue to Palace entry
+            Continue to town
           </button>
         </div>
       </section>
@@ -225,7 +264,7 @@ export function AdventurerCreation({
         <p>There is no free reroll after a successful save.</p>
       </div>
       {failure ? (
-        <div className="inline-error" role="alert">
+        <div ref={blockingSummary} className="inline-error" role="alert" tabIndex={-1}>
           <h4 tabIndex={-1}>Creation was not saved</h4>
           <p>{view.message}</p>
           <p>The prior slot remains available. Retry uses the same canonical creation process.</p>

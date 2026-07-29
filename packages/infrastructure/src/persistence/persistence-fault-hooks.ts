@@ -26,15 +26,11 @@ export function assertTestOnlyFaultHooks(faultHooks: PersistenceFaultHooks | und
 }
 
 export function injectedFaultMessage(cause: unknown): string | null {
-  return cause instanceof Error && cause.name === 'InjectedPersistenceFault' ? cause.message : null;
+  return cause instanceof Error && 'point' in cause ? cause.message : null;
 }
 
 export function injectedFaultPoint(cause: unknown): PersistenceFaultPoint | null {
-  if (
-    !(cause instanceof Error) ||
-    cause.name !== 'InjectedPersistenceFault' ||
-    !('point' in cause)
-  ) {
+  if (!(cause instanceof Error) || !('point' in cause)) {
     return null;
   }
   return typeof cause.point === 'string' ? (cause.point as PersistenceFaultPoint) : null;

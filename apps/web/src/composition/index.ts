@@ -1,13 +1,27 @@
 import {
+  AdventurerCreationService,
   createUpdateSafetyState,
+  type AdventurerCreationContent,
   type SaveSlotOperationStatusPort,
   type SaveSlotService,
   type UpdateSafetyStatePort,
 } from '@notequest/application';
-import type { SaveSlotId } from '@notequest/domain';
+import type {
+  CommandId,
+  ContentVersion,
+  IdempotencyKey,
+  RulesVersion,
+  SaveSlotId,
+} from '@notequest/domain';
+import {
+  palaceAdventurerCreationApproval,
+  palaceAdventurerCreationContent,
+} from '@notequest/content';
 import type { AdventurerCreationUiPort, RouteAdapter } from '@notequest/ui';
 import {
   createDexieSaveSlotService,
+  createDexieActionTransactionCoordinator,
+  createDexiePersistenceRepositories,
   createNoteQuestDatabase,
   initializeSaveSlotFoundation,
   NOTEQUEST_SELECTED_SLOT_KEY,
@@ -69,6 +83,7 @@ export async function createWebComposition(): Promise<AppComposition> {
   updates.updateStorageCapability(await checkApplicationStorage());
   const updateSafety = createUpdateSafetyState();
   const baseSaveSlots = createDexieSaveSlotService(database);
+  const repositories = createDexiePersistenceRepositories(database);
   const selected = await database.workspace.get(NOTEQUEST_SELECTED_SLOT_KEY);
   const selectedSlotId =
     typeof selected?.value === 'object' &&
@@ -84,6 +99,56 @@ export async function createWebComposition(): Promise<AppComposition> {
   }
   const unsubscribeSafety = updateSafety.subscribe((snapshot) => updates.updateSafety(snapshot));
   const saveSlots: SaveSlotService = createUpdateSafeSaveSlotService(baseSaveSlots, updateSafety);
+  const creationService = new AdventurerCreationService({
+    slots: repositories.slots,
+    records: repositories.records,
+    coordinator: createDexieActionTransactionCoordinator(database),
+    content: palaceAdventurerCreationContent as unknown as AdventurerCreationContent,
+    rulesVersion: palaceAdventurerCreationApproval.rulesVersion as RulesVersion,
+    contentVersion: palaceAdventurerCreationApproval.contentVersion as ContentVersion,
+    masterSeedForSlot: (slotId) => {
+      const material = slotId.replaceAll('-', '').slice(-16).padStart(16, '0');
+      return `0x${material}`;
+    },
+    newId: () => crypto.randomUUID(),
+    now: () => new Date().toISOString(),
+  });
+  const creationActions = new Map<
+    string,
+    { commandId: CommandId; idempotencyKey: IdempotencyKey }
+  >();
+  const adventurerCreation: AdventurerCreationUiPort = {
+    loadCommitted: (slotId) => creationService.loadCommitted(slotId as SaveSlotId),
+    async create(rawSlotId, playerAuthoredName) {
+      const slotId = rawSlotId as SaveSlotId;
+      const identity = creationActions.get(slotId) ?? {
+        commandId: crypto.randomUUID() as CommandId,
+        idempotencyKey: crypto.randomUUID() as IdempotencyKey,
+      };
+      creationActions.set(slotId, identity);
+      updateSafety.beginCommand(slotId);
+      const prepared = await creationService.prepare({
+        type: 'create_adventurer',
+        module: 'adventurer',
+        slotId,
+        playerAuthoredName,
+        creationMode: 'canonical_random',
+        metadata: identity,
+      });
+      if (!prepared.ok) {
+        updateSafety.failSave(slotId);
+        return { ok: false, committed: false, retryable: false, message: prepared.message };
+      }
+      updateSafety.beginSave(slotId);
+      const result = await creationService.commit(prepared.prepared);
+      if (result.ok) {
+        const slot = await baseSaveSlots.lookup(slotId);
+        if (slot.ok) updateSafety.acceptDurableSlot(slot.value);
+        else updateSafety.failSave(slotId);
+      } else if (result.committed === false) updateSafety.failSave(slotId);
+      return result;
+    },
+  };
   if (import.meta.env.PROD) void pwa.register();
 
   return {
@@ -91,6 +156,7 @@ export async function createWebComposition(): Promise<AppComposition> {
       saveSlots,
       saveSlotOperations: updateSafety,
       updateSafety,
+      adventurerCreation,
     },
     route: createBrowserRouteAdapter(initialized.value.catalogue.slotIds),
     pwa,

@@ -163,6 +163,9 @@ function harness(commitFailure = false) {
   return {
     service,
     records,
+    slots,
+    recordRepository,
+    coordinator,
     get commitCalls() {
       return commitCalls;
     },
@@ -319,6 +322,30 @@ describe('AdventurerCreationService', () => {
       ok: false,
       kind: 'validation',
       message: 'Creation requires a stable idempotency key.',
+    });
+  });
+
+  it('rejects incomplete content before any ID allocation or random draw', async () => {
+    const context = harness();
+    const service = new AdventurerCreationService({
+      slots: context.slots,
+      records: context.recordRepository,
+      coordinator: context.coordinator,
+      content: { ...content, spells: {} },
+      rulesVersion,
+      contentVersion,
+      masterSeedForSlot: () => {
+        throw new Error('RNG seed must not be requested for malformed content.');
+      },
+      newId: () => {
+        throw new Error('ID must not be allocated for malformed content.');
+      },
+      now: () => timestamp,
+    });
+    await expect(service.prepare(command())).resolves.toMatchObject({
+      ok: false,
+      kind: 'unavailable',
+      message: 'Approved spell creation content is incomplete or invalid.',
     });
   });
 });
