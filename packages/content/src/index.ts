@@ -6,4 +6,3 @@ export * from './palace-manifest.ts';
 export * from './palace-manifest-integrity.ts';
 export * from './palace-manifest-integrity-fixtures.ts';
 export * from './shell-notices.ts';
-export * from './adventurer-creation-content.ts';

@@ -3,7 +3,10 @@ import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { AdventurerCreationCommitResult } from '@notequest/application';
+import type {
+  AdventurerCreationCommitResult,
+  AdventurerCreationLoadResult,
+} from '@notequest/application';
 
 import { AdventurerCreation, type AdventurerCreationUiPort } from './adventurer-creation';
 
@@ -73,7 +76,7 @@ const committed = {
 
 function port(overrides: Partial<AdventurerCreationUiPort> = {}): AdventurerCreationUiPort {
   return {
-    loadCommitted: vi.fn().mockResolvedValue(null),
+    loadCommitted: vi.fn().mockResolvedValue({ kind: 'empty' }),
     create: vi.fn().mockResolvedValue(committed),
     ...overrides,
   };
@@ -89,7 +92,7 @@ function deferred<T>() {
 
 describe('AdventurerCreation', () => {
   it('renders loading, entry, local-name guidance, validation, and cancellation states', async () => {
-    const loading = deferred<AdventurerCreationCommitResult | null>();
+    const loading = deferred<AdventurerCreationLoadResult>();
     const onCancel = vi.fn();
     render(
       <AdventurerCreation
@@ -100,7 +103,7 @@ describe('AdventurerCreation', () => {
       />,
     );
     expect(screen.getByRole('status')).toHaveTextContent('Checking this slot');
-    loading.resolve(null);
+    loading.resolve({ kind: 'empty' });
     const input = await screen.findByRole('textbox', { name: 'Adventurer name' });
     await waitFor(() => expect(input).toHaveFocus());
     expect(screen.getByText(/private to this local save/i)).toBeVisible();
@@ -178,7 +181,9 @@ describe('AdventurerCreation', () => {
     render(
       <AdventurerCreation
         slotId="slot.fixture"
-        port={port({ loadCommitted: vi.fn().mockResolvedValue(committed) })}
+        port={port({
+          loadCommitted: vi.fn().mockResolvedValue({ kind: 'committed', result: committed }),
+        })}
         onCancel={vi.fn()}
         onContinue={onContinue}
       />,
@@ -238,7 +243,10 @@ describe('AdventurerCreation', () => {
   });
 
   it('keeps an ambiguous commit neutral and allows only authoritative recheck', async () => {
-    const loadCommitted = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(committed);
+    const loadCommitted = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: 'empty' })
+      .mockResolvedValueOnce({ kind: 'committed', result: committed });
     render(
       <AdventurerCreation
         slotId="slot.fixture"

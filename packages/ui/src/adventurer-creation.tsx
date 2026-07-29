@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import {
   validateAdventurerName,
   type AdventurerCreationCommitResult,
+  type AdventurerCreationLoadResult,
 } from '@notequest/application';
 
 import { focusBlockingError, focusTarget, focusValidationError } from './accessibility';
 
 export interface AdventurerCreationUiPort {
-  loadCommitted(slotId: string): Promise<AdventurerCreationCommitResult | null>;
+  loadCommitted(slotId: string): Promise<AdventurerCreationLoadResult>;
   create(slotId: string, playerAuthoredName: string): Promise<AdventurerCreationCommitResult>;
 }
 
@@ -50,11 +51,13 @@ export function AdventurerCreation({
       .loadCommitted(slotId)
       .then((result) => {
         if (!active) return;
-        if (result?.ok) {
-          setName(result.playerAuthoredName);
-          setView({ kind: 'committed', result });
-        } else {
+        if (result.kind === 'committed') {
+          setName(result.result.playerAuthoredName);
+          setView({ kind: 'committed', result: result.result });
+        } else if (result.kind === 'empty') {
           setView({ kind: 'entry' });
+        } else {
+          setView({ kind: 'failure', message: result.message });
         }
       })
       .catch(() => {
@@ -134,8 +137,8 @@ export function AdventurerCreation({
                 .loadCommitted(slotId)
                 .then((result) => {
                   setView(
-                    result?.ok
-                      ? { kind: 'committed', result }
+                    result.kind === 'committed'
+                      ? { kind: 'committed', result: result.result }
                       : {
                           kind: 'unknown',
                           message: 'The save status is still unconfirmed.',

@@ -715,7 +715,7 @@ describe('App shell', () => {
       services: {
         ...base.services,
         adventurerCreation: {
-          loadCommitted: vi.fn().mockResolvedValue(null),
+          loadCommitted: vi.fn().mockResolvedValue({ kind: 'empty' }),
           create: vi.fn(),
         },
       },

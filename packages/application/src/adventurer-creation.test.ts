@@ -17,10 +17,14 @@ import {
 } from './adventurer-creation';
 import type {
   PersistedRecord,
+  EventRecord,
+  EventRepository,
   RecordRepository,
   RepositoryResult,
   SlotRecord,
   SlotRepository,
+  SnapshotRecord,
+  SnapshotRepository,
 } from './repositories';
 
 const slotId = '00000000-0000-4000-8000-000000000001' as SaveSlotId;
@@ -70,6 +74,8 @@ function harness(commitFailure = false) {
   let id = 0;
   const records: PersistedRecord[] = [];
   let commitCalls = 0;
+  let committedEvent: EventRecord | undefined;
+  let committedSnapshot: SnapshotRecord | undefined;
   let slot: SlotRecord = {
     slotId,
     slotIndex: 1,
@@ -124,6 +130,8 @@ function harness(commitFailure = false) {
         ...(envelope.randomStreamRecords ?? []),
         ...(envelope.randomResultRecords ?? []),
       );
+      committedEvent = envelope.events[0];
+      committedSnapshot = envelope.recoveryPointers?.snapshots?.[0];
       slot = {
         ...(envelope.slotMetadata ?? slot),
         revision: 1,
@@ -149,9 +157,26 @@ function harness(commitFailure = false) {
       };
     },
   };
+  const events = {
+    get: async () =>
+      committedEvent === undefined
+        ? { ok: false as const, error: { code: 'missing_record' as const, message: 'missing' } }
+        : success(committedEvent),
+    append: async (event: EventRecord) => success(event),
+    listForSlot: async () => success(committedEvent === undefined ? [] : [committedEvent]),
+  } satisfies EventRepository;
+  const snapshots = {
+    get: async () =>
+      committedSnapshot === undefined
+        ? { ok: false as const, error: { code: 'missing_record' as const, message: 'missing' } }
+        : success(committedSnapshot),
+    put: async (snapshot: SnapshotRecord) => success(snapshot),
+  } satisfies SnapshotRepository;
   const service = new AdventurerCreationService({
     slots,
     records: recordRepository,
+    events,
+    snapshots,
     coordinator,
     content,
     rulesVersion,
@@ -165,6 +190,8 @@ function harness(commitFailure = false) {
     records,
     slots,
     recordRepository,
+    events,
+    snapshots,
     coordinator,
     get commitCalls() {
       return commitCalls;
@@ -242,9 +269,8 @@ describe('AdventurerCreationService', () => {
     });
     const restored = await context.service.loadCommitted(slotId);
     expect(restored).toMatchObject({
-      ok: true,
-      state: prepared.prepared.state,
-      evidence: prepared.prepared.evidence,
+      kind: 'committed',
+      result: { ok: true, state: prepared.prepared.state, evidence: prepared.prepared.evidence },
     });
   });
 
@@ -330,6 +356,8 @@ describe('AdventurerCreationService', () => {
     const service = new AdventurerCreationService({
       slots: context.slots,
       records: context.recordRepository,
+      events: context.events,
+      snapshots: context.snapshots,
       coordinator: context.coordinator,
       content: { ...content, spells: {} },
       rulesVersion,

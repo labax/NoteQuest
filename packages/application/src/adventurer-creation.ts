@@ -18,7 +18,9 @@ import {
 
 import type { ActionTransactionCoordinator } from './action-commit.ts';
 import type {
+  EventRepository,
   RecordRepository,
+  SnapshotRepository,
   SlotRepository,
   PersistedRecord,
   SlotRecord,
@@ -149,9 +151,22 @@ export type AdventurerCreationCommitResult =
       readonly message: string;
     };
 
+export type AdventurerCreationLoadResult =
+  | { readonly kind: 'empty' }
+  | {
+      readonly kind: 'committed';
+      readonly result: Extract<AdventurerCreationCommitResult, { ok: true }>;
+    }
+  | {
+      readonly kind: 'unavailable' | 'incoherent';
+      readonly message: string;
+    };
+
 export interface AdventurerCreationDependencies {
   readonly slots: SlotRepository;
   readonly records: RecordRepository;
+  readonly events: EventRepository;
+  readonly snapshots: SnapshotRepository;
   readonly coordinator: ActionTransactionCoordinator;
   readonly content: AdventurerCreationContent;
   readonly rulesVersion: RulesVersion;
@@ -218,6 +233,65 @@ export function validateAdventurerName(rawName: string): AdventurerNameValidatio
     };
   }
   return { ok: true, normalized, graphemeCount };
+}
+
+function object(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isAdventurerCreatedEvent(value: unknown): value is AdventurerCreatedEvent {
+  return (
+    object(value) &&
+    value.type === 'adventurer_created' &&
+    typeof value.adventurerId === 'string' &&
+    object(value.metadata) &&
+    typeof value.metadata.eventId === 'string' &&
+    typeof value.metadata.commandId === 'string' &&
+    typeof value.metadata.stateRevision === 'number'
+  );
+}
+function isCanonicalAdventurerState(value: unknown): value is CanonicalAdventurerState {
+  return (
+    object(value) &&
+    typeof value.adventurerId === 'string' &&
+    typeof value.raceId === 'string' &&
+    typeof value.classId === 'string' &&
+    typeof value.maxHp === 'number' &&
+    typeof value.currentHp === 'number' &&
+    Array.isArray(value.equipment) &&
+    Array.isArray(value.spellCharges) &&
+    Array.isArray(value.effectIds) &&
+    typeof value.rulesVersion === 'string' &&
+    typeof value.contentVersion === 'string'
+  );
+}
+function isLocalAdventurerProfile(value: unknown): value is LocalAdventurerProfile {
+  return (
+    object(value) &&
+    typeof value.adventurerId === 'string' &&
+    typeof value.playerAuthoredName === 'string' &&
+    value.sourceCategory === 'user-authored' &&
+    value.private === true
+  );
+}
+function isCreationEvidenceRecord(
+  value: unknown,
+): value is { evidence: AdventurerCreationEvidence; event: AdventurerCreatedEvent } {
+  return object(value) && object(value.evidence) && isAdventurerCreatedEvent(value.event);
+}
+function isCreationSnapshotBody(value: unknown): value is {
+  stateRecords: readonly PersistedRecord[];
+  randomStreamRecords: readonly PersistedRecord[];
+  randomResultRecords: readonly PersistedRecord[];
+  creationEvent: AdventurerCreatedEvent;
+} {
+  return (
+    object(value) &&
+    Array.isArray(value.stateRecords) &&
+    Array.isArray(value.randomStreamRecords) &&
+    Array.isArray(value.randomResultRecords) &&
+    isAdventurerCreatedEvent(value.creationEvent)
+  );
 }
 
 export class AdventurerCreationService {
@@ -582,50 +656,108 @@ export class AdventurerCreationService {
 
   async loadCommitted(
     slotId: CreateAdventurerCommand['slotId'],
-  ): Promise<AdventurerCreationCommitResult | null> {
-    const [slot, states, profiles, evidenceRecords] = await Promise.all([
+  ): Promise<AdventurerCreationLoadResult> {
+    const [slot, states, profiles, evidenceRecords, events, snapshot] = await Promise.all([
       this.dependencies.slots.get(slotId),
       this.dependencies.records.listByType(slotId, 'adventurer'),
       this.dependencies.records.listByType(slotId, 'adventurer-profile'),
       this.dependencies.records.listByType(slotId, 'adventurer-creation-evidence'),
+      this.dependencies.events.listForSlot(slotId),
+      this.dependencies.snapshots.get(slotId, 'last-valid'),
     ]);
-    if (!slot.ok) throw new Error(`Slot read failed: ${slot.error.message}`);
-    if (slot.value.status === 'empty' && slot.value.revision === 0) return null;
-    if (!states.ok) throw new Error(`Adventurer state read failed: ${states.error.message}`);
-    if (!profiles.ok) throw new Error(`Local profile read failed: ${profiles.error.message}`);
+    if (!slot.ok)
+      return { kind: 'unavailable', message: `slot read failed: ${slot.error.message}` };
+    if (!states.ok)
+      return {
+        kind: 'unavailable',
+        message: `adventurer state read failed: ${states.error.message}`,
+      };
+    if (!profiles.ok)
+      return {
+        kind: 'unavailable',
+        message: `local profile read failed: ${profiles.error.message}`,
+      };
     if (!evidenceRecords.ok)
-      throw new Error(`Creation evidence read failed: ${evidenceRecords.error.message}`);
+      return {
+        kind: 'unavailable',
+        message: `creation evidence read failed: ${evidenceRecords.error.message}`,
+      };
+    if (!events.ok)
+      return { kind: 'unavailable', message: `event read failed: ${events.error.message}` };
+    if (!snapshot.ok && snapshot.error.code !== 'missing_record')
+      return {
+        kind: 'unavailable',
+        message: `protected snapshot read failed: ${snapshot.error.message}`,
+      };
+    if (!slot.ok || !states.ok || !profiles.ok || !evidenceRecords.ok || !events.ok)
+      return { kind: 'unavailable', message: 'Creation data could not be read.' };
+
+    if (slot.value.status === 'empty' && slot.value.revision === 0) {
+      return states.value.length === 0 &&
+        profiles.value.length === 0 &&
+        evidenceRecords.value.length === 0 &&
+        events.value.length === 0 &&
+        !snapshot.ok
+        ? { kind: 'empty' }
+        : { kind: 'incoherent', message: 'The empty slot contains unexpected creation data.' };
+    }
     if (
+      !snapshot.ok ||
       slot.value.status !== 'ready' ||
       slot.value.integrityStatus !== 'valid' ||
       slot.value.currentSnapshotId !== 'last-valid' ||
+      slot.value.lastValidSnapshotId !== 'last-valid' ||
       states.value.length !== 1 ||
       profiles.value.length !== 1 ||
-      evidenceRecords.value.length !== 1
+      evidenceRecords.value.length !== 1 ||
+      events.value.length !== 1 ||
+      snapshot.value.sourceRevision !== slot.value.revision ||
+      snapshot.value.schemaVersion !== slot.value.schemaVersion
     )
-      throw new Error('Committed adventurer records are incomplete or incoherent.');
-    const state = states.value[0]!.body as CanonicalAdventurerState;
-    const profile = profiles.value[0]!.body as LocalAdventurerProfile;
-    const creationEvidence = evidenceRecords.value[0]!.body as {
-      evidence: AdventurerCreationEvidence;
-      event: AdventurerCreatedEvent;
-    };
+      return { kind: 'incoherent', message: 'Committed adventurer records are incomplete.' };
+
+    const stateBody = states.value[0]!.body;
+    const profileBody = profiles.value[0]!.body;
+    const evidenceBody = evidenceRecords.value[0]!.body;
+    const eventBody = events.value[0]!.body;
+    const snapshotBody = snapshot.value.body;
     if (
-      state.adventurerId !== profile.adventurerId ||
-      creationEvidence.event.adventurerId !== state.adventurerId ||
-      creationEvidence.event.metadata.stateRevision !== slot.value.revision ||
-      state.rulesVersion !== slot.value.rulesVersion ||
-      state.contentVersion !== slot.value.contentVersion
+      !isCanonicalAdventurerState(stateBody) ||
+      !isLocalAdventurerProfile(profileBody) ||
+      !isCreationEvidenceRecord(evidenceBody) ||
+      !isAdventurerCreatedEvent(eventBody) ||
+      !isCreationSnapshotBody(snapshotBody)
     )
-      throw new Error('Committed adventurer identity, revision, or versions are incoherent.');
+      return { kind: 'incoherent', message: 'Committed adventurer data has an invalid shape.' };
+    if (
+      stateBody.adventurerId !== profileBody.adventurerId ||
+      evidenceBody.event.adventurerId !== stateBody.adventurerId ||
+      eventBody.metadata.eventId !== evidenceBody.event.metadata.eventId ||
+      eventBody.metadata.commandId !== evidenceBody.event.metadata.commandId ||
+      eventBody.metadata.stateRevision !== slot.value.revision ||
+      stateBody.rulesVersion !== slot.value.rulesVersion ||
+      stateBody.contentVersion !== slot.value.contentVersion ||
+      !snapshotBody.stateRecords.some(
+        (record) =>
+          record.recordType === 'adventurer' && record.recordId === stateBody.adventurerId,
+      ) ||
+      snapshotBody.creationEvent.metadata.eventId !== eventBody.metadata.eventId
+    )
+      return {
+        kind: 'incoherent',
+        message: 'Committed identity, event, snapshot, or versions disagree.',
+      };
     return {
-      ok: true,
-      committed: true,
-      stateRevision: slot.value.revision,
-      state,
-      playerAuthoredName: profile.playerAuthoredName,
-      evidence: creationEvidence.evidence,
-      event: creationEvidence.event,
+      kind: 'committed',
+      result: {
+        ok: true,
+        committed: true,
+        stateRevision: slot.value.revision,
+        state: stateBody,
+        playerAuthoredName: profileBody.playerAuthoredName,
+        evidence: evidenceBody.evidence,
+        event: eventBody,
+      },
     };
   }
 
@@ -654,9 +786,10 @@ export class AdventurerCreationService {
   private async reconcileCommitted(
     prepared: PreparedAdventurerCreation,
   ): Promise<Extract<AdventurerCreationCommitResult, { ok: true }> | null> {
-    const committed = await this.loadCommitted(prepared.command.slotId);
+    const loaded = await this.loadCommitted(prepared.command.slotId);
+    const committed = loaded.kind === 'committed' ? loaded.result : null;
     if (
-      committed?.ok !== true ||
+      committed === null ||
       committed.event?.metadata.commandId !== prepared.command.metadata.commandId ||
       committed.state.adventurerId !== prepared.state.adventurerId
     ) {

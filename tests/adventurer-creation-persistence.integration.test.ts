@@ -84,6 +84,8 @@ async function harness(faultPoint?: PersistenceFaultPoint) {
   const service = new AdventurerCreationService({
     slots: repositories.slots,
     records: repositories.records,
+    events: repositories.events,
+    snapshots: repositories.snapshots,
     coordinator: createDexieActionTransactionCoordinator(
       database,
       {},
@@ -147,6 +149,8 @@ describe('adventurer creation persistence', () => {
     const reloadedService = new AdventurerCreationService({
       slots: repositories.slots,
       records: repositories.records,
+      events: repositories.events,
+      snapshots: repositories.snapshots,
       coordinator: createDexieActionTransactionCoordinator(database, {}, () => timestamp),
       content,
       rulesVersion,
@@ -158,11 +162,14 @@ describe('adventurer creation persistence', () => {
       now: () => timestamp,
     });
     await expect(reloadedService.loadCommitted(NOTEQUEST_SLOT_IDS[0])).resolves.toMatchObject({
-      ok: true,
-      state: prepared.prepared.state,
-      evidence: prepared.prepared.evidence,
-      event: prepared.prepared.event,
-      playerAuthoredName: 'Local fixture hero',
+      kind: 'committed',
+      result: {
+        ok: true,
+        state: prepared.prepared.state,
+        evidence: prepared.prepared.evidence,
+        event: prepared.prepared.event,
+        playerAuthoredName: 'Local fixture hero',
+      },
     });
     const durableBeforeInspection = {
       records: await database.records.toArray(),
@@ -170,9 +177,8 @@ describe('adventurer creation persistence', () => {
       snapshots: await database.snapshots.toArray(),
     };
     await expect(reloadedService.loadCommitted(NOTEQUEST_SLOT_IDS[0])).resolves.toMatchObject({
-      ok: true,
-      state: prepared.prepared.state,
-      evidence: prepared.prepared.evidence,
+      kind: 'committed',
+      result: { ok: true, state: prepared.prepared.state, evidence: prepared.prepared.evidence },
     });
     expect(await database.records.toArray()).toEqual(durableBeforeInspection.records);
     expect(await database.events.toArray()).toEqual(durableBeforeInspection.events);
@@ -187,7 +193,7 @@ describe('adventurer creation persistence', () => {
     await expect(database.records.count()).resolves.toBe(0);
     await expect(database.events.count()).resolves.toBe(0);
     await expect(database.snapshots.count()).resolves.toBe(0);
-    await expect(service.loadCommitted(NOTEQUEST_SLOT_IDS[0])).resolves.toBeNull();
+    await expect(service.loadCommitted(NOTEQUEST_SLOT_IDS[0])).resolves.toEqual({ kind: 'empty' });
     await expect(repositories.slots.get(NOTEQUEST_SLOT_IDS[0])).resolves.toMatchObject({
       ok: true,
       value: { revision: 0, status: 'empty' },
