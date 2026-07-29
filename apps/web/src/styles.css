@@ -328,6 +328,99 @@ h2 {
 .error-card {
   border-color: #b66a62;
 }
+.creation-entry,
+.creation-result,
+.creation-state-card {
+  border: 1px solid #d4ccbb;
+  border-radius: 0.8rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  background: #fff;
+}
+.creation-entry-copy {
+  max-width: 48rem;
+}
+.creation-entry form {
+  display: grid;
+  gap: 0.55rem;
+  max-width: 36rem;
+  margin-top: 1.25rem;
+}
+.creation-entry label {
+  font-weight: 800;
+}
+.creation-entry input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid #59677a;
+  border-radius: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  color: inherit;
+  font: inherit;
+}
+.creation-entry input[aria-invalid='true'] {
+  border-color: #9e342d;
+  box-shadow: 0 0 0 2px #f4d7d4;
+}
+.creation-result-header,
+.creation-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.creation-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-block: 1.25rem;
+}
+.creation-summary div,
+.roll-evidence,
+.creation-details div {
+  border: 1px solid #e1dbcf;
+  border-radius: 0.55rem;
+  padding: 0.75rem;
+  background: #fffdf8;
+}
+.creation-summary dt,
+.creation-details dt,
+.roll-evidence dt {
+  color: #536174;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.creation-summary dd,
+.creation-details dd,
+.roll-evidence dd {
+  margin: 0.2rem 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 750;
+}
+.creation-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  margin-block: 1.25rem;
+}
+.creation-details,
+.roll-evidence {
+  display: grid;
+  gap: 0.65rem;
+}
+.roll-evidence {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.creation-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+.creation-actions button:last-child {
+  border-color: #2d4c3b;
+  background: #2d4c3b;
+  color: #fff;
+  font-weight: 800;
+}
 @media (max-width: 760px) {
   .shell-header {
     align-items: stretch;
@@ -352,5 +445,12 @@ h2 {
   }
   .notice-grid {
     grid-template-columns: 1fr;
+  }
+  .creation-summary,
+  .creation-columns {
+    grid-template-columns: 1fr;
+  }
+  .creation-actions button {
+    width: 100%;
   }
 }

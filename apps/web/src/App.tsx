@@ -11,6 +11,7 @@ import { describeSaveSlotCapability, type SlotRecord } from '@notequest/applicat
 import { getShellNotice, shellNotices, type ShellNotice } from '@notequest/content';
 import {
   AnnouncementRegions,
+  AdventurerCreation,
   createAnnouncementService,
   focusTarget,
   routeMetadata,
@@ -460,7 +461,9 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
                 ? 'Review interim product, storage, privacy, rights, and feedback information bundled with this application shell.'
                 : route.destination === 'data'
                   ? 'Review the selected local workspace and guidance for keeping browser-held data safe.'
-                  : 'This destination is represented in the shell. Its gameplay features are not available yet.'}
+                  : route.destination === 'adventurer-creation'
+                    ? 'Create one canonical adventurer for this local slot. Results appear only after the complete save succeeds.'
+                    : 'This destination is represented in the shell. Its gameplay features are not available yet.'}
           </p>
           {slotRequest.status === 'failed' ? (
             <div className="inline-error" role="alert">
@@ -549,6 +552,25 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
               })()
             : null}
           {route.destination === 'about' ? <AboutAndCredits version={composition.version} /> : null}
+          {route.destination === 'adventurer-creation' && route.slotId !== undefined ? (
+            composition.services.adventurerCreation === undefined ? (
+              <div className="inline-error" role="alert">
+                Approved adventurer creation content is not available in this build. The selected
+                slot was not changed.
+              </div>
+            ) : (
+              <AdventurerCreation
+                slotId={route.slotId}
+                port={composition.services.adventurerCreation}
+                onCancel={() => composition.route.navigate({ destination: 'save-slots' })}
+                onContinue={() => {
+                  if (route.slotId !== undefined) {
+                    composition.route.navigate({ destination: 'town', slotId: route.slotId });
+                  }
+                }}
+              />
+            )
+          ) : null}
           {route.destination === 'data' ? (
             <div className="notice-grid notice-grid-compact">
               <NoticeSection notice={getShellNotice('storage')} />
