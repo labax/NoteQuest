@@ -13,3 +13,8 @@ Forbidden dependencies:
 - Domain rule implementation hidden inside content data.
 
 Content validation tests should live with future content-validation tooling or top-level test folders. Package-specific fixtures should remain clearly labelled as synthetic/project-original.
+
+The selected adventurer-creation package is project-original and lives in
+`src/project-original-adventurer-creation.ts`. Its manifest enumerates every runtime row,
+effect, spell, weapon, and starting-state definition with public-safe provenance and recorded
+RFC-8785/SHA-256 integrity evidence. It does not make source-derived content available.
