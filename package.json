@@ -16,6 +16,10 @@
     "build": "npm run typecheck && npm run build -w @notequest/web && npm run verify:pwa-artifact && npm run verify:production-fault-boundary",
     "preview": "npm run preview -w @notequest/web",
     "test": "vitest run",
+    "test:browser": "NOTEQUEST_RELEASE_ID=${NOTEQUEST_RELEASE_ID:-browser-smoke} npm run build && playwright test",
+    "test:browser:ci": "npm run test:browser:smoke && npm run test:browser:pwa",
+    "test:browser:smoke": "playwright test --project=chromium-desktop --project=chromium-phone",
+    "test:browser:pwa": "playwright test --project=chromium-pwa",
     "typecheck": "tsc --noEmit",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
@@ -32,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.0",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.0",
