@@ -1,6 +1,68 @@
 import { expect, test, type Locator } from '@playwright/test';
 import { shellFixture } from './fixtures/shell';
 
+async function renderedReleaseId(page: import('@playwright/test').Page): Promise<string> {
+  const version = await page.locator('.shell-footer span').first().textContent();
+  return version?.replace(/^Version\s+/, '') ?? '';
+}
+
+async function expectNoHorizontalOverflow(page: import('@playwright/test').Page): Promise<void> {
+  const evidence = await page.evaluate(() => {
+    const clientWidth = document.documentElement.clientWidth;
+    const offenders = Array.from(document.body.querySelectorAll('*')).flatMap((element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      if (
+        element.classList.contains('visually-hidden') ||
+        style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        rect.width === 0 ||
+        rect.height === 0 ||
+        (rect.left >= -0.5 && rect.right <= clientWidth + 0.5)
+      )
+        return [];
+      return [
+        {
+          element: `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}${
+            element.className ? `.${String(element.className).trim().replace(/\s+/g, '.')}` : ''
+          }`,
+          text: element.textContent?.trim().slice(0, 80) ?? '',
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+        },
+      ];
+    });
+    return { clientWidth, scrollWidth: document.body.scrollWidth, offenders };
+  });
+  expect(
+    evidence.scrollWidth,
+    `horizontal overflow: viewport=${evidence.clientWidth}, scrollWidth=${evidence.scrollWidth}; offenders=${JSON.stringify(evidence.offenders)}`,
+  ).toBe(evidence.clientWidth);
+  expect(
+    evidence.offenders,
+    `elements outside viewport: ${JSON.stringify(evidence.offenders)}`,
+  ).toEqual([]);
+}
+
+async function expectPointerTarget(locator: Locator): Promise<void> {
+  const hit = await locator.evaluate((control) => {
+    const rect = control.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const target = document.elementFromPoint(x, y);
+    return {
+      reachable: target !== null && control.contains(target),
+      control: control.textContent?.trim() ?? '',
+      target: target
+        ? `${target.tagName.toLowerCase()}${target.id ? `#${target.id}` : ''}.${String(target.className)}`
+        : 'none',
+      rect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
+    };
+  });
+  expect(hit.reachable, `pointer target obstruction: ${JSON.stringify(hit)}`).toBe(true);
+}
+
 async function expectNoOverlap(controls: Locator): Promise<void> {
   const boxes = await controls.evaluateAll((elements) =>
     elements.map((element) => {
@@ -68,9 +130,12 @@ test('exposes labelled landmarks, heading structure, keyboard focus, and route a
   await expect(assertive).toHaveAttribute('aria-atomic', 'true');
   await expect(assertive).toBeEmpty();
 
+  await expect(page.getByRole('heading', { name: shellFixture.initialHeading })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
   const about = page.getByRole('button', { name: 'About and credits' });
-  await about.focus();
   await expect(about).toBeFocused();
+  await expect(about).toHaveCSS('outline-style', 'solid');
+  await expectPointerTarget(about);
   await page.keyboard.press('Enter');
 
   const destination = page.getByRole('heading', { level: 2, name: 'About and credits' });
@@ -91,11 +156,56 @@ test('navigates every top-level destination after a synthetic empty slot is sele
   await expect(page.getByRole('heading', { name: 'Create adventurer' })).toBeFocused();
 
   for (const destination of shellFixture.unlockedDestinations) {
-    await page.getByRole('button', { name: destination.heading, exact: true }).click();
+    const control = page.getByRole('button', { name: destination.heading, exact: true });
+    await control.scrollIntoViewIfNeeded();
+    await expect(control).toBeVisible();
+    await expectPointerTarget(control);
+    await control.click();
     const heading = page.getByRole('heading', { name: destination.heading, exact: true }).first();
     await expect(heading).toBeFocused();
     await expect(page).toHaveURL(new RegExp(`${destination.path.replace('/', '\\/')}\\?slot=`));
+    await expectNoHorizontalOverflow(page);
   }
+
+  for (const name of [
+    'About and credits',
+    'Graveyard',
+    'Manage local data',
+    'History',
+    'Inventory',
+    'Expedition',
+    'Town',
+    'Choose a local save slot',
+  ]) {
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByRole('button', { name, exact: true })).toBeFocused();
+  }
+});
+
+test('@phone keeps the exact production release identity readable on phone widths', async ({
+  page,
+}) => {
+  const expectedReleaseId = await renderedReleaseId(page);
+  expect(expectedReleaseId).toMatch(/^[a-f0-9]{40}$/);
+  await page.getByRole('button', { name: 'About and credits' }).click();
+  const identity = page.locator('.release-identity');
+  await expect(identity).toHaveText(expectedReleaseId);
+  await expect(identity).toBeVisible();
+  const containment = await identity.evaluate((element) => {
+    const value = element.getBoundingClientRect();
+    const card = element.closest('.notice-card')?.getBoundingClientRect();
+    return card
+      ? value.left >= card.left &&
+          value.right <= card.right &&
+          value.top >= card.top &&
+          value.bottom <= card.bottom
+      : false;
+  });
+  expect(containment, 'release identity must remain inside its About card').toBe(true);
+  await expectNoHorizontalOverflow(page);
+  const about = page.getByRole('button', { name: 'About and credits' });
+  await about.scrollIntoViewIfNeeded();
+  await expectPointerTarget(about);
 });
 
 test('reloads the selected route without losing save-slot readiness', async ({ page }) => {
@@ -130,8 +240,9 @@ test('keeps required shell controls visible and separate at the configured viewp
   page,
 }, testInfo) => {
   const viewport = page.viewportSize();
-  const isPhone = testInfo.project.name === 'chromium-phone';
-  expect(viewport?.width).toBe(isPhone ? 360 : 1280);
+  const isPhone = testInfo.project.name.startsWith('chromium-phone-');
+  const expectedWidth = testInfo.project.name === 'chromium-phone-360' ? 360 : isPhone ? 390 : 1280;
+  expect(viewport?.width).toBe(expectedWidth);
 
   const nav = page.getByRole('navigation', { name: 'Primary destinations' });
   const controls = nav.getByRole('button');
@@ -178,16 +289,15 @@ test('keeps required shell controls visible and separate at the configured viewp
   const storageControl = page.getByRole('button', { name: 'Learn about local storage' });
   await storageControl.scrollIntoViewIfNeeded();
   await expect(storageControl).toBeInViewport();
-  await expect(page.locator('body')).toHaveJSProperty(
-    'scrollWidth',
-    await page.locator('body').evaluate((body) => body.clientWidth),
-  );
+  await expectNoHorizontalOverflow(page);
 });
 
 test('@pwa installs the production service worker and relaunches offline', async ({
   page,
   context,
 }) => {
+  const expectedReleaseId = await renderedReleaseId(page);
+  expect(expectedReleaseId).toMatch(/^[a-f0-9]{40}$/);
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
   await page.reload();
   await expect
@@ -232,7 +342,7 @@ test('@pwa installs the production service worker and relaunches offline', async
     return { ready, cacheNames, cachedResponses };
   });
   expect(readiness.ready).toBe(true);
-  expect(readiness.cacheNames.some((name) => name.startsWith('nq-shell-'))).toBe(true);
+  expect(readiness.cacheNames).toContain(`nq-shell-${expectedReleaseId}`);
   expect(readiness.cachedResponses).toBeGreaterThanOrEqual(3);
 
   await context.setOffline(true);

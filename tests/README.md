@@ -10,7 +10,7 @@ React/UI tests that need DOM APIs must opt in explicitly, for example with `// @
 - `packages/ui/**/*.test.tsx`: shared React component and accessibility-focused component tests; opt in to jsdom when DOM rendering is needed.
 - `apps/web/src/**/*.test.tsx`: web-app shell, composition, and app-specific component tests; opt in to jsdom when DOM rendering is needed.
 - `tests/**/*.test.ts`: repository-level scaffold, architecture, and cross-workspace tests that should avoid browser-only APIs unless explicitly marked.
-- `tests/browser/`: Playwright shell smoke tests. Run `npm run test:browser` to build and run all projects, `npm run test:browser:ci` against an already-built app for the same shell-plus-PWA sequence used by CI, `npm run test:browser:smoke` for only the 1280px desktop and 360px phone checks, or `npm run test:browser:pwa` for only the Chromium service-worker/offline project.
+- `tests/browser/`: Playwright shell smoke tests. Run `npm run test:browser` to build and run all projects, `npm run test:browser:ci` against an already-built app for the same shell-plus-PWA sequence used by CI, `npm run test:browser:smoke` for the 1280px desktop plus 360px and 390px phone checks, or `npm run test:browser:pwa` for only the Chromium service-worker/offline project.
 - `tests/e2e/`, `tests/performance/`, `tests/security/`, and `tests/accessibility/`: future cross-layer suites when tooling is added.
 - `packages/test-support/`: shared test builders and synthetic fixtures; do not duplicate production domain rules here.
 - `packages/content/` fixtures must remain approved or project-original and separate from executable application logic.
@@ -19,7 +19,7 @@ Browser fixtures live under `tests/browser/fixtures/`, are test-only and project
 not be imported by the application. The shell suite currently covers load, routing/fallback,
 reload, empty save-slot readiness, landmark/focus/live-region foundations, minimum-width control
 separation, and an offline relaunch. The responsive smoke asserts the 1280px two-region/three-slot
-desktop composition and the 360px single-column regions/slots, 44px controls, and lack of horizontal
+desktop composition and the 360px/390px single-column regions/slots, 44px controls, and lack of horizontal
 overflow; it is a DOM geometry check rather than a screenshot-baseline review. Synthetic
 blocked/waiting/failed/update-ready PWA state
 injection remains deferred to later story subtasks because the production browser composition does
@@ -39,9 +39,10 @@ online/offline event presentation remains covered by the coordinator and shell c
 
 The desktop and phone shell projects block service workers so background install/update messages
 cannot race route-announcement assertions; real worker behavior is isolated in `chromium-pwa`.
-Accessibility smoke checks validate unique labelled landmarks, the H1/H2 shell structure, keyboard
-activation, destination focus, `aria-current`, and polite/assertive live-region behavior. They are
-not a substitute for the required axe, keyboard journey, screen-reader, zoom, contrast, or full
+Accessibility smoke checks validate unique labelled landmarks, the H1/H2 shell structure, sequential
+keyboard activation, unobscured visible focus, destination focus, `aria-current`, and
+polite/assertive live-region behavior. They are not a substitute for the required axe, full keyboard
+journey, screen-reader, browser zoom, contrast, or full
 assistive-technology release matrices.
 
 ## Browser smoke execution
@@ -54,7 +55,8 @@ npx playwright install --with-deps chromium
 npm run test:browser
 ```
 
-`test:browser` supplies the synthetic `browser-smoke` release identity when no release identity is
+`test:browser` uses a repository-owned Node runner that supplies a synthetic 40-character release
+identity when no release identity is
 already set, performs the production build and artifact checks, starts the loopback preview server,
 and runs desktop, phone, and PWA projects. When a production build already exists, run
 `npm run test:browser:ci` to reproduce the browser portion of the pull-request workflow without
@@ -65,3 +67,9 @@ Browser execution requires a supported Chromium binary plus its host libraries. 
 cannot install or launch them can still run Vitest/typecheck/build checks, but that is an environment
 limitation rather than passing browser evidence and must be reported with the failing install or
 launch command. A successful jsdom run must never be substituted for the Playwright result.
+
+The phone projects open About/Credits and verify the exact build identity remains visible, unchanged,
+contained, and free of horizontal overflow at 360px and 390px. Genuine 200% browser zoom requires
+interactive browser chrome and is not equivalent to Playwright page-scale or device-scale-factor
+emulation. Follow and record the explicit manual procedure in
+[`manual-zoom-reflow.md`](browser/manual-zoom-reflow.md); its current review result is **Not run**.

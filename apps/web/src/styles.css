@@ -9,6 +9,7 @@
 }
 body {
   margin: 0;
+  width: 100%;
   min-width: 320px;
   min-height: 100vh;
 }
@@ -25,12 +26,15 @@ button:disabled {
   opacity: 0.65;
 }
 .app-shell {
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto 1fr auto;
 }
 .shell-header,
 .shell-footer {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -38,6 +42,17 @@ button:disabled {
   padding: 1rem clamp(1rem, 4vw, 3rem);
   background: #fffdf8;
   border-bottom: 1px solid #d4ccbb;
+}
+.shell-footer span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.shell-header > *,
+.shell-footer > *,
+.status-cluster,
+.shell-layout > * {
+  min-width: 0;
 }
 .shell-footer {
   border-top: 1px solid #d4ccbb;
@@ -81,6 +96,14 @@ h2 {
   padding: 0.35rem 0.65rem;
   background: #eef5eb;
   font-size: 0.8rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.status-cluster span {
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 .status-cluster details {
   flex-basis: 100%;
@@ -104,6 +127,7 @@ h2 {
 }
 .shell-layout {
   width: min(100%, 90rem);
+  max-width: 100%;
   margin-inline: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
@@ -126,6 +150,10 @@ h2 {
   border-color: #172033;
   background: #172033;
   color: #fff;
+}
+.destination-nav button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .route-notice,
 .inline-error {
@@ -302,11 +330,14 @@ h2 {
 }
 @media (max-width: 760px) {
   .shell-header {
-    align-items: flex-start;
+    align-items: stretch;
     flex-direction: column;
+    width: 100%;
+    max-width: 100%;
   }
   .status-cluster {
     justify-content: flex-start;
+    width: 100%;
   }
   .status-cluster details,
   .status-cluster details dl {

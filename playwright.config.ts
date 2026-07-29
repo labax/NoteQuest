@@ -17,7 +17,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium-desktop',
-      grepInvert: /@pwa/,
+      grepInvert: /@pwa|@phone/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -25,11 +25,20 @@ export default defineConfig({
       },
     },
     {
-      name: 'chromium-phone',
+      name: 'chromium-phone-360',
       grepInvert: /@pwa/,
       use: {
         ...devices['Pixel 5'],
         viewport: { width: 360, height: 800 },
+        serviceWorkers: 'block',
+      },
+    },
+    {
+      name: 'chromium-phone-390',
+      grepInvert: /@pwa/,
+      use: {
+        ...devices['Pixel 5'],
+        viewport: { width: 390, height: 844 },
         serviceWorkers: 'block',
       },
     },
