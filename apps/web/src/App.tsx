@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { describeSaveSlotCapability, type SlotRecord } from '@notequest/application';
+import { getShellNotice, shellNotices, type ShellNotice } from '@notequest/content';
 import {
   AnnouncementRegions,
   createAnnouncementService,
@@ -157,6 +158,42 @@ function DataSlotReview({
       </p>
       <SlotMetadata slot={slot} />
     </section>
+  );
+}
+
+function NoticeSection({ notice }: { readonly notice: ShellNotice }) {
+  return (
+    <section className="notice-card" aria-labelledby={`notice-${notice.id}`}>
+      <p className="placeholder-label">Implementation placeholder</p>
+      <h3 id={`notice-${notice.id}`}>{notice.heading}</h3>
+      {notice.paragraphs.map((paragraph) => (
+        <p key={paragraph}>{paragraph}</p>
+      ))}
+    </section>
+  );
+}
+
+function AboutAndCredits({ version }: { readonly version: string }) {
+  return (
+    <div className="notice-grid" data-notice-status="implementation-placeholder">
+      {shellNotices.slice(0, 3).map((notice) => (
+        <NoticeSection key={notice.id} notice={notice} />
+      ))}
+      <section className="notice-card" aria-labelledby="notice-version">
+        <p className="placeholder-label">Implementation placeholder</p>
+        <h3 id="notice-version">Version</h3>
+        <p>
+          Application build:{' '}
+          <strong className="release-identity" data-release-identity="exact">
+            {version}
+          </strong>
+          . Final release and content version details are pending release review.
+        </p>
+      </section>
+      {shellNotices.slice(3).map((notice) => (
+        <NoticeSection key={notice.id} notice={notice} />
+      ))}
+    </div>
   );
 }
 
@@ -419,7 +456,11 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
           <p className="intro">
             {route.destination === 'save-slots'
               ? 'Choose one of three independent local workspaces. Your data stays in this browser unless you deliberately export it.'
-              : 'This destination is represented in the shell. Its gameplay features are not available yet.'}
+              : route.destination === 'about'
+                ? 'Review interim product, storage, privacy, rights, and feedback information bundled with this application shell.'
+                : route.destination === 'data'
+                  ? 'Review the selected local workspace and guidance for keeping browser-held data safe.'
+                  : 'This destination is represented in the shell. Its gameplay features are not available yet.'}
           </p>
           {slotRequest.status === 'failed' ? (
             <div className="inline-error" role="alert">
@@ -507,6 +548,13 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
                 );
               })()
             : null}
+          {route.destination === 'about' ? <AboutAndCredits version={composition.version} /> : null}
+          {route.destination === 'data' ? (
+            <div className="notice-grid notice-grid-compact">
+              <NoticeSection notice={getShellNotice('storage')} />
+              <NoticeSection notice={getShellNotice('privacy')} />
+            </div>
+          ) : null}
           {route.destination === 'save-slots' ? (
             <section className="local-guidance" aria-labelledby="local-guidance-title">
               <h3 id="local-guidance-title">Local data and safety</h3>

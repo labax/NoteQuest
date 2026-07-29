@@ -138,6 +138,67 @@ describe('App shell', () => {
     expect(document.title).toBe('About and Credits · NoteQuest');
   });
 
+  it('renders every required About placeholder from bundled notice records', async () => {
+    const route = fixtureRoute({
+      destination: 'about',
+      metadata: routeMetadata.about,
+      fallback: null,
+    });
+    render(
+      <App compose={() => Promise.resolve(fixtureComposition(undefined, undefined, route))} />,
+    );
+
+    await screen.findByRole('heading', { name: 'About and credits' });
+    for (const heading of [
+      'Project status',
+      'Source and rights notices',
+      'Third-party notices',
+      'Version',
+      'Storage guidance',
+      'Privacy boundary',
+      'Voluntary feedback path',
+    ]) {
+      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+    }
+    expect(screen.getAllByText('Implementation placeholder').length).toBeGreaterThanOrEqual(7);
+    expect(screen.getByText(/Application build:/)).toHaveTextContent('test-version');
+    expect(screen.getByText(/does not promise cloud backup/i)).toBeInTheDocument();
+    expect(screen.getByText(/no in-app submission endpoint is configured/i)).toBeInTheDocument();
+  });
+
+  it('preserves an exact production release SHA with the reviewed wrapping hook', async () => {
+    const releaseSha = '06c703731ab7ac39f35207eef4b5ab9a44e7beab';
+    const route = fixtureRoute({
+      destination: 'about',
+      metadata: routeMetadata.about,
+      fallback: null,
+    });
+    const composition = {
+      ...fixtureComposition(undefined, undefined, route),
+      version: releaseSha,
+    };
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    const releaseIdentity = await screen.findByText(releaseSha, { exact: true });
+    expect(releaseIdentity).toHaveTextContent(releaseSha);
+    expect(releaseIdentity).toHaveClass('release-identity');
+    expect(releaseIdentity).toHaveAttribute('data-release-identity', 'exact');
+  });
+
+  it('links first-launch storage guidance to storage and privacy details', async () => {
+    const route = fixtureRoute();
+    render(
+      <App compose={() => Promise.resolve(fixtureComposition(undefined, undefined, route))} />,
+    );
+    await screen.findByRole('heading', { name: 'Choose a local save slot' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Learn about local storage' }));
+
+    expect(route.navigate).toHaveBeenCalledWith({ destination: 'data' });
+    expect(await screen.findByRole('heading', { name: 'Storage guidance' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Privacy boundary' })).toBeInTheDocument();
+  });
+
   it('explains a guarded direct load and returns to the safe save-slot state', async () => {
     const route = fixtureRoute({
       destination: 'save-slots',

@@ -218,6 +218,35 @@ h2 {
   border-top: 1px solid #d4ccbb;
   padding-top: 1.25rem;
 }
+.notice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.notice-grid-compact {
+  margin-top: 1.25rem;
+}
+.notice-card {
+  border: 1px solid #d4ccbb;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: #fff;
+}
+.notice-card p:last-child {
+  margin-bottom: 0;
+  line-height: 1.55;
+}
+.placeholder-label {
+  margin-bottom: 0.35rem;
+  color: #7a531f;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.release-identity {
+  overflow-wrap: anywhere;
+}
 .slot-skeleton span {
   display: block;
   height: 1rem;
@@ -288,6 +317,9 @@ h2 {
     grid-template-columns: 1fr;
   }
   .slot-grid {
+    grid-template-columns: 1fr;
+  }
+  .notice-grid {
     grid-template-columns: 1fr;
   }
 }
