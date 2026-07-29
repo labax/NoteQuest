@@ -54,5 +54,11 @@ jobs:
       - name: Build production app
         run: npm run build
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser shell and PWA smoke tests
+        run: npm run test:browser:ci
+
       # Future M1+ gates can be added here without replacing the workflow shape,
       # for example content validation or lightweight security checks once scoped.
