@@ -1,13 +1,31 @@
 import {
+  AdventurerCreationService,
+  createPerSlotActionCommitQueue,
   createUpdateSafetyState,
+  type AdventurerCreationContent,
   type SaveSlotOperationStatusPort,
   type SaveSlotService,
   type UpdateSafetyStatePort,
 } from '@notequest/application';
-import type { SaveSlotId } from '@notequest/domain';
-import type { RouteAdapter } from '@notequest/ui';
+import type { ContentVersion, DefinitionId, RulesVersion, SaveSlotId } from '@notequest/domain';
+import type { AdventurerCreationUiPort, RouteAdapter } from '@notequest/ui';
 import {
+  authorizedNoteQuestAdventurerCreationContentVersion,
+  authorizedNoteQuestAdventurerCreationManifest,
+  authorizedNoteQuestAdventurerCreationRulesVersion,
+  authorizedNoteQuestClasses,
+  authorizedNoteQuestRaces,
+  authorizedNoteQuestSpells,
+  authorizedNoteQuestWeapons,
+  validatePalaceContentManifest,
+  validatePalaceManifestIntegrity,
+} from '@notequest/content';
+import {
+  createDexieActionTransactionCoordinator,
+  createDexiePersistenceRepositories,
   createDexieSaveSlotService,
+  createSha256Hasher,
+  serializeCanonicalJson,
   createNoteQuestDatabase,
   initializeSaveSlotFoundation,
   NOTEQUEST_SELECTED_SLOT_KEY,
@@ -27,6 +45,8 @@ export interface AppServices {
   readonly saveSlots: SaveSlotService;
   readonly saveSlotOperations: SaveSlotOperationStatusPort;
   readonly updateSafety: UpdateSafetyStatePort;
+  /** Available once approved Palace creation content is composed at the web boundary. */
+  readonly adventurerCreation?: AdventurerCreationUiPort;
 }
 
 export interface AppComposition {
@@ -67,6 +87,64 @@ export async function createWebComposition(): Promise<AppComposition> {
   updates.updateStorageCapability(await checkApplicationStorage());
   const updateSafety = createUpdateSafetyState();
   const baseSaveSlots = createDexieSaveSlotService(database);
+  const manifestValidation = validatePalaceContentManifest(
+    authorizedNoteQuestAdventurerCreationManifest,
+  );
+  const integrityValidation = await validatePalaceManifestIntegrity(
+    authorizedNoteQuestAdventurerCreationManifest,
+    {
+      canonicalJson: { serializeCanonicalJson },
+      sha256: createSha256Hasher(),
+    },
+  );
+  if (!manifestValidation.valid || !integrityValidation.valid) {
+    database.close();
+    throw new Error('Selected adventurer creation content failed governance validation.');
+  }
+  const repositories = createDexiePersistenceRepositories(database);
+  const weapons = new Map(authorizedNoteQuestWeapons.map((weapon) => [weapon.id, weapon]));
+  const creationContent: AdventurerCreationContent = {
+    raceTableId: 'creation.notequest.races' as DefinitionId,
+    classTableId: 'creation.notequest.classes' as DefinitionId,
+    spellTableId: 'creation.notequest.basic-spells' as DefinitionId,
+    races: authorizedNoteQuestRaces.map((race) => ({
+      ...race,
+      id: race.id as DefinitionId,
+      startingSpellCharges: race.randomSpellDraws,
+      fixedSpellGrants: race.fixedSpellGrants.map((grant) => ({
+        ...grant,
+        spellId: grant.spellId as DefinitionId,
+      })),
+      effectIds: race.effectIds as readonly DefinitionId[],
+    })),
+    classes: authorizedNoteQuestClasses.map((entry) => {
+      const weapon = weapons.get(entry.weaponId)!;
+      return {
+        ...entry,
+        id: entry.id as DefinitionId,
+        startingSpellCharges: entry.randomSpellDraws,
+        fixedSpellGrants: (
+          entry.fixedSpellGrants as readonly { spellId: string; charges: number }[]
+        ).map((grant) => ({
+          ...grant,
+          spellId: grant.spellId as DefinitionId,
+        })),
+        effectIds: entry.effectIds as readonly DefinitionId[],
+        weapon: {
+          definitionId: weapon.id as DefinitionId,
+          label: weapon.label,
+          hands: weapon.hands,
+          damage: weapon.damage,
+        },
+      };
+    }),
+    spells: Object.fromEntries(
+      authorizedNoteQuestSpells.map((spell) => [
+        spell.total,
+        { id: spell.id as DefinitionId, label: spell.label },
+      ]),
+    ),
+  };
   const selected = await database.workspace.get(NOTEQUEST_SELECTED_SLOT_KEY);
   const selectedSlotId =
     typeof selected?.value === 'object' &&
@@ -82,6 +160,70 @@ export async function createWebComposition(): Promise<AppComposition> {
   }
   const unsubscribeSafety = updateSafety.subscribe((snapshot) => updates.updateSafety(snapshot));
   const saveSlots: SaveSlotService = createUpdateSafeSaveSlotService(baseSaveSlots, updateSafety);
+  const creationService = new AdventurerCreationService({
+    slots: repositories.slots,
+    records: repositories.records,
+    events: repositories.events,
+    snapshots: repositories.snapshots,
+    coordinator: createPerSlotActionCommitQueue(createDexieActionTransactionCoordinator(database)),
+    content: creationContent,
+    rulesVersion: authorizedNoteQuestAdventurerCreationRulesVersion as RulesVersion,
+    contentVersion: authorizedNoteQuestAdventurerCreationContentVersion as ContentVersion,
+    masterSeedForSlot: (slotId) => `0x${slotId.replaceAll('-', '').slice(-16)}`,
+    newId: () => crypto.randomUUID(),
+    now: () => new Date().toISOString(),
+  });
+  const creationIdentities = new Map<string, { commandId: string; idempotencyKey: string }>();
+  const adventurerCreation: AdventurerCreationUiPort = {
+    loadCommitted: (slotId) => creationService.loadCommitted(slotId as SaveSlotId),
+    async create(rawSlotId, playerAuthoredName) {
+      const slotId = rawSlotId as SaveSlotId;
+      const identity = creationIdentities.get(slotId) ?? {
+        commandId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+      };
+      creationIdentities.set(slotId, identity);
+      updateSafety.beginCommand(slotId);
+      try {
+        const prepared = await creationService.prepare({
+          type: 'create_adventurer',
+          module: 'adventurer',
+          slotId,
+          playerAuthoredName,
+          creationMode: 'canonical_random',
+          metadata: identity as never,
+        });
+        if (!prepared.ok) {
+          updateSafety.failSave(slotId);
+          return { ok: false, committed: false, retryable: false, message: prepared.message };
+        }
+        updateSafety.beginSave(slotId);
+        const result = await creationService.commit(prepared.prepared);
+        if (result.ok) {
+          const durable = await baseSaveSlots.lookup(slotId);
+          if (!durable.ok) {
+            updateSafety.failSave(slotId);
+            return {
+              ok: false,
+              committed: 'unknown',
+              retryable: true,
+              message: 'Durable save could not be verified.',
+            };
+          }
+          updateSafety.acceptDurableSlot(durable.value);
+        } else if (result.committed === false) updateSafety.failSave(slotId);
+        return result;
+      } catch {
+        updateSafety.failSave(slotId);
+        return {
+          ok: false,
+          committed: 'unknown',
+          retryable: true,
+          message: 'Save status could not be confirmed.',
+        };
+      }
+    },
+  };
   if (import.meta.env.PROD) void pwa.register();
 
   return {
@@ -89,6 +231,7 @@ export async function createWebComposition(): Promise<AppComposition> {
       saveSlots,
       saveSlotOperations: updateSafety,
       updateSafety,
+      adventurerCreation,
     },
     route: createBrowserRouteAdapter(initialized.value.catalogue.slotIds),
     pwa,

@@ -1,0 +1,23 @@
+# Adventurer creation verification
+
+**Issue scope:** STORY-M6-001 review follow-up  
+**Verification date:** 2026-08-01  
+**Source-state command:** `git rev-parse HEAD`  
+**Status:** Governed authorized content is validated at composition, and production creation is composed through the atomic local persistence boundary.
+
+## Automated evidence
+
+| Concern                           | Command                                                                                                                                                                                                                                                          | Result                                                                                                                            |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Full repository verification      | `NOTEQUEST_RELEASE_ID=07ba9a5000000000000000000000000000000000 npm run verify`                                                                                                                                                                                   | Passed at the verified source state: 41 test files and 437 tests, release-ID checks, build, PWA/fault-boundary checks, and audit. |
+| Focused creation/content behavior | `npx vitest run apps/web/src/composition/adventurer-creation.test.ts packages/application/src/adventurer-creation.test.ts packages/content/src/authorized-notequest-adventurer-creation.test.ts tests/authorized-notequest-adventurer-content-integrity.test.ts` | Production composition, deterministic application behavior, manifest structure, and recorded integrity pass.                      |
+| Browser runner                    | `npm run test:browser-runner`                                                                                                                                                                                                                                    | See the PR verification report.                                                                                                   |
+| Chromium shell smoke              | `npm run test:browser:smoke`                                                                                                                                                                                                                                     | See the PR verification report.                                                                                                   |
+
+## Scope and deferred evidence
+
+1. Authorized structured definitions contain mechanics and names only; no source prose, artwork,
+   screenshots, layout, or trade dress is bundled.
+2. Persistence receipt-loss fault injection remains test-only and is excluded from production bundles.
+3. Issue #91 manual zoom/reflow, representative assistive technology, non-Chromium/installed-PWA,
+   browser-restart, and restricted-storage evidence remains deferred and is not claimed here.
