@@ -43,7 +43,7 @@ const content: AdventurerCreationContent = {
     label: `Fixture race ${index + 2}`,
     baseHp: 10 + index,
     startingSpellCharges: index === 5 ? 1 : 0,
-    effectIds: [],
+    effectIds: [definition('fixture.effect')],
   })),
   classes: Array.from({ length: 11 }, (_, index) => ({
     id: definition(`fixture.class_${index + 2}`),
@@ -65,7 +65,16 @@ const content: AdventurerCreationContent = {
       { id: definition(`fixture.spell_${index + 1}`), label: `Fixture spell ${index + 1}` },
     ]),
   ),
-  effects: {},
+  effects: {
+    'fixture.effect': {
+      id: definition('fixture.effect'),
+      label: 'Fixture effect',
+      version: contentVersion,
+      trigger: 'fixture-trigger',
+      guards: ['fixture guard'],
+      outcome: { operation: 'fixture-operation', value: 1 },
+    },
+  },
   startingState: {
     usableArms: 2,
     usableHands: 2,
@@ -356,6 +365,14 @@ describe('AdventurerCreationService', () => {
       },
     ],
     [
+      'named stream RNG state',
+      (context: ReturnType<typeof harness>) => {
+        const stream = context.records.find((record) => record.recordType === 'random-stream')!
+          .body as { rng: Record<string, unknown> };
+        stream.rng.state = '0x0000000000000000';
+      },
+    ],
+    [
       'class result label',
       (context: ReturnType<typeof harness>) => {
         const evidence = context.records.find(
@@ -373,6 +390,24 @@ describe('AdventurerCreationService', () => {
       },
     ],
     [
+      'effect outcome mechanics',
+      (context: ReturnType<typeof harness>) => {
+        const state = context.records.find((record) => record.recordType === 'adventurer')!
+          .body as { effects: { outcome: Record<string, unknown> }[] };
+        state.effects[0]!.outcome.value = 99;
+      },
+    ],
+    [
+      'record timestamp',
+      (context: ReturnType<typeof harness>) => {
+        const index = context.records.findIndex((record) => record.recordType === 'adventurer');
+        context.records[index] = {
+          ...context.records[index]!,
+          updatedAt: '2026-07-29T02:00:00.000Z',
+        };
+      },
+    ],
+    [
       'private profile identity',
       (context: ReturnType<typeof harness>) => {
         const profile = context.records.find(
@@ -385,6 +420,29 @@ describe('AdventurerCreationService', () => {
       'snapshot metadata',
       (context: ReturnType<typeof harness>) => {
         context.setCommittedSnapshot({ ...context.committedSnapshot!, sourceRevision: 0 });
+      },
+    ],
+    [
+      'snapshot record arrays',
+      (context: ReturnType<typeof harness>) => {
+        const snapshot = context.committedSnapshot!;
+        const body = snapshot.body as { stateRecords: PersistedRecord[] };
+        context.setCommittedSnapshot({
+          ...snapshot,
+          body: {
+            ...body,
+            stateRecords: [
+              ...body.stateRecords,
+              {
+                slotId,
+                recordType: 'unrelated',
+                recordId: 'unrelated',
+                updatedAt: timestamp,
+                body: {},
+              },
+            ],
+          },
+        });
       },
     ],
   ])('rejects semantic corruption in %s without writes', async (_label, corrupt) => {
@@ -401,7 +459,7 @@ describe('AdventurerCreationService', () => {
     expect(context.commitCalls).toBe(1);
   });
 
-  it('scopes creation RNG evidence while tolerating later records and slot revisions', async () => {
+  it('rejects a revision-bumped creation snapshot that does not declare a later schema', async () => {
     const context = harness();
     const prepared = await context.service.prepare(command());
     if (!prepared.ok) throw new Error(prepared.message);
@@ -431,8 +489,7 @@ describe('AdventurerCreationService', () => {
       revision: 2,
     });
     await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
-      kind: 'committed',
-      result: { state: prepared.prepared.state, stateRevision: 2 },
+      kind: 'incoherent',
     });
   });
 

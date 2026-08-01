@@ -650,6 +650,50 @@ function creationSemanticsMatch(
   );
 }
 
+function currentStateRetainsCreationSemantics(
+  content: AdventurerCreationContent,
+  current: CanonicalAdventurerState,
+  initial: CanonicalAdventurerState,
+): boolean {
+  const initialWeapon = initial.equipment[0];
+  const currentWeapon = current.equipment.find((item) => item.itemId === initialWeapon?.itemId);
+  const knownSpells = new Map(
+    Object.values(content.spells).map((spell) => [spell.id, spell.label] as const),
+  );
+  return (
+    current.adventurerId === initial.adventurerId &&
+    current.raceId === initial.raceId &&
+    current.classId === initial.classId &&
+    current.rulesVersion === initial.rulesVersion &&
+    current.contentVersion === initial.contentVersion &&
+    initialWeapon !== undefined &&
+    currentWeapon !== undefined &&
+    currentWeapon.definitionId === initialWeapon.definitionId &&
+    currentWeapon.label === initialWeapon.label &&
+    currentWeapon.hands === initialWeapon.hands &&
+    sameValue(currentWeapon.damage, initialWeapon.damage) &&
+    initial.spellCharges.every((initialCharge) => {
+      const currentCharge = current.spellCharges.find(
+        (charge) => charge.chargeId === initialCharge.chargeId,
+      );
+      return (
+        currentCharge !== undefined &&
+        currentCharge.definitionId === initialCharge.definitionId &&
+        currentCharge.label === initialCharge.label &&
+        currentCharge.source === initialCharge.source
+      );
+    }) &&
+    current.spellCharges.every((charge) => knownSpells.get(charge.definitionId) === charge.label) &&
+    initial.effectIds.every((id) => current.effectIds.includes(id)) &&
+    current.effects.every(
+      (effect, index) =>
+        effect.id === current.effectIds[index] &&
+        content.effects[effect.id] !== undefined &&
+        sameValue(effect, content.effects[effect.id]),
+    )
+  );
+}
+
 export class AdventurerCreationService {
   private readonly preparedByAction = new Map<string, PreparedAdventurerCreation>();
 
@@ -1199,18 +1243,25 @@ export class AdventurerCreationService {
       creationStreams.length !== 1 ||
       !object(streamBody) ||
       serializedStream === null
-    )
+    ) {
       return {
         kind: 'incoherent',
         message: 'Creation event or random stream is missing or malformed.',
       };
+    }
     let replay = createNamedRandomStream(serializedStream.masterSeed, serializedStream.purpose);
+    const expectedIdentity = createNamedRandomStream(
+      this.dependencies.masterSeedForSlot(slotId),
+      'adventurer-creation',
+    ).identity;
     const drawCount = streamBody.drawCount;
     if (typeof drawCount !== 'number' || !Number.isSafeInteger(drawCount) || drawCount < 0)
       return { kind: 'incoherent', message: 'Creation random stream draw count is invalid.' };
+    const replayedDice: number[] = [];
     for (let drawIndex = 0; drawIndex < drawCount; drawIndex += 1) {
       const draw = replay.rng.nextBounded(6);
       replay = { ...replay, rng: draw.state };
+      replayedDice.push(draw.value + 1);
     }
     const creationState = evidenceBody.initialState;
     const creationRevision = eventBody.metadata.stateRevision;
@@ -1254,10 +1305,12 @@ export class AdventurerCreationService {
       evidenceBody.event.adventurerId !== stateBody.adventurerId ||
       !sameValue(evidenceBody.event, eventBody) ||
       !creationSemanticsMatch(this.dependencies.content, creationState, evidenceBody.evidence) ||
+      !currentStateRetainsCreationSemantics(this.dependencies.content, stateBody, creationState) ||
       creationState.rulesVersion !== this.dependencies.rulesVersion ||
       creationState.contentVersion !== this.dependencies.contentVersion ||
       eventBody.metadata.eventId !== evidenceBody.event.metadata.eventId ||
       eventBody.metadata.commandId !== evidenceBody.event.metadata.commandId ||
+      eventBody.metadata.schemaVersion !== 1 ||
       eventBody.module !== 'adventurer' ||
       eventBody.summary !== 'Adventurer creation committed.' ||
       !sameValue(eventBody.requirementIds, [
@@ -1275,8 +1328,10 @@ export class AdventurerCreationService {
       }) ||
       eventBody.metadata.sequence !== eventRecord?.sequence ||
       eventRecord?.retentionClass !== 'mechanical-history' ||
+      (eventRecord?.timestamp !== stateRecord.updatedAt && snapshotIsCreation) ||
       profileRecord.updatedAt !== eventRecord?.timestamp ||
       evidenceRecord.updatedAt !== eventRecord?.timestamp ||
+      (snapshot.value.createdAt !== eventRecord?.timestamp && snapshotIsCreation) ||
       eventBody.metadata.stateRevision > slot.value.revision ||
       stateBody.rulesVersion !== slot.value.rulesVersion ||
       stateBody.contentVersion !== slot.value.contentVersion ||
@@ -1307,18 +1362,30 @@ export class AdventurerCreationService {
           ).length === 1,
       ) ||
       streamRecord?.recordId !== creationStreamId ||
-      !isIsoDate(streamRecord?.updatedAt) ||
+      streamRecord?.updatedAt !== eventBody.metadata.occurredAt ||
       streamBody.streamId !== creationStreamId ||
       streamBody.purpose !== 'adventurer-creation' ||
       streamBody.drawCount !==
         expectedRolls.reduce((count, roll) => count + roll.naturalDice.length, 0) ||
+      serializedStream.masterSeed !== expectedIdentity.masterSeed ||
+      serializedStream.derivationId !== expectedIdentity.derivationId ||
+      serializedStream.derivationVersion !== expectedIdentity.derivationVersion ||
+      !sameValue(
+        replayedDice,
+        expectedRolls.flatMap((roll) => roll.naturalDice),
+      ) ||
       !sameValue(serializeNamedRandomStream(replay), serializedStream) ||
       randomResults.value
         .filter((record) => expectedRolls.some((roll) => roll.rollResultId === record.recordId))
-        .some((record) => !isIsoDate(record.updatedAt)) ||
+        .some((record) => record.updatedAt !== eventBody.metadata.occurredAt) ||
       snapshot.value.sourceRevision < creationRevision ||
       snapshotCurrentStates.length !== 1 ||
-      (snapshotIsCreation && !snapshotCreationRecordsMatch)
+      (snapshotIsCreation &&
+        (snapshotBody.stateRecords.length !== 3 ||
+          (snapshotBody.randomStreamRecords ?? []).length !== 1 ||
+          (snapshotBody.randomResultRecords ?? []).length !== expectedRolls.length ||
+          !snapshotCreationRecordsMatch)) ||
+      (!snapshotIsCreation && Reflect.get(snapshotBody, 'schema') !== 'cumulative-state-v1')
     )
       return {
         kind: 'incoherent',
