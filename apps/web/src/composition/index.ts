@@ -8,7 +8,13 @@ import {
   type SaveSlotService,
   type UpdateSafetyStatePort,
 } from '@notequest/application';
-import type { ContentVersion, DefinitionId, RulesVersion, SaveSlotId } from '@notequest/domain';
+import type {
+  ContentVersion,
+  DefinitionId,
+  IdempotencyKey,
+  RulesVersion,
+  SaveSlotId,
+} from '@notequest/domain';
 import type { AdventurerCreationUiPort, RouteAdapter } from '@notequest/ui';
 import {
   authorizedNoteQuestAdventurerCreationContentVersion,
@@ -25,6 +31,7 @@ import {
   validatePalaceManifestIntegrity,
 } from '@notequest/content';
 import {
+  actionCommitIdempotencyWorkspaceKey,
   createDexieActionTransactionCoordinator,
   createDexiePersistenceRepositories,
   createDexieSaveSlotService,
@@ -201,6 +208,9 @@ export async function createWebComposition(): Promise<AppComposition> {
       };
       creationIdentities.set(slotId, identity);
       updateSafety.beginCommand(slotId);
+      let reconciliationToken: string | undefined;
+      let preparedAction: PreparedAdventurerCreation | undefined;
+      let commitStarted = false;
       try {
         const prepared = await creationService.prepare({
           type: 'create_adventurer',
@@ -214,9 +224,11 @@ export async function createWebComposition(): Promise<AppComposition> {
           updateSafety.failSave(slotId);
           return { ok: false, committed: false, retryable: false, message: prepared.message };
         }
-        const reconciliationToken = crypto.randomUUID();
-        reconciliationActions.set(reconciliationToken, prepared.prepared);
+        reconciliationToken = crypto.randomUUID();
+        preparedAction = prepared.prepared;
+        reconciliationActions.set(reconciliationToken, preparedAction);
         updateSafety.beginSave(slotId);
+        commitStarted = true;
         const result = await creationService.commit(prepared.prepared);
         if (result.ok) {
           const durable = await baseSaveSlots.lookup(slotId);
@@ -231,19 +243,29 @@ export async function createWebComposition(): Promise<AppComposition> {
           }
           updateSafety.acceptDurableSlot(durable.value);
         } else if (result.committed === false) updateSafety.failSave(slotId);
-        return result.ok || result.committed === false
-          ? result
-          : { ...result, reconciliationToken };
+        if (result.ok || result.committed === false) {
+          reconciliationActions.delete(reconciliationToken);
+          creationIdentities.delete(slotId);
+          return result;
+        }
+        return { ...result, reconciliationToken };
       } catch {
-        const prepared = [...reconciliationActions.entries()].find(
-          ([, action]) => action.command.slotId === slotId,
-        );
+        if (!commitStarted || reconciliationToken === undefined || preparedAction === undefined) {
+          updateSafety.failSave(slotId);
+          creationIdentities.delete(slotId);
+          return {
+            ok: false,
+            committed: false,
+            retryable: true,
+            message: 'Creation could not be started.',
+          };
+        }
         return {
           ok: false,
           committed: 'unknown',
-          retryable: true,
+          retryable: false,
           message: 'Save status could not be confirmed.',
-          ...(prepared === undefined ? {} : { reconciliationToken: prepared[0] }),
+          reconciliationToken,
         };
       }
     },
@@ -259,8 +281,20 @@ export async function createWebComposition(): Promise<AppComposition> {
         };
       try {
         const loaded = await creationService.loadCommitted(prepared.command.slotId);
+        const idempotencyKey = prepared.command.metadata.idempotencyKey as IdempotencyKey;
+        const marker = await database.workspace.get(
+          actionCommitIdempotencyWorkspaceKey(prepared.command.slotId, idempotencyKey),
+        );
+        const markerValue = marker?.value;
+        const markerMatches =
+          typeof markerValue === 'object' &&
+          markerValue !== null &&
+          Reflect.get(markerValue, 'actionId') === prepared.command.metadata.commandId &&
+          typeof Reflect.get(markerValue, 'stateRevision') === 'number';
         if (
+          markerMatches &&
           loaded.kind === 'committed' &&
+          Reflect.get(markerValue, 'stateRevision') === loaded.result.stateRevision &&
           loaded.result.event?.metadata.commandId === prepared.command.metadata.commandId &&
           loaded.result.state.adventurerId === prepared.state.adventurerId
         ) {
@@ -275,10 +309,13 @@ export async function createWebComposition(): Promise<AppComposition> {
             };
           updateSafety.acceptDurableSlot(durable.value);
           reconciliationActions.delete(reconciliationToken);
+          creationIdentities.delete(prepared.command.slotId);
           return loaded.result;
         }
         if (loaded.kind === 'empty') {
           updateSafety.failSave(prepared.command.slotId);
+          reconciliationActions.delete(reconciliationToken);
+          creationIdentities.delete(prepared.command.slotId);
           return {
             ok: false,
             committed: false,

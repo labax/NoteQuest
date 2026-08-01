@@ -152,11 +152,13 @@ export function AdventurerCreation({
                   setView(
                     result.ok
                       ? { kind: 'committed', result }
-                      : {
-                          kind: 'unknown',
-                          message: 'The save status is still unconfirmed.',
-                          reconciliationToken,
-                        },
+                      : result.committed === false
+                        ? { kind: 'failure', message: result.message }
+                        : {
+                            kind: 'unknown',
+                            message: 'The save status is still unconfirmed.',
+                            reconciliationToken,
+                          },
                   );
                 })
                 .catch(() =>
@@ -246,7 +248,7 @@ export function AdventurerCreation({
                 <dd>
                   {state.effects.length === 0
                     ? 'None'
-                    : state.effects.map((effect) => effect.id).join(', ')}
+                    : state.effects.map((effect) => effect.label).join(', ')}
                 </dd>
               </div>
               <div>

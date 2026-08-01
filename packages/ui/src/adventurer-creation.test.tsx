@@ -41,8 +41,17 @@ const committed = {
       },
     ],
     spellCharges: [],
-    effectIds: [],
-    effects: [],
+    effectIds: ['effect.fixture'],
+    effects: [
+      {
+        id: 'effect.fixture',
+        label: 'Fixture blessing',
+        version: 'content.fixture',
+        trigger: 'creation',
+        guards: [],
+        outcome: { operation: 'fixture' },
+      },
+    ],
     rulesVersion: 'rules.fixture',
     contentVersion: 'content.fixture',
   },
@@ -200,6 +209,8 @@ describe('AdventurerCreation', () => {
     expect(screen.getByText('3 + 4 = 7')).toBeVisible();
     expect(screen.getByText('Fixture blade (1d6, 1 hand)')).toBeVisible();
     expect(screen.getByText('Starting effects')).toBeVisible();
+    expect(screen.getByText('Fixture blessing')).toBeVisible();
+    expect(screen.queryByText('effect.fixture')).not.toBeInTheDocument();
     expect(screen.getByText('Spell charges')).toBeVisible();
     expect(screen.queryByRole('button', { name: /reroll/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Continue to town' }));
@@ -277,5 +288,37 @@ describe('AdventurerCreation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Recheck save status' }));
     expect(reconcile).toHaveBeenCalledWith('opaque-action');
     expect(await screen.findByRole('heading', { name: 'Local Hero' })).toBeVisible();
+  });
+
+  it('turns authoritative known-false reconciliation into a truthful retry state', async () => {
+    render(
+      <AdventurerCreation
+        slotId="slot.fixture"
+        port={port({
+          create: vi.fn().mockResolvedValue({
+            ok: false,
+            committed: 'unknown',
+            retryable: false,
+            message: 'receipt lost',
+            reconciliationToken: 'opaque-action',
+          }),
+          reconcile: vi.fn().mockResolvedValue({
+            ok: false,
+            committed: false,
+            retryable: true,
+            message: 'The original creation action was not committed.',
+          }),
+        })}
+        onCancel={vi.fn()}
+        onContinue={vi.fn()}
+      />,
+    );
+    await userEvent.type(await screen.findByRole('textbox'), 'Local Hero');
+    await userEvent.click(screen.getByRole('button', { name: 'Create and save adventurer' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Recheck save status' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The original creation action was not committed.',
+    );
+    expect(screen.getByRole('button', { name: 'Create and save adventurer' })).toBeVisible();
   });
 });

@@ -45,6 +45,7 @@ export interface AdventurerRaceDefinition extends AdventurerCreationTableRow {
 
 export interface AdventurerEffectDefinition {
   readonly id: DefinitionId;
+  readonly label: string;
   readonly version: ContentVersion;
   readonly trigger: string;
   readonly guards: readonly string[];
@@ -266,7 +267,8 @@ function validateCreationContent(content: AdventurerCreationContent): string | n
   if (
     referencedEffects.some((id) => content.effects[id] === undefined) ||
     Object.values(content.effects).some(
-      (effect) => effect.version.trim() === '' || effect.trigger.trim() === '',
+      (effect) =>
+        effect.version.trim() === '' || effect.label.trim() === '' || effect.trigger.trim() === '',
     )
   )
     return 'Approved effect creation content is incomplete or invalid.';
