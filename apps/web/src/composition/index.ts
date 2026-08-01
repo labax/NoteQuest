@@ -32,6 +32,7 @@ import {
 } from '@notequest/content';
 import {
   actionCommitIdempotencyWorkspaceKey,
+  actionCommitDexieStores,
   createDexieActionTransactionCoordinator,
   createDexiePersistenceRepositories,
   createDexieSaveSlotService,
@@ -280,11 +281,20 @@ export async function createWebComposition(): Promise<AppComposition> {
           reconciliationToken,
         };
       try {
-        const loaded = await creationService.loadCommitted(prepared.command.slotId);
         const idempotencyKey = prepared.command.metadata.idempotencyKey as IdempotencyKey;
-        const marker = await database.workspace.get(
-          actionCommitIdempotencyWorkspaceKey(prepared.command.slotId, idempotencyKey),
+        // The marker and creation records must be observed at one IndexedDB snapshot. Reading
+        // them separately can false-negative a transaction that commits between both reads.
+        const observation = await database.transaction(
+          'r',
+          ...actionCommitDexieStores(database),
+          async () => ({
+            loaded: await creationService.loadCommitted(prepared.command.slotId),
+            marker: await database.workspace.get(
+              actionCommitIdempotencyWorkspaceKey(prepared.command.slotId, idempotencyKey),
+            ),
+          }),
         );
+        const { loaded, marker } = observation;
         const markerValue = marker?.value;
         const markerMatches =
           typeof markerValue === 'object' &&
@@ -294,7 +304,8 @@ export async function createWebComposition(): Promise<AppComposition> {
         if (
           markerMatches &&
           loaded.kind === 'committed' &&
-          Reflect.get(markerValue, 'stateRevision') === loaded.result.stateRevision &&
+          Reflect.get(markerValue, 'stateRevision') ===
+            loaded.result.event?.metadata.stateRevision &&
           loaded.result.event?.metadata.commandId === prepared.command.metadata.commandId &&
           loaded.result.state.adventurerId === prepared.state.adventurerId
         ) {
@@ -312,7 +323,9 @@ export async function createWebComposition(): Promise<AppComposition> {
           creationIdentities.delete(prepared.command.slotId);
           return loaded.result;
         }
-        if (loaded.kind === 'empty') {
+        // Absence is authoritative only when the same coherent observation contains neither
+        // the marker nor any creation records. A present or malformed marker stays ambiguous.
+        if (loaded.kind === 'empty' && marker === undefined) {
           updateSafety.failSave(prepared.command.slotId);
           reconciliationActions.delete(reconciliationToken);
           creationIdentities.delete(prepared.command.slotId);

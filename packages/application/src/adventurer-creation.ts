@@ -306,6 +306,54 @@ function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function strings(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function isBaseRollReference(value: unknown): value is RollReference {
+  return (
+    object(value) &&
+    typeof value.rollResultId === 'string' &&
+    typeof value.streamId === 'string' &&
+    Array.isArray(value.naturalDice) &&
+    value.naturalDice.length > 0 &&
+    value.naturalDice.every((die) => Number.isInteger(die) && die >= 1 && die <= 6) &&
+    Number.isInteger(value.finalValue) &&
+    value.finalValue === value.naturalDice.reduce((sum: number, die) => sum + die, 0) &&
+    typeof value.tableId === 'string' &&
+    typeof value.rowId === 'string' &&
+    value.manualEntry === false
+  );
+}
+
+function isRollReference(value: unknown): value is RollReference & {
+  readonly resultId: DefinitionId;
+  readonly resultLabel: string;
+} {
+  return (
+    isBaseRollReference(value) &&
+    'resultId' in value &&
+    typeof value.resultId === 'string' &&
+    'resultLabel' in value &&
+    typeof value.resultLabel === 'string' &&
+    value.resultLabel.trim() !== ''
+  );
+}
+
+function isEffect(value: unknown): value is AdventurerEffectDefinition {
+  return (
+    object(value) &&
+    typeof value.id === 'string' &&
+    typeof value.label === 'string' &&
+    value.label.trim() !== '' &&
+    typeof value.version === 'string' &&
+    typeof value.trigger === 'string' &&
+    Array.isArray(value.guards) &&
+    strings(value.guards) &&
+    object(value.outcome)
+  );
+}
+
 function isAdventurerCreatedEvent(value: unknown): value is AdventurerCreatedEvent {
   return (
     object(value) &&
@@ -314,7 +362,18 @@ function isAdventurerCreatedEvent(value: unknown): value is AdventurerCreatedEve
     object(value.metadata) &&
     typeof value.metadata.eventId === 'string' &&
     typeof value.metadata.commandId === 'string' &&
-    typeof value.metadata.stateRevision === 'number'
+    Number.isInteger(value.metadata.stateRevision) &&
+    typeof value.metadata.schemaVersion === 'number' &&
+    typeof value.metadata.rulesVersion === 'string' &&
+    typeof value.metadata.contentVersion === 'string' &&
+    object(value.entities) &&
+    typeof value.entities.slotId === 'string' &&
+    value.entities.adventurerId === value.adventurerId &&
+    Array.isArray(value.rollRefs) &&
+    value.rollRefs.every(isBaseRollReference) &&
+    object(value.after) &&
+    typeof value.after.maxHp === 'number' &&
+    typeof value.after.currentHp === 'number'
   );
 }
 function isCanonicalAdventurerState(value: unknown): value is CanonicalAdventurerState {
@@ -325,9 +384,53 @@ function isCanonicalAdventurerState(value: unknown): value is CanonicalAdventure
     typeof value.classId === 'string' &&
     typeof value.maxHp === 'number' &&
     typeof value.currentHp === 'number' &&
+    value.currentHp >= 0 &&
+    value.currentHp <= value.maxHp &&
+    value.usableArms === 2 &&
+    value.usableHands === 2 &&
+    value.torches === 10 &&
+    value.coins === 0 &&
+    value.status === 'alive' &&
+    value.location === 'town' &&
+    Array.isArray(value.backpackItemIds) &&
+    strings(value.backpackItemIds) &&
+    Array.isArray(value.armourItemIds) &&
+    strings(value.armourItemIds) &&
+    value.death === null &&
     Array.isArray(value.equipment) &&
+    value.equipment.length === 1 &&
+    value.equipment.every(
+      (item) =>
+        object(item) &&
+        typeof item.itemId === 'string' &&
+        typeof item.definitionId === 'string' &&
+        typeof item.label === 'string' &&
+        item.equipped === true &&
+        Number.isInteger(item.hands) &&
+        object(item.damage) &&
+        Number.isInteger(item.damage.diceCount) &&
+        Number.isInteger(item.damage.dieSides) &&
+        typeof item.damage.modifier === 'number' &&
+        typeof item.damage.damageType === 'string',
+    ) &&
     Array.isArray(value.spellCharges) &&
+    value.spellCharges.every(
+      (charge) =>
+        object(charge) &&
+        typeof charge.chargeId === 'string' &&
+        typeof charge.definitionId === 'string' &&
+        typeof charge.label === 'string' &&
+        charge.remainingUses === 1 &&
+        (charge.source === 'fixed' || charge.source === 'random'),
+    ) &&
     Array.isArray(value.effectIds) &&
+    strings(value.effectIds) &&
+    Array.isArray(value.effects) &&
+    value.effects.every(isEffect) &&
+    value.effects.length === (value.effectIds as readonly unknown[]).length &&
+    value.effects.every(
+      (effect, index) => effect.id === (value.effectIds as readonly unknown[])[index],
+    ) &&
     typeof value.rulesVersion === 'string' &&
     typeof value.contentVersion === 'string'
   );
@@ -338,13 +441,25 @@ function isLocalAdventurerProfile(value: unknown): value is LocalAdventurerProfi
     typeof value.adventurerId === 'string' &&
     typeof value.playerAuthoredName === 'string' &&
     value.sourceCategory === 'user-authored' &&
-    value.private === true
+    value.private === true &&
+    typeof value.updatedAt === 'string'
   );
 }
 function isCreationEvidenceRecord(
   value: unknown,
 ): value is { evidence: AdventurerCreationEvidence; event: AdventurerCreatedEvent } {
-  return object(value) && object(value.evidence) && isAdventurerCreatedEvent(value.event);
+  return (
+    object(value) &&
+    object(value.evidence) &&
+    isRollReference(value.evidence.race) &&
+    isRollReference(value.evidence.adventurerClass) &&
+    Array.isArray(value.evidence.spells) &&
+    value.evidence.spells.every(isRollReference) &&
+    typeof value.evidence.derivedMaxHp === 'number' &&
+    typeof value.evidence.rulesVersion === 'string' &&
+    typeof value.evidence.contentVersion === 'string' &&
+    isAdventurerCreatedEvent(value.event)
+  );
 }
 function isCreationSnapshotBody(value: unknown): value is {
   stateRecords: readonly PersistedRecord[];
@@ -359,6 +474,10 @@ function isCreationSnapshotBody(value: unknown): value is {
     Array.isArray(value.randomResultRecords) &&
     isAdventurerCreatedEvent(value.creationEvent)
   );
+}
+
+function sameValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 export class AdventurerCreationService {
@@ -822,9 +941,8 @@ export class AdventurerCreationService {
       states.value.length !== 1 ||
       profiles.value.length !== 1 ||
       evidenceRecords.value.length !== 1 ||
-      streams.value.length !== 1 ||
-      snapshot.value.sourceRevision !== slot.value.revision ||
-      snapshot.value.schemaVersion !== slot.value.schemaVersion
+      snapshot.value.sourceRevision > slot.value.revision ||
+      snapshot.value.schemaVersion > (slot.value.schemaVersion ?? 0)
     )
       return { kind: 'incoherent', message: 'Committed adventurer records are incomplete.' };
 
@@ -839,10 +957,34 @@ export class AdventurerCreationService {
       !isCreationSnapshotBody(snapshotBody)
     )
       return { kind: 'incoherent', message: 'Committed adventurer data has an invalid shape.' };
+    const stateRecord = states.value[0]!;
+    const profileRecord = profiles.value[0]!;
+    const evidenceRecord = evidenceRecords.value[0]!;
+    if (
+      stateRecord.slotId !== slotId ||
+      stateRecord.recordType !== 'adventurer' ||
+      stateRecord.recordId !== stateBody.adventurerId ||
+      profileRecord.slotId !== slotId ||
+      profileRecord.recordType !== 'adventurer-profile' ||
+      profileRecord.recordId !== stateBody.adventurerId ||
+      profileRecord.ownerType !== 'adventurer' ||
+      profileRecord.ownerId !== stateBody.adventurerId ||
+      evidenceRecord.slotId !== slotId ||
+      evidenceRecord.recordType !== 'adventurer-creation-evidence' ||
+      evidenceRecord.recordId !== stateBody.adventurerId ||
+      evidenceRecord.ownerType !== 'adventurer' ||
+      evidenceRecord.ownerId !== stateBody.adventurerId
+    )
+      return { kind: 'incoherent', message: 'Committed record ownership is invalid.' };
     const creationEvents = events.value.filter(
       (record) =>
         isAdventurerCreatedEvent(record.body) &&
-        record.body.metadata.eventId === evidenceBody.event.metadata.eventId,
+        record.body.metadata.eventId === evidenceBody.event.metadata.eventId &&
+        record.slotId === slotId &&
+        record.eventType === 'adventurer_created' &&
+        record.aggregateType === 'adventurer' &&
+        record.aggregateId === stateBody.adventurerId &&
+        record.sequence === record.body.metadata.sequence,
     );
     const eventBody = creationEvents[0]?.body;
     const expectedRolls = [
@@ -850,8 +992,22 @@ export class AdventurerCreationService {
       evidenceBody.evidence.adventurerClass,
       ...evidenceBody.evidence.spells,
     ];
-    const streamBody = streams.value[0]!.body;
-    if (!isAdventurerCreatedEvent(eventBody) || creationEvents.length !== 1 || !object(streamBody))
+    const creationStreamId = expectedRolls[0]?.streamId;
+    const creationStreams = streams.value.filter(
+      (record) =>
+        record.slotId === slotId &&
+        record.recordType === 'random-stream' &&
+        object(record.body) &&
+        record.body.streamId === creationStreamId,
+    );
+    const streamRecord = creationStreams[0];
+    const streamBody = streamRecord?.body;
+    if (
+      !isAdventurerCreatedEvent(eventBody) ||
+      creationEvents.length !== 1 ||
+      creationStreams.length !== 1 ||
+      !object(streamBody)
+    )
       return {
         kind: 'incoherent',
         message: 'Creation event or random stream is missing or malformed.',
@@ -859,29 +1015,74 @@ export class AdventurerCreationService {
     if (
       stateBody.adventurerId !== profileBody.adventurerId ||
       evidenceBody.event.adventurerId !== stateBody.adventurerId ||
+      !sameValue(evidenceBody.event, eventBody) ||
+      evidenceBody.evidence.derivedMaxHp !== stateBody.maxHp ||
+      evidenceBody.evidence.rulesVersion !== stateBody.rulesVersion ||
+      evidenceBody.evidence.contentVersion !== stateBody.contentVersion ||
       eventBody.metadata.eventId !== evidenceBody.event.metadata.eventId ||
       eventBody.metadata.commandId !== evidenceBody.event.metadata.commandId ||
-      eventBody.metadata.stateRevision !== slot.value.revision ||
+      eventBody.metadata.stateRevision > slot.value.revision ||
       stateBody.rulesVersion !== slot.value.rulesVersion ||
       stateBody.contentVersion !== slot.value.contentVersion ||
-      randomResults.value.length !== expectedRolls.length ||
-      !expectedRolls.every((roll) =>
-        randomResults.value.some(
-          (record) =>
-            record.recordId === roll.rollResultId &&
-            object(record.body) &&
-            record.body.streamId === roll.streamId,
-        ),
+      eventBody.entities.slotId !== slotId ||
+      eventBody.metadata.rulesVersion !== stateBody.rulesVersion ||
+      eventBody.metadata.contentVersion !== stateBody.contentVersion ||
+      eventBody.rollRefs?.length !== expectedRolls.length ||
+      eventBody.rollRefs?.every((roll, index) => {
+        const expected = expectedRolls[index];
+        return (
+          expected !== undefined &&
+          roll.rollResultId === expected.rollResultId &&
+          roll.streamId === expected.streamId &&
+          sameValue(roll.naturalDice, expected.naturalDice) &&
+          roll.finalValue === expected.finalValue &&
+          roll.tableId === expected.tableId &&
+          roll.rowId === expected.rowId
+        );
+      }) !== true ||
+      !expectedRolls.every(
+        (roll) =>
+          randomResults.value.filter(
+            (record) =>
+              record.slotId === slotId &&
+              record.recordType === 'random-result' &&
+              record.recordId === roll.rollResultId &&
+              sameValue(record.body, roll),
+          ).length === 1,
       ) ||
-      streamBody.streamId !== expectedRolls[0]?.streamId ||
+      streamRecord?.recordId !== creationStreamId ||
+      streamBody.streamId !== creationStreamId ||
+      streamBody.purpose !== 'adventurer-creation' ||
       streamBody.drawCount !==
         expectedRolls.reduce((count, roll) => count + roll.naturalDice.length, 0) ||
-      snapshotBody.randomStreamRecords.length !== 1 ||
-      snapshotBody.randomResultRecords.length !== expectedRolls.length ||
-      !snapshotBody.stateRecords.some(
-        (record) =>
-          record.recordType === 'adventurer' && record.recordId === stateBody.adventurerId,
+      snapshot.value.sourceRevision < eventBody.metadata.stateRevision ||
+      snapshotBody.randomStreamRecords.filter(
+        (record) => record.recordId === creationStreamId && sameValue(record.body, streamBody),
+      ).length !== 1 ||
+      !expectedRolls.every(
+        (roll) =>
+          snapshotBody.randomResultRecords.filter(
+            (record) => record.recordId === roll.rollResultId && sameValue(record.body, roll),
+          ).length === 1,
       ) ||
+      snapshotBody.stateRecords.filter(
+        (record) =>
+          record.recordType === 'adventurer' &&
+          record.recordId === stateBody.adventurerId &&
+          isCanonicalAdventurerState(record.body),
+      ).length !== 1 ||
+      snapshotBody.stateRecords.filter(
+        (record) =>
+          record.recordType === 'adventurer-profile' &&
+          record.recordId === stateBody.adventurerId &&
+          sameValue(record.body, profileBody),
+      ).length !== 1 ||
+      snapshotBody.stateRecords.filter(
+        (record) =>
+          record.recordType === 'adventurer-creation-evidence' &&
+          record.recordId === stateBody.adventurerId &&
+          sameValue(record.body, evidenceBody),
+      ).length !== 1 ||
       snapshotBody.creationEvent.metadata.eventId !== eventBody.metadata.eventId
     )
       return {

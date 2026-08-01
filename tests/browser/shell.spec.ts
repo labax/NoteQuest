@@ -80,6 +80,36 @@ async function expectNoOverlap(controls: Locator): Promise<void> {
   }
 }
 
+async function durableStoreCounts(page: import('@playwright/test').Page) {
+  return page.evaluate(async () => {
+    const request = indexedDB.open('notequest-local-workspace');
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const names = ['workspace', 'slots', 'records', 'events', 'snapshots'] as const;
+      const transaction = database.transaction(names, 'readonly');
+      const values = await Promise.all(
+        names.map(
+          (name) =>
+            new Promise<number>((resolve, reject) => {
+              const count = transaction.objectStore(name).count();
+              count.onsuccess = () => resolve(count.result);
+              count.onerror = () => reject(count.error);
+            }),
+        ),
+      );
+      return Object.fromEntries(names.map((name, index) => [name, values[index]!])) as Record<
+        (typeof names)[number],
+        number
+      >;
+    } finally {
+      database.close();
+    }
+  });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto(shellFixture.initialPath);
   await expect(page.getByRole('heading', { name: shellFixture.initialHeading })).toBeVisible();
@@ -219,6 +249,29 @@ test('reloads the selected route without losing save-slot readiness', async ({ p
   await expect(page.getByRole('article')).toHaveCount(3);
   await expect(page.getByRole('article').first()).toContainText('Empty — no local adventure yet.');
   await expect(page).toHaveTitle('Save Slots · NoteQuest');
+});
+
+test('creates once and reloads identical durable evidence without extra writes', async ({
+  page,
+}) => {
+  await page.getByRole('article').first().getByRole('button', { name: 'Start new game' }).click();
+  await page.getByLabel('Adventurer name').fill('Browser Hero');
+  await page.getByRole('button', { name: 'Create and save adventurer' }).click();
+  const committed = page.getByRole('heading', { name: 'Browser Hero' });
+  await expect(committed).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  const evidence = await page.locator('.creation-result').textContent();
+  const counts = await durableStoreCounts(page);
+  expect(counts.records).toBeGreaterThanOrEqual(7);
+  expect(counts.events).toBe(1);
+  expect(counts.snapshots).toBe(1);
+  expect(counts.workspace).toBeGreaterThanOrEqual(2);
+
+  await page.reload();
+  await expect(committed).toBeVisible();
+  expect(await page.locator('.creation-result').textContent()).toBe(evidence);
+  expect(await durableStoreCounts(page)).toEqual(counts);
+  await expectNoHorizontalOverflow(page);
 });
 
 test('falls back safely from an unknown top-level route', async ({ page }) => {

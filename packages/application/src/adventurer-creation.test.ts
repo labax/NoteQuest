@@ -206,6 +206,15 @@ function harness(commitFailure = false) {
     get commitCalls() {
       return commitCalls;
     },
+    get committedSnapshot() {
+      return committedSnapshot;
+    },
+    setCommittedSnapshot(value: SnapshotRecord) {
+      committedSnapshot = value;
+    },
+    setSlot(value: SlotRecord) {
+      slot = value;
+    },
   };
 }
 
@@ -281,6 +290,69 @@ describe('AdventurerCreationService', () => {
     expect(restored).toMatchObject({
       kind: 'committed',
       result: { ok: true, state: prepared.prepared.state, evidence: prepared.prepared.evidence },
+    });
+  });
+
+  it.each([
+    ['state effects', 'adventurer', (body: Record<string, unknown>) => delete body.effects],
+    [
+      'effect label',
+      'adventurer',
+      (body: Record<string, unknown>) => {
+        const effects = body.effects as Record<string, unknown>[];
+        if (effects[0]) effects[0].label = '';
+        else body.effectIds = ['fixture.effect'];
+      },
+    ],
+    [
+      'creation spell evidence',
+      'adventurer-creation-evidence',
+      (body: Record<string, unknown>) => delete (body.evidence as Record<string, unknown>).spells,
+    ],
+  ])('blocks malformed nested %s without throwing', async (_label, recordType, corrupt) => {
+    const context = harness();
+    const prepared = await context.service.prepare(command());
+    if (!prepared.ok) throw new Error(prepared.message);
+    await context.service.commit(prepared.prepared);
+    const record = context.records.find((candidate) => candidate.recordType === recordType)!;
+    corrupt(record.body as Record<string, unknown>);
+    await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+      kind: 'incoherent',
+    });
+  });
+
+  it('scopes creation RNG evidence while tolerating later records and slot revisions', async () => {
+    const context = harness();
+    const prepared = await context.service.prepare(command());
+    if (!prepared.ok) throw new Error(prepared.message);
+    await context.service.commit(prepared.prepared);
+    context.records.push(
+      {
+        slotId,
+        recordType: 'random-stream',
+        recordId: 'later-stream',
+        updatedAt: timestamp,
+        body: { streamId: 'later-stream', purpose: 'palace-generation', drawCount: 1 },
+      },
+      {
+        slotId,
+        recordType: 'random-result',
+        recordId: 'later-result',
+        updatedAt: timestamp,
+        body: { streamId: 'later-stream', naturalDice: [4], finalValue: 4 },
+      },
+    );
+    const snapshot = context.committedSnapshot!;
+    context.setCommittedSnapshot({ ...snapshot, sourceRevision: 2 });
+    const currentSlot = await context.slots.get();
+    if (!currentSlot.ok) throw new Error(currentSlot.error.message);
+    context.setSlot({
+      ...currentSlot.value,
+      revision: 2,
+    });
+    await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+      kind: 'committed',
+      result: { state: prepared.prepared.state, stateRevision: 2 },
     });
   });
 
