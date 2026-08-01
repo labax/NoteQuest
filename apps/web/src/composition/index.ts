@@ -74,6 +74,17 @@ export interface AppComposition {
 
 export const createPwaStatusAdapter = createPwaLifecycleAdapter;
 
+/** Narrow construction seam used to exercise the production port without exposing faults to UI. */
+export interface WebCompositionCreationTestOverrides {
+  readonly service?: Pick<AdventurerCreationService, 'prepare' | 'commit' | 'loadCommitted'>;
+  readonly commit?: AdventurerCreationService['commit'];
+  readonly newId?: () => string;
+  readonly observe?: (
+    prepared: PreparedAdventurerCreation,
+  ) => Promise<{ readonly loaded: AdventurerCreationLoadResult; readonly marker: unknown }>;
+  readonly lookupDurableSlot?: SaveSlotService['lookup'];
+}
+
 export function classifyCreationReconciliationObservation(
   loaded: AdventurerCreationLoadResult,
   marker: unknown,
@@ -94,7 +105,9 @@ export function classifyCreationReconciliationObservation(
 }
 
 /** The only production location that constructs application-level adapters. */
-export async function createWebComposition(): Promise<AppComposition> {
+export async function createWebComposition(
+  creationTestOverrides: WebCompositionCreationTestOverrides = {},
+): Promise<AppComposition> {
   const database = await createNoteQuestDatabase();
   await database.open();
   const initialized = await initializeSaveSlotFoundation(database);
@@ -204,19 +217,26 @@ export async function createWebComposition(): Promise<AppComposition> {
   }
   const unsubscribeSafety = updateSafety.subscribe((snapshot) => updates.updateSafety(snapshot));
   const saveSlots: SaveSlotService = createUpdateSafeSaveSlotService(baseSaveSlots, updateSafety);
-  const creationService = new AdventurerCreationService({
-    slots: repositories.slots,
-    records: repositories.records,
-    events: repositories.events,
-    snapshots: repositories.snapshots,
-    coordinator: createPerSlotActionCommitQueue(createDexieActionTransactionCoordinator(database)),
-    content: creationContent,
-    rulesVersion: authorizedNoteQuestAdventurerCreationRulesVersion as RulesVersion,
-    contentVersion: authorizedNoteQuestAdventurerCreationContentVersion as ContentVersion,
-    masterSeedForSlot: (slotId) => `0x${slotId.replaceAll('-', '').slice(-16)}`,
-    newId: () => crypto.randomUUID(),
-    now: () => new Date().toISOString(),
-  });
+  const creationService =
+    creationTestOverrides.service ??
+    new AdventurerCreationService({
+      slots: repositories.slots,
+      records: repositories.records,
+      events: repositories.events,
+      snapshots: repositories.snapshots,
+      coordinator: createPerSlotActionCommitQueue(
+        createDexieActionTransactionCoordinator(database),
+      ),
+      content: creationContent,
+      rulesVersion: authorizedNoteQuestAdventurerCreationRulesVersion as RulesVersion,
+      contentVersion: authorizedNoteQuestAdventurerCreationContentVersion as ContentVersion,
+      masterSeedForSlot: (slotId) => `0x${slotId.replaceAll('-', '').slice(-16)}`,
+      newId: () => crypto.randomUUID(),
+      now: () => new Date().toISOString(),
+    });
+  const newCreationId = creationTestOverrides.newId ?? (() => crypto.randomUUID());
+  const lookupDurableSlot =
+    creationTestOverrides.lookupDurableSlot ?? baseSaveSlots.lookup.bind(baseSaveSlots);
   const creationIdentities = new Map<string, { commandId: string; idempotencyKey: string }>();
   const reconciliationActions = new Map<string, PreparedAdventurerCreation>();
   const adventurerCreation: AdventurerCreationUiPort = {
@@ -224,8 +244,8 @@ export async function createWebComposition(): Promise<AppComposition> {
     async create(rawSlotId, playerAuthoredName) {
       const slotId = rawSlotId as SaveSlotId;
       const identity = creationIdentities.get(slotId) ?? {
-        commandId: crypto.randomUUID(),
-        idempotencyKey: crypto.randomUUID(),
+        commandId: newCreationId(),
+        idempotencyKey: newCreationId(),
       };
       creationIdentities.set(slotId, identity);
       updateSafety.beginCommand(slotId);
@@ -245,14 +265,16 @@ export async function createWebComposition(): Promise<AppComposition> {
           updateSafety.failSave(slotId);
           return { ok: false, committed: false, retryable: false, message: prepared.message };
         }
-        reconciliationToken = crypto.randomUUID();
+        reconciliationToken = newCreationId();
         preparedAction = prepared.prepared;
         reconciliationActions.set(reconciliationToken, preparedAction);
         updateSafety.beginSave(slotId);
         commitStarted = true;
-        const result = await creationService.commit(prepared.prepared);
+        const result = await (
+          creationTestOverrides.commit ?? creationService.commit.bind(creationService)
+        )(prepared.prepared);
         if (result.ok) {
-          const durable = await baseSaveSlots.lookup(slotId);
+          const durable = await lookupDurableSlot(slotId);
           if (!durable.ok) {
             return {
               ok: false,
@@ -304,23 +326,23 @@ export async function createWebComposition(): Promise<AppComposition> {
         const idempotencyKey = prepared.command.metadata.idempotencyKey as IdempotencyKey;
         // The marker and creation records must be observed at one IndexedDB snapshot. Reading
         // them separately can false-negative a transaction that commits between both reads.
-        const observation = await database.transaction(
-          'r',
-          ...actionCommitDexieStores(database),
-          async () => ({
-            loaded: await creationService.loadCommitted(prepared.command.slotId),
-            marker: await database.workspace.get(
-              actionCommitIdempotencyWorkspaceKey(prepared.command.slotId, idempotencyKey),
-            ),
-          }),
-        );
+        const observation = creationTestOverrides.observe
+          ? await creationTestOverrides.observe(prepared)
+          : await database.transaction('r', ...actionCommitDexieStores(database), async () => ({
+              loaded: await creationService.loadCommitted(prepared.command.slotId),
+              marker: (
+                await database.workspace.get(
+                  actionCommitIdempotencyWorkspaceKey(prepared.command.slotId, idempotencyKey),
+                )
+              )?.value,
+            }));
         const { loaded, marker } = observation;
-        const classification = classifyCreationReconciliationObservation(loaded, marker?.value, {
+        const classification = classifyCreationReconciliationObservation(loaded, marker, {
           actionId: prepared.command.metadata.commandId,
           adventurerId: prepared.state.adventurerId,
         });
         if (classification === 'same-action' && loaded.kind === 'committed') {
-          const durable = await baseSaveSlots.lookup(prepared.command.slotId);
+          const durable = await lookupDurableSlot(prepared.command.slotId);
           if (!durable.ok)
             return {
               ok: false,

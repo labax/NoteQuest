@@ -312,6 +312,14 @@ function strings(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 }
 
+function nonEmptyUniqueStrings(value: unknown): value is readonly string[] {
+  return (
+    strings(value) &&
+    value.every((entry) => entry.trim() !== '') &&
+    new Set(value).size === value.length
+  );
+}
+
 function isIsoDate(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value));
 }
@@ -436,9 +444,9 @@ function isCanonicalAdventurerState(value: unknown): value is CanonicalAdventure
     typeof value.location === 'string' &&
     value.location.trim() !== '' &&
     Array.isArray(value.backpackItemIds) &&
-    strings(value.backpackItemIds) &&
+    nonEmptyUniqueStrings(value.backpackItemIds) &&
     Array.isArray(value.armourItemIds) &&
-    strings(value.armourItemIds) &&
+    nonEmptyUniqueStrings(value.armourItemIds) &&
     (value.death === null || (object(value.death) && isJsonValue(value.death))) &&
     Array.isArray(value.equipment) &&
     value.equipment.length === 1 &&
@@ -446,6 +454,7 @@ function isCanonicalAdventurerState(value: unknown): value is CanonicalAdventure
       (item) =>
         object(item) &&
         typeof item.itemId === 'string' &&
+        item.itemId.trim() !== '' &&
         typeof item.definitionId === 'string' &&
         typeof item.label === 'string' &&
         typeof item.equipped === 'boolean' &&
@@ -456,11 +465,22 @@ function isCanonicalAdventurerState(value: unknown): value is CanonicalAdventure
         typeof item.damage.modifier === 'number' &&
         typeof item.damage.damageType === 'string',
     ) &&
+    new Set((value.equipment as readonly { readonly itemId: string }[]).map((item) => item.itemId))
+      .size === (value.equipment as readonly unknown[]).length &&
+    [
+      ...(value.backpackItemIds as readonly string[]),
+      ...(value.armourItemIds as readonly string[]),
+    ].every((itemId) =>
+      (value.equipment as readonly { readonly itemId: string }[]).some(
+        (item) => item.itemId === itemId,
+      ),
+    ) &&
     Array.isArray(value.spellCharges) &&
     value.spellCharges.every(
       (charge) =>
         object(charge) &&
         typeof charge.chargeId === 'string' &&
+        charge.chargeId.trim() !== '' &&
         typeof charge.definitionId === 'string' &&
         typeof charge.label === 'string' &&
         typeof charge.remainingUses === 'number' &&
@@ -469,8 +489,10 @@ function isCanonicalAdventurerState(value: unknown): value is CanonicalAdventure
         charge.remainingUses <= 1 &&
         (charge.source === 'fixed' || charge.source === 'random'),
     ) &&
+    new Set(value.spellCharges.map((charge) => charge.chargeId)).size ===
+      value.spellCharges.length &&
     Array.isArray(value.effectIds) &&
-    strings(value.effectIds) &&
+    nonEmptyUniqueStrings(value.effectIds) &&
     Array.isArray(value.effects) &&
     value.effects.every(isEffect) &&
     value.effects.length === (value.effectIds as readonly unknown[]).length &&
@@ -583,10 +605,20 @@ function creationSemanticsMatch(
   const fixed = [
     ...(race.fixedSpellGrants ?? []),
     ...(adventurerClass.fixedSpellGrants ?? []),
-  ].flatMap((grant) => Array.from({ length: grant.charges }, () => grant.spellId));
+  ].flatMap((grant) =>
+    Array.from({ length: grant.charges }, () => {
+      const spell = Object.values(content.spells).find(({ id }) => id === grant.spellId);
+      return spell === undefined ? null : { definitionId: spell.id, label: spell.label };
+    }),
+  );
   const fixedCharges = state.spellCharges
     .filter((charge) => charge.source === 'fixed')
-    .map((charge) => charge.definitionId);
+    .map((charge) => ({
+      definitionId: charge.definitionId,
+      label: charge.label,
+      source: charge.source,
+      remainingUses: charge.remainingUses,
+    }));
   const randomCharges = state.spellCharges.filter((charge) => charge.source === 'random');
   const effects = [...race.effectIds, ...adventurerClass.effectIds].map(
     (id) => content.effects[id],
@@ -623,7 +655,15 @@ function creationSemanticsMatch(
     state.equipment[0]?.equipped === true &&
     state.equipment[0]?.hands === adventurerClass.weapon.hands &&
     sameValue(state.equipment[0]?.damage, adventurerClass.weapon.damage) &&
-    sameValue(fixedCharges, fixed) &&
+    fixed.every((charge) => charge !== null) &&
+    sameValue(
+      fixedCharges,
+      fixed.map((charge) => ({
+        ...charge,
+        source: 'fixed',
+        remainingUses: 1,
+      })),
+    ) &&
     randomCharges.length === evidence.spells.length &&
     randomCharges.every((charge, index) => {
       const roll = evidence.spells[index];
@@ -948,7 +988,7 @@ export class AdventurerCreationService {
         message: 'Creation cannot commit without a stable idempotency key.',
       };
     }
-    const timestamp = this.dependencies.now();
+    const timestamp = prepared.event.metadata.occurredAt;
     const slotResult = await this.dependencies.slots.get(prepared.command.slotId);
     if (!slotResult.ok)
       return { ok: false, committed: false, retryable: true, message: slotResult.error.message };
@@ -1152,7 +1192,7 @@ export class AdventurerCreationService {
     }
     if (
       !snapshot.ok ||
-      slot.value.status !== 'ready' ||
+      (slot.value.status !== 'ready' && slot.value.status !== 'active') ||
       slot.value.integrityStatus !== 'valid' ||
       slot.value.currentSnapshotId !== 'last-valid' ||
       slot.value.lastValidSnapshotId !== 'last-valid' ||
@@ -1161,7 +1201,7 @@ export class AdventurerCreationService {
       evidenceRecords.value.length !== 1 ||
       !Number.isSafeInteger(slot.value.revision) ||
       slot.value.revision < 1 ||
-      slot.value.schemaVersion === null ||
+      slot.value.schemaVersion !== 1 ||
       slot.value.rulesVersion === null ||
       slot.value.contentVersion === null ||
       !isIsoDate(slot.value.createdAt) ||
@@ -1169,8 +1209,8 @@ export class AdventurerCreationService {
       snapshot.value.slotId !== slotId ||
       snapshot.value.snapshotClass !== 'last-valid' ||
       !isIsoDate(snapshot.value.createdAt) ||
-      snapshot.value.sourceRevision > slot.value.revision ||
-      snapshot.value.schemaVersion !== slot.value.schemaVersion
+      snapshot.value.sourceRevision !== slot.value.revision ||
+      snapshot.value.schemaVersion !== 1
     )
       return { kind: 'incoherent', message: 'Committed adventurer records are incomplete.' };
 
@@ -1185,6 +1225,9 @@ export class AdventurerCreationService {
       !isCreationSnapshotBody(snapshotBody)
     )
       return { kind: 'incoherent', message: 'Committed adventurer data has an invalid shape.' };
+    const nameValidation = validateAdventurerName(profileBody.playerAuthoredName);
+    if (!nameValidation.ok || nameValidation.normalized !== profileBody.playerAuthoredName)
+      return { kind: 'incoherent', message: 'The private adventurer name is invalid.' };
     const stateRecord = states.value[0]!;
     const profileRecord = profiles.value[0]!;
     const evidenceRecord = evidenceRecords.value[0]!;
@@ -1226,7 +1269,21 @@ export class AdventurerCreationService {
       evidenceBody.evidence.adventurerClass,
       ...evidenceBody.evidence.spells,
     ];
+    const expectedStreamIds = new Set(expectedRolls.map((roll) => roll.streamId));
+    const expectedResultIds = expectedRolls.map((roll) => roll.rollResultId);
+    if (
+      expectedRolls.length < 2 ||
+      expectedStreamIds.size !== 1 ||
+      expectedRolls.some(
+        (roll) => roll.streamId.trim() === '' || roll.rollResultId.trim() === '',
+      ) ||
+      new Set(expectedResultIds).size !== expectedResultIds.length
+    )
+      return { kind: 'incoherent', message: 'Creation rolls do not identify one unique stream.' };
     const creationStreamId = expectedRolls[0]?.streamId;
+    const creationResultRecords = randomResults.value.filter(
+      (record) => object(record.body) && record.body.streamId === creationStreamId,
+    );
     const creationStreams = streams.value.filter(
       (record) =>
         record.slotId === slotId &&
@@ -1327,6 +1384,7 @@ export class AdventurerCreationService {
         coins: creationState.coins,
       }) ||
       eventBody.metadata.sequence !== eventRecord?.sequence ||
+      eventBody.metadata.occurredAt !== eventRecord?.timestamp ||
       eventRecord?.retentionClass !== 'mechanical-history' ||
       (eventRecord?.timestamp !== stateRecord.updatedAt && snapshotIsCreation) ||
       profileRecord.updatedAt !== eventRecord?.timestamp ||
@@ -1343,6 +1401,7 @@ export class AdventurerCreationService {
         const expected = expectedRolls[index];
         return (
           expected !== undefined &&
+          roll.streamId === creationStreamId &&
           roll.rollResultId === expected.rollResultId &&
           roll.streamId === expected.streamId &&
           sameValue(roll.naturalDice, expected.naturalDice) &&
@@ -1351,9 +1410,16 @@ export class AdventurerCreationService {
           roll.rowId === expected.rowId
         );
       }) !== true ||
+      creationResultRecords.length !== expectedRolls.length ||
+      new Set(creationResultRecords.map((record) => record.recordId)).size !==
+        creationResultRecords.length ||
+      !sameValue(
+        [...creationResultRecords.map((record) => record.recordId)].sort(),
+        [...expectedResultIds].sort(),
+      ) ||
       !expectedRolls.every(
         (roll) =>
-          randomResults.value.filter(
+          creationResultRecords.filter(
             (record) =>
               record.slotId === slotId &&
               record.recordType === 'random-result' &&

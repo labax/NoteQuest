@@ -42,7 +42,8 @@ const content: AdventurerCreationContent = {
     total: index + 2,
     label: `Fixture race ${index + 2}`,
     baseHp: 10 + index,
-    startingSpellCharges: index === 5 ? 1 : 0,
+    startingSpellCharges: 1,
+    fixedSpellGrants: [{ spellId: definition('fixture.spell_1'), charges: 1 }],
     effectIds: [definition('fixture.effect')],
   })),
   classes: Array.from({ length: 11 }, (_, index) => ({
@@ -91,6 +92,7 @@ function success<T>(value: T): RepositoryResult<T> {
 
 function harness(commitFailure = false) {
   let id = 0;
+  let clockReads = 0;
   const records: PersistedRecord[] = [];
   let commitCalls = 0;
   const committedEvents: EventRecord[] = [];
@@ -202,7 +204,10 @@ function harness(commitFailure = false) {
     contentVersion,
     masterSeedForSlot: () => '0x0000000000000050',
     newId: () => `00000000-0000-4000-8000-${String(++id).padStart(12, '0')}`,
-    now: () => timestamp,
+    now: () => {
+      clockReads += 1;
+      return timestamp;
+    },
   });
   return {
     service,
@@ -214,6 +219,12 @@ function harness(commitFailure = false) {
     coordinator,
     get commitCalls() {
       return commitCalls;
+    },
+    get idAllocations() {
+      return id;
+    },
+    get clockReads() {
+      return clockReads;
     },
     get committedSnapshot() {
       return committedSnapshot;
@@ -306,6 +317,79 @@ describe('AdventurerCreationService', () => {
   });
 
   it.each([
+    [
+      'stale snapshot',
+      (slot: SlotRecord, snapshot: SnapshotRecord) => ({
+        slot: { ...slot, revision: 2 },
+        snapshot,
+      }),
+    ],
+    [
+      'future snapshot',
+      (slot: SlotRecord, snapshot: SnapshotRecord) => ({
+        slot,
+        snapshot: { ...snapshot, sourceRevision: 2 },
+      }),
+    ],
+    [
+      'unsupported slot schema',
+      (slot: SlotRecord, snapshot: SnapshotRecord) => ({
+        slot: { ...slot, schemaVersion: 2 },
+        snapshot,
+      }),
+    ],
+    [
+      'unsupported snapshot schema',
+      (slot: SlotRecord, snapshot: SnapshotRecord) => ({
+        slot,
+        snapshot: { ...snapshot, schemaVersion: 2 },
+      }),
+    ],
+  ])('rejects %s at the protected snapshot gate', async (_label, mutate) => {
+    const context = harness();
+    const prepared = await context.service.prepare(command());
+    if (!prepared.ok) throw new Error(prepared.message);
+    await context.service.commit(prepared.prepared);
+    const currentSlot = await context.slots.get();
+    if (!currentSlot.ok) throw new Error(currentSlot.error.message);
+    const changed = mutate(currentSlot.value, context.committedSnapshot!);
+    context.setSlot(changed.slot);
+    context.setCommittedSnapshot(changed.snapshot);
+    await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+      kind: 'incoherent',
+    });
+  });
+
+  it.each(['creating', 'importing', 'resetting', 'migrating', 'isolated'] as const)(
+    'rejects %s slot status during restore',
+    async (status) => {
+      const context = harness();
+      const prepared = await context.service.prepare(command());
+      if (!prepared.ok) throw new Error(prepared.message);
+      await context.service.commit(prepared.prepared);
+      const currentSlot = await context.slots.get();
+      if (!currentSlot.ok) throw new Error(currentSlot.error.message);
+      context.setSlot({ ...currentSlot.value, status });
+      await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+        kind: 'incoherent',
+      });
+    },
+  );
+
+  it('rejects invalid slot integrity during restore', async () => {
+    const context = harness();
+    const prepared = await context.service.prepare(command());
+    if (!prepared.ok) throw new Error(prepared.message);
+    await context.service.commit(prepared.prepared);
+    const currentSlot = await context.slots.get();
+    if (!currentSlot.ok) throw new Error(currentSlot.error.message);
+    context.setSlot({ ...currentSlot.value, integrityStatus: 'invalid' });
+    await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+      kind: 'incoherent',
+    });
+  });
+
+  it.each([
     ['state effects', 'adventurer', (body: Record<string, unknown>) => delete body.effects],
     [
       'effect label',
@@ -334,6 +418,128 @@ describe('AdventurerCreationService', () => {
   });
 
   it.each([
+    [
+      'class roll on a second stream',
+      (context: ReturnType<typeof harness>) => {
+        const body = context.records.find(
+          (record) => record.recordType === 'adventurer-creation-evidence',
+        )!.body as { evidence: { adventurerClass: Record<string, unknown> } };
+        body.evidence.adventurerClass.streamId = 'second-stream';
+      },
+    ],
+    [
+      'spell roll on a second stream',
+      (context: ReturnType<typeof harness>) => {
+        const body = context.records.find(
+          (record) => record.recordType === 'adventurer-creation-evidence',
+        )!.body as { evidence: { spells: Record<string, unknown>[] } };
+        body.evidence.spells[0]!.streamId = 'second-stream';
+      },
+    ],
+    [
+      'event roll reference on a second stream',
+      (context: ReturnType<typeof harness>) => {
+        const body = context.records.find(
+          (record) => record.recordType === 'adventurer-creation-evidence',
+        )!.body as { event: { rollRefs: Record<string, unknown>[] } };
+        body.event.rollRefs[0]!.streamId = 'second-stream';
+      },
+    ],
+    [
+      'duplicate creation result ID',
+      (context: ReturnType<typeof harness>) => {
+        const body = context.records.find(
+          (record) => record.recordType === 'adventurer-creation-evidence',
+        )!.body as {
+          evidence: { race: { rollResultId: string }; adventurerClass: Record<string, unknown> };
+        };
+        body.evidence.adventurerClass.rollResultId = body.evidence.race.rollResultId;
+      },
+    ],
+    [
+      'missing creation result',
+      (context: ReturnType<typeof harness>) => {
+        const index = context.records.findIndex((record) => record.recordType === 'random-result');
+        context.records.splice(index, 1);
+      },
+    ],
+    [
+      'extra result on the creation stream',
+      (context: ReturnType<typeof harness>) => {
+        const existing = context.records.find((record) => record.recordType === 'random-result')!;
+        context.records.push({ ...structuredClone(existing), recordId: 'extra-result' });
+      },
+    ],
+    [
+      'creation timestamp family',
+      (context: ReturnType<typeof harness>) => {
+        const index = context.records.findIndex((record) => record.recordType === 'random-stream');
+        context.records[index] = {
+          ...context.records[index]!,
+          updatedAt: '2026-07-29T02:00:00.000Z',
+        };
+      },
+    ],
+    ...(['', '   ', 'Local\u0007Hero', 'x'.repeat(41)] as const).map(
+      (name) =>
+        [
+          `private name ${JSON.stringify(name)}`,
+          (context: ReturnType<typeof harness>) => {
+            const body = context.records.find(
+              (record) => record.recordType === 'adventurer-profile',
+            )!.body as Record<string, unknown>;
+            body.playerAuthoredName = name;
+          },
+        ] as const,
+    ),
+    [
+      'fixed spell label',
+      (context: ReturnType<typeof harness>) => {
+        const state = context.records.find((record) => record.recordType === 'adventurer')!
+          .body as { spellCharges: Record<string, unknown>[] };
+        state.spellCharges.find((charge) => charge.source === 'fixed')!.label = 'Wrong';
+      },
+    ],
+    [
+      'fixed spell remaining uses',
+      (context: ReturnType<typeof harness>) => {
+        const state = context.records.find((record) => record.recordType === 'adventurer')!
+          .body as { spellCharges: Record<string, unknown>[] };
+        state.spellCharges.find((charge) => charge.source === 'fixed')!.remainingUses = 0;
+      },
+    ],
+    [
+      'empty equipment item ID',
+      (context: ReturnType<typeof harness>) => {
+        const state = context.records.find((record) => record.recordType === 'adventurer')!
+          .body as { equipment: Record<string, unknown>[] };
+        state.equipment[0]!.itemId = '';
+      },
+    ],
+    [
+      'duplicate equipment item ID',
+      (context: ReturnType<typeof harness>) => {
+        const state = context.records.find((record) => record.recordType === 'adventurer')!
+          .body as { equipment: Record<string, unknown>[] };
+        state.equipment.push(structuredClone(state.equipment[0]!));
+      },
+    ],
+    [
+      'empty spell charge ID',
+      (context: ReturnType<typeof harness>) => {
+        const state = context.records.find((record) => record.recordType === 'adventurer')!
+          .body as { spellCharges: Record<string, unknown>[] };
+        state.spellCharges[0]!.chargeId = '';
+      },
+    ],
+    [
+      'duplicate spell charge ID',
+      (context: ReturnType<typeof harness>) => {
+        const state = context.records.find((record) => record.recordType === 'adventurer')!
+          .body as { spellCharges: Record<string, unknown>[] };
+        state.spellCharges[1]!.chargeId = state.spellCharges[0]!.chargeId;
+      },
+    ],
     [
       'race identity',
       (context: ReturnType<typeof harness>) => {
@@ -445,19 +651,26 @@ describe('AdventurerCreationService', () => {
         });
       },
     ],
-  ])('rejects semantic corruption in %s without writes', async (_label, corrupt) => {
-    const context = harness();
-    const prepared = await context.service.prepare(command());
-    if (!prepared.ok) throw new Error(prepared.message);
-    await context.service.commit(prepared.prepared);
-    const recordCount = context.records.length;
-    corrupt(context);
-    await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
-      kind: 'incoherent',
-    });
-    expect(context.records).toHaveLength(recordCount);
-    expect(context.commitCalls).toBe(1);
-  });
+  ] as readonly [string, (context: ReturnType<typeof harness>) => void][])(
+    'rejects semantic corruption in %s without writes',
+    async (_label, corrupt) => {
+      const context = harness();
+      const prepared = await context.service.prepare(command());
+      if (!prepared.ok) throw new Error(prepared.message);
+      await context.service.commit(prepared.prepared);
+      corrupt(context);
+      const recordCount = context.records.length;
+      const idAllocations = context.idAllocations;
+      const clockReads = context.clockReads;
+      await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+        kind: 'incoherent',
+      });
+      expect(context.records).toHaveLength(recordCount);
+      expect(context.commitCalls).toBe(1);
+      expect(context.idAllocations).toBe(idAllocations);
+      expect(context.clockReads).toBe(clockReads);
+    },
+  );
 
   it('rejects a revision-bumped creation snapshot that does not declare a later schema', async () => {
     const context = harness();
@@ -540,7 +753,12 @@ describe('AdventurerCreationService', () => {
     });
     const currentSlot = await context.slots.get();
     if (!currentSlot.ok) throw new Error(currentSlot.error.message);
-    context.setSlot({ ...currentSlot.value, revision: 2, updatedAt: currentRecord.updatedAt });
+    context.setSlot({
+      ...currentSlot.value,
+      revision: 2,
+      status: 'active',
+      updatedAt: currentRecord.updatedAt,
+    });
     const recordCount = context.records.length;
     await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
       kind: 'committed',
@@ -653,7 +871,6 @@ describe('AdventurerCreationService', () => {
     await expect(service.prepare(command())).resolves.toMatchObject({
       ok: false,
       kind: 'unavailable',
-      message: 'Approved spell creation content is incomplete or invalid.',
     });
   });
 });
