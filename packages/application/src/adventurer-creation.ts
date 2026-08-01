@@ -690,6 +690,26 @@ function creationSemanticsMatch(
   );
 }
 
+function governedCreationPlan(
+  content: AdventurerCreationContent,
+  evidence: AdventurerCreationEvidence,
+): { readonly randomSpellDraws: number; readonly dieDraws: number } | null {
+  const race = content.races.find((row) => row.id === evidence.race.resultId);
+  const adventurerClass = content.classes.find(
+    (row) => row.id === evidence.adventurerClass.resultId,
+  );
+  if (race === undefined || adventurerClass === undefined) return null;
+  const counts = [
+    race.randomSpellDraws ?? race.startingSpellCharges,
+    adventurerClass.randomSpellDraws ?? adventurerClass.startingSpellCharges,
+  ];
+  if (counts.some((count) => !Number.isSafeInteger(count) || count < 0)) return null;
+  const randomSpellDraws = counts[0]! + counts[1]!;
+  if (!Number.isSafeInteger(randomSpellDraws)) return null;
+  // Race and class each consume two d6 rolls; every governed random spell consumes one.
+  return { randomSpellDraws, dieDraws: 4 + randomSpellDraws };
+}
+
 function currentStateRetainsCreationSemantics(
   content: AdventurerCreationContent,
   current: CanonicalAdventurerState,
@@ -1252,18 +1272,23 @@ export class AdventurerCreationService {
       evidenceBody.initialState.adventurerId !== stateBody.adventurerId
     )
       return { kind: 'incoherent', message: 'Committed record ownership is invalid.' };
-    const creationEvents = events.value.filter(
+    const creationEventClaims = events.value.filter(
       (record) =>
-        isAdventurerCreatedEvent(record.body) &&
-        record.body.metadata.eventId === evidenceBody.event.metadata.eventId &&
         record.slotId === slotId &&
-        record.eventType === 'adventurer_created' &&
-        record.aggregateType === 'adventurer' &&
-        record.aggregateId === stateBody.adventurerId &&
-        record.sequence === record.body.metadata.sequence,
+        ((record.eventType === 'adventurer_created' &&
+          record.aggregateId === stateBody.adventurerId) ||
+          (object(record.body) &&
+            object(record.body.metadata) &&
+            record.body.metadata.commandId === evidenceBody.event.metadata.commandId)),
     );
-    const eventRecord = creationEvents[0];
+    const eventRecord = creationEventClaims[0];
     const eventBody = eventRecord?.body;
+    const governedPlan = governedCreationPlan(this.dependencies.content, evidenceBody.evidence);
+    if (
+      governedPlan === null ||
+      evidenceBody.evidence.spells.length !== governedPlan.randomSpellDraws
+    )
+      return { kind: 'incoherent', message: 'Creation spell evidence has invalid cardinality.' };
     const expectedRolls = [
       evidenceBody.evidence.race,
       evidenceBody.evidence.adventurerClass,
@@ -1282,21 +1307,24 @@ export class AdventurerCreationService {
       return { kind: 'incoherent', message: 'Creation rolls do not identify one unique stream.' };
     const creationStreamId = expectedRolls[0]?.streamId;
     const creationResultRecords = randomResults.value.filter(
-      (record) => object(record.body) && record.body.streamId === creationStreamId,
+      (record) =>
+        (object(record.body) && record.body.streamId === creationStreamId) ||
+        expectedResultIds.some((resultId) => resultId === record.recordId),
     );
     const creationStreams = streams.value.filter(
       (record) =>
         record.slotId === slotId &&
         record.recordType === 'random-stream' &&
         object(record.body) &&
-        record.body.streamId === creationStreamId,
+        (record.body.streamId === creationStreamId ||
+          record.body.purpose === 'adventurer-creation'),
     );
     const streamRecord = creationStreams[0];
     const streamBody = streamRecord?.body;
     const serializedStream = decodeNamedStream(streamBody);
     if (
       !isAdventurerCreatedEvent(eventBody) ||
-      creationEvents.length !== 1 ||
+      creationEventClaims.length !== 1 ||
       creationStreams.length !== 1 ||
       !object(streamBody) ||
       serializedStream === null
@@ -1312,10 +1340,15 @@ export class AdventurerCreationService {
       'adventurer-creation',
     ).identity;
     const drawCount = streamBody.drawCount;
-    if (typeof drawCount !== 'number' || !Number.isSafeInteger(drawCount) || drawCount < 0)
+    if (
+      typeof drawCount !== 'number' ||
+      !Number.isSafeInteger(drawCount) ||
+      drawCount < 0 ||
+      drawCount !== governedPlan.dieDraws
+    )
       return { kind: 'incoherent', message: 'Creation random stream draw count is invalid.' };
     const replayedDice: number[] = [];
-    for (let drawIndex = 0; drawIndex < drawCount; drawIndex += 1) {
+    for (let drawIndex = 0; drawIndex < governedPlan.dieDraws; drawIndex += 1) {
       const draw = replay.rng.nextBounded(6);
       replay = { ...replay, rng: draw.state };
       replayedDice.push(draw.value + 1);
@@ -1431,8 +1464,7 @@ export class AdventurerCreationService {
       streamRecord?.updatedAt !== eventBody.metadata.occurredAt ||
       streamBody.streamId !== creationStreamId ||
       streamBody.purpose !== 'adventurer-creation' ||
-      streamBody.drawCount !==
-        expectedRolls.reduce((count, roll) => count + roll.naturalDice.length, 0) ||
+      streamBody.drawCount !== governedPlan.dieDraws ||
       serializedStream.masterSeed !== expectedIdentity.masterSeed ||
       serializedStream.derivationId !== expectedIdentity.derivationId ||
       serializedStream.derivationVersion !== expectedIdentity.derivationVersion ||

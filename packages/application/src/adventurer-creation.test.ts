@@ -90,7 +90,7 @@ function success<T>(value: T): RepositoryResult<T> {
   return { ok: true, value };
 }
 
-function harness(commitFailure = false) {
+function harness(commitFailure = false, creationContent = content) {
   let id = 0;
   let clockReads = 0;
   const records: PersistedRecord[] = [];
@@ -199,7 +199,7 @@ function harness(commitFailure = false) {
     events,
     snapshots,
     coordinator,
-    content,
+    content: creationContent,
     rulesVersion,
     contentVersion,
     masterSeedForSlot: () => '0x0000000000000050',
@@ -237,6 +237,9 @@ function harness(commitFailure = false) {
     },
     addEvent(value: EventRecord) {
       committedEvents.push(value);
+    },
+    removeEvent(index: number) {
+      committedEvents.splice(index, 1);
     },
   };
 }
@@ -314,6 +317,186 @@ describe('AdventurerCreationService', () => {
       kind: 'committed',
       result: { ok: true, state: prepared.prepared.state, evidence: prepared.prepared.evidence },
     });
+  });
+
+  it.each([
+    ['negative', -1],
+    ['fractional', 4.5],
+    ['NaN', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+    ['extremely large safe', Number.MAX_SAFE_INTEGER],
+    ['one below governed', 4],
+    ['one above governed', 6],
+  ])('rejects %s creation draw count without unbounded replay or writes', async (_label, value) => {
+    const context = harness();
+    const prepared = await context.service.prepare(command());
+    if (!prepared.ok) throw new Error(prepared.message);
+    await context.service.commit(prepared.prepared);
+    const stream = context.records.find((record) => record.recordType === 'random-stream')!;
+    (stream.body as Record<string, unknown>).drawCount = value;
+    const writes = context.commitCalls;
+    const recordCount = context.records.length;
+    await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+      kind: 'incoherent',
+    });
+    expect(context.commitCalls).toBe(writes);
+    expect(context.records).toHaveLength(recordCount);
+  });
+
+  it.each([0, 2])(
+    'derives and restores the governed random-spell cardinality of %i',
+    async (randomSpellDraws) => {
+      const governedContent: AdventurerCreationContent = {
+        ...content,
+        races: content.races.map((race) => ({
+          ...race,
+          startingSpellCharges: randomSpellDraws,
+          randomSpellDraws,
+        })),
+      };
+      const context = harness(false, governedContent);
+      const prepared = await context.service.prepare(command());
+      if (!prepared.ok) throw new Error(prepared.message);
+      expect(prepared.prepared.evidence.spells).toHaveLength(randomSpellDraws);
+      await context.service.commit(prepared.prepared);
+      await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+        kind: 'committed',
+      });
+    },
+  );
+
+  it.each(['removed', 'added'])(
+    'rejects a consistently %s governed random-spell draw without writes',
+    async (mode) => {
+      const context = harness();
+      const prepared = await context.service.prepare(command());
+      if (!prepared.ok) throw new Error(prepared.message);
+      await context.service.commit(prepared.prepared);
+      const evidenceRecord = context.records.find(
+        (record) => record.recordType === 'adventurer-creation-evidence',
+      )!;
+      const evidenceBody = evidenceRecord.body as {
+        evidence: { spells: Record<string, unknown>[] };
+        initialState: { spellCharges: Record<string, unknown>[] };
+        event: { rollRefs: Record<string, unknown>[] };
+      };
+      const currentState = context.records.find((record) => record.recordType === 'adventurer')!
+        .body as { spellCharges: Record<string, unknown>[] };
+      const stream = context.records.find((record) => record.recordType === 'random-stream')!;
+      const randomRecordIndex = context.records.findIndex(
+        (record) =>
+          record.recordType === 'random-result' &&
+          record.recordId === evidenceBody.evidence.spells[0]?.rollResultId,
+      );
+      if (mode === 'removed') {
+        evidenceBody.evidence.spells.pop();
+        evidenceBody.event.rollRefs.pop();
+        evidenceBody.initialState.spellCharges = evidenceBody.initialState.spellCharges.filter(
+          (charge) => charge.source !== 'random',
+        );
+        currentState.spellCharges = currentState.spellCharges.filter(
+          (charge) => charge.source !== 'random',
+        );
+        if (randomRecordIndex >= 0) context.records.splice(randomRecordIndex, 1);
+        (stream.body as { drawCount: number }).drawCount -= 1;
+      } else {
+        const extraRoll = {
+          ...structuredClone(evidenceBody.evidence.spells[0]!),
+          rollResultId: 'extra-creation-result',
+        };
+        evidenceBody.evidence.spells.push(extraRoll);
+        evidenceBody.event.rollRefs.push(extraRoll);
+        const extraCharge = {
+          ...structuredClone(
+            currentState.spellCharges.find((charge) => charge.source === 'random')!,
+          ),
+          chargeId: 'extra-charge',
+        };
+        evidenceBody.initialState.spellCharges.push(extraCharge);
+        currentState.spellCharges.push(extraCharge);
+        context.records.push({
+          slotId,
+          recordType: 'random-result',
+          recordId: 'extra-creation-result',
+          updatedAt: timestamp,
+          body: extraRoll,
+        });
+        (stream.body as { drawCount: number }).drawCount += 1;
+      }
+      const writes = context.commitCalls;
+      const recordCount = context.records.length;
+      await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+        kind: 'incoherent',
+      });
+      expect(context.commitCalls).toBe(writes);
+      expect(context.records).toHaveLength(recordCount);
+    },
+  );
+
+  it.each([
+    'duplicate event',
+    'missing event',
+    'conflicting event',
+    'duplicate result',
+    'missing result',
+    'extra result',
+    'conflicting result',
+    'extra creation stream',
+  ])('rejects %s creation-specific records without writes', async (mode) => {
+    const context = harness();
+    const prepared = await context.service.prepare(command());
+    if (!prepared.ok) throw new Error(prepared.message);
+    await context.service.commit(prepared.prepared);
+    const creationResult = context.records.find((record) => record.recordType === 'random-result')!;
+    const duplicateEvent = (): EventRecord => ({
+      slotId,
+      sequence: prepared.prepared.event.metadata.sequence,
+      timestamp: prepared.prepared.event.metadata.occurredAt,
+      eventType: 'adventurer_created',
+      aggregateType: 'adventurer',
+      aggregateId: prepared.prepared.state.adventurerId,
+      retentionClass: 'mechanical-history',
+      body: structuredClone(prepared.prepared.event),
+    });
+    if (mode === 'duplicate event') context.addEvent(duplicateEvent());
+    if (mode === 'missing event') context.removeEvent(0);
+    if (mode === 'conflicting event') {
+      const conflict = duplicateEvent();
+      (conflict.body as { metadata: { eventId: string } }).metadata.eventId = 'conflicting-event';
+      context.addEvent(conflict);
+    }
+    if (mode === 'duplicate result') context.records.push(structuredClone(creationResult));
+    if (mode === 'missing result')
+      context.records.splice(context.records.indexOf(creationResult), 1);
+    if (mode === 'extra result') {
+      context.records.push({
+        ...structuredClone(creationResult),
+        recordId: 'extra-result',
+        body: { ...(creationResult.body as object), rollResultId: 'extra-result' },
+      });
+    }
+    if (mode === 'conflicting result') {
+      context.records.push({
+        ...structuredClone(creationResult),
+        body: { ...(creationResult.body as object), streamId: 'different-stream' },
+      });
+    }
+    if (mode === 'extra creation stream') {
+      const stream = context.records.find((record) => record.recordType === 'random-stream')!;
+      context.records.push({
+        ...structuredClone(stream),
+        recordId: 'extra-creation-stream',
+        body: { ...(stream.body as object), streamId: 'extra-creation-stream' },
+      });
+    }
+    const writes = context.commitCalls;
+    const recordCount = context.records.length;
+    await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+      kind: 'incoherent',
+    });
+    expect(context.commitCalls).toBe(writes);
+    expect(context.records).toHaveLength(recordCount);
   });
 
   it.each([
