@@ -80,6 +80,7 @@ function port(overrides: Partial<AdventurerCreationUiPort> = {}): AdventurerCrea
   return {
     loadCommitted: vi.fn().mockResolvedValue({ kind: 'empty' }),
     create: vi.fn().mockResolvedValue(committed),
+    reconcile: vi.fn().mockResolvedValue(committed),
     ...overrides,
   };
 }
@@ -247,14 +248,20 @@ describe('AdventurerCreation', () => {
   });
 
   it('keeps an ambiguous commit neutral and allows only authoritative recheck', async () => {
-    const loadCommitted = vi
-      .fn()
-      .mockResolvedValueOnce({ kind: 'empty' })
-      .mockResolvedValueOnce({ kind: 'committed', result: committed });
+    const reconcile = vi.fn().mockResolvedValue(committed);
     render(
       <AdventurerCreation
         slotId="slot.fixture"
-        port={port({ loadCommitted, create: vi.fn().mockRejectedValue(new Error('receipt lost')) })}
+        port={port({
+          reconcile,
+          create: vi.fn().mockResolvedValue({
+            ok: false,
+            committed: 'unknown',
+            retryable: false,
+            message: 'receipt lost',
+            reconciliationToken: 'opaque-action',
+          }),
+        })}
         onCancel={vi.fn()}
         onContinue={vi.fn()}
       />,
@@ -268,6 +275,7 @@ describe('AdventurerCreation', () => {
       screen.queryByRole('button', { name: 'Create and save adventurer' }),
     ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Recheck save status' }));
+    expect(reconcile).toHaveBeenCalledWith('opaque-action');
     expect(await screen.findByRole('heading', { name: 'Local Hero' })).toBeVisible();
   });
 });

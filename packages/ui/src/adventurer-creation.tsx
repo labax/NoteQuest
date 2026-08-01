@@ -7,9 +7,14 @@ import {
 
 import { focusBlockingError, focusTarget, focusValidationError } from './accessibility';
 
+export type AdventurerCreationUiResult = AdventurerCreationCommitResult & {
+  readonly reconciliationToken?: string;
+};
+
 export interface AdventurerCreationUiPort {
   loadCommitted(slotId: string): Promise<AdventurerCreationLoadResult>;
-  create(slotId: string, playerAuthoredName: string): Promise<AdventurerCreationCommitResult>;
+  create(slotId: string, playerAuthoredName: string): Promise<AdventurerCreationUiResult>;
+  reconcile(reconciliationToken: string): Promise<AdventurerCreationUiResult>;
 }
 
 export interface AdventurerCreationProps {
@@ -25,7 +30,7 @@ type CreationViewState =
   | { readonly kind: 'validation'; readonly message: string }
   | { readonly kind: 'committing' }
   | { readonly kind: 'failure'; readonly message: string }
-  | { readonly kind: 'unknown'; readonly message: string }
+  | { readonly kind: 'unknown'; readonly message: string; readonly reconciliationToken?: string }
   | {
       readonly kind: 'committed';
       readonly result: Extract<AdventurerCreationCommitResult, { ok: true }>;
@@ -94,7 +99,13 @@ export function AdventurerCreation({
         message: 'The save status could not be confirmed.',
       });
     } else if (!result.ok && result.committed === 'unknown') {
-      setView({ kind: 'unknown', message: 'The save status could not be confirmed.' });
+      setView({
+        kind: 'unknown',
+        message: 'The save status could not be confirmed.',
+        ...(result.reconciliationToken === undefined
+          ? {}
+          : { reconciliationToken: result.reconciliationToken }),
+      });
     } else if (!result.ok) {
       setView({ kind: 'failure', message: result.message });
     } else {
@@ -133,22 +144,30 @@ export function AdventurerCreation({
             type="button"
             onClick={() => {
               setView({ kind: 'loading' });
+              const reconciliationToken = view.reconciliationToken;
+              if (reconciliationToken === undefined) return;
               void port
-                .loadCommitted(slotId)
+                .reconcile(reconciliationToken)
                 .then((result) => {
                   setView(
-                    result.kind === 'committed'
-                      ? { kind: 'committed', result: result.result }
+                    result.ok
+                      ? { kind: 'committed', result }
                       : {
                           kind: 'unknown',
                           message: 'The save status is still unconfirmed.',
+                          reconciliationToken,
                         },
                   );
                 })
                 .catch(() =>
-                  setView({ kind: 'unknown', message: 'The save status is still unconfirmed.' }),
+                  setView({
+                    kind: 'unknown',
+                    message: 'The save status is still unconfirmed.',
+                    reconciliationToken,
+                  }),
                 );
             }}
+            disabled={view.reconciliationToken === undefined}
           >
             Recheck save status
           </button>
@@ -293,9 +312,9 @@ export function AdventurerCreation({
       </div>
       {failure ? (
         <div ref={blockingSummary} className="inline-error" role="alert" tabIndex={-1}>
-          <h4 tabIndex={-1}>Creation was not saved</h4>
+          <h4 tabIndex={-1}>Creation could not be completed</h4>
           <p>{view.message}</p>
-          <p>The prior slot remains available. Retry uses the same canonical creation process.</p>
+          <p>Review the reported status before retrying this same creation action.</p>
         </div>
       ) : null}
       {validation ? (

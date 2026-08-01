@@ -3,6 +3,7 @@ import {
   createPerSlotActionCommitQueue,
   createUpdateSafetyState,
   type AdventurerCreationContent,
+  type PreparedAdventurerCreation,
   type SaveSlotOperationStatusPort,
   type SaveSlotService,
   type UpdateSafetyStatePort,
@@ -189,6 +190,7 @@ export async function createWebComposition(): Promise<AppComposition> {
     now: () => new Date().toISOString(),
   });
   const creationIdentities = new Map<string, { commandId: string; idempotencyKey: string }>();
+  const reconciliationActions = new Map<string, PreparedAdventurerCreation>();
   const adventurerCreation: AdventurerCreationUiPort = {
     loadCommitted: (slotId) => creationService.loadCommitted(slotId as SaveSlotId),
     async create(rawSlotId, playerAuthoredName) {
@@ -212,29 +214,92 @@ export async function createWebComposition(): Promise<AppComposition> {
           updateSafety.failSave(slotId);
           return { ok: false, committed: false, retryable: false, message: prepared.message };
         }
+        const reconciliationToken = crypto.randomUUID();
+        reconciliationActions.set(reconciliationToken, prepared.prepared);
         updateSafety.beginSave(slotId);
         const result = await creationService.commit(prepared.prepared);
         if (result.ok) {
           const durable = await baseSaveSlots.lookup(slotId);
           if (!durable.ok) {
-            updateSafety.failSave(slotId);
             return {
               ok: false,
               committed: 'unknown',
               retryable: true,
               message: 'Durable save could not be verified.',
+              reconciliationToken,
             };
           }
           updateSafety.acceptDurableSlot(durable.value);
         } else if (result.committed === false) updateSafety.failSave(slotId);
-        return result;
+        return result.ok || result.committed === false
+          ? result
+          : { ...result, reconciliationToken };
       } catch {
-        updateSafety.failSave(slotId);
+        const prepared = [...reconciliationActions.entries()].find(
+          ([, action]) => action.command.slotId === slotId,
+        );
         return {
           ok: false,
           committed: 'unknown',
           retryable: true,
           message: 'Save status could not be confirmed.',
+          ...(prepared === undefined ? {} : { reconciliationToken: prepared[0] }),
+        };
+      }
+    },
+    async reconcile(reconciliationToken) {
+      const prepared = reconciliationActions.get(reconciliationToken);
+      if (prepared === undefined)
+        return {
+          ok: false,
+          committed: 'unknown',
+          retryable: false,
+          message: 'Save status could not be confirmed.',
+          reconciliationToken,
+        };
+      try {
+        const loaded = await creationService.loadCommitted(prepared.command.slotId);
+        if (
+          loaded.kind === 'committed' &&
+          loaded.result.event?.metadata.commandId === prepared.command.metadata.commandId &&
+          loaded.result.state.adventurerId === prepared.state.adventurerId
+        ) {
+          const durable = await baseSaveSlots.lookup(prepared.command.slotId);
+          if (!durable.ok)
+            return {
+              ok: false,
+              committed: 'unknown',
+              retryable: false,
+              message: 'Durable save could not be verified.',
+              reconciliationToken,
+            };
+          updateSafety.acceptDurableSlot(durable.value);
+          reconciliationActions.delete(reconciliationToken);
+          return loaded.result;
+        }
+        if (loaded.kind === 'empty') {
+          updateSafety.failSave(prepared.command.slotId);
+          return {
+            ok: false,
+            committed: false,
+            retryable: true,
+            message: 'The original creation action was not committed.',
+          };
+        }
+        return {
+          ok: false,
+          committed: 'unknown',
+          retryable: false,
+          message: 'The original creation action could not be confirmed.',
+          reconciliationToken,
+        };
+      } catch {
+        return {
+          ok: false,
+          committed: 'unknown',
+          retryable: false,
+          message: 'The original creation action could not be confirmed.',
+          reconciliationToken,
         };
       }
     },
