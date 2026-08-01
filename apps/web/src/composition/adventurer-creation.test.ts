@@ -2,6 +2,10 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bundledContentStatus } from '@notequest/content';
+import {
+  authorizedNoteQuestAdventurerCreationTableIds,
+  authorizedNoteQuestStartingState,
+} from '@notequest/content';
 import { NOTEQUEST_SLOT_IDS } from '@notequest/infrastructure';
 
 import { createWebComposition } from './index';
@@ -22,6 +26,25 @@ describe('production adventurer creation composition', () => {
       expect(port).toBeDefined();
       const result = await port!.create(NOTEQUEST_SLOT_IDS[0], 'Local Hero');
       expect(result).toMatchObject({ ok: true, committed: true, playerAuthoredName: 'Local Hero' });
+      if (!result.ok) throw new Error(result.message);
+      expect(result.evidence.race.tableId).toBe(
+        authorizedNoteQuestAdventurerCreationTableIds.races,
+      );
+      expect(result.evidence.adventurerClass.tableId).toBe(
+        authorizedNoteQuestAdventurerCreationTableIds.classes,
+      );
+      expect(result.state).toMatchObject({
+        usableArms: authorizedNoteQuestStartingState.usableArms,
+        usableHands: authorizedNoteQuestStartingState.usableHands,
+        torches: authorizedNoteQuestStartingState.torches,
+        coins: authorizedNoteQuestStartingState.coins,
+        status: authorizedNoteQuestStartingState.status,
+        location: authorizedNoteQuestStartingState.location,
+      });
+      expect(result.state.equipment[0]?.damage).toMatchObject({ diceCount: 1, dieSides: 6 });
+      expect(result.state.effects.map((effect) => effect.version)).toEqual(
+        result.state.effects.map(() => result.state.contentVersion),
+      );
       await expect(port!.loadCommitted(NOTEQUEST_SLOT_IDS[0])).resolves.toMatchObject({
         kind: 'committed',
         result: { state: result.ok ? result.state : undefined },

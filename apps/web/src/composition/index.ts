@@ -14,8 +14,11 @@ import {
   authorizedNoteQuestAdventurerCreationManifest,
   authorizedNoteQuestAdventurerCreationRulesVersion,
   authorizedNoteQuestClasses,
+  authorizedNoteQuestEffects,
   authorizedNoteQuestRaces,
   authorizedNoteQuestSpells,
+  authorizedNoteQuestStartingState,
+  authorizedNoteQuestAdventurerCreationTableIds,
   authorizedNoteQuestWeapons,
   validatePalaceContentManifest,
   validatePalaceManifestIntegrity,
@@ -104,9 +107,9 @@ export async function createWebComposition(): Promise<AppComposition> {
   const repositories = createDexiePersistenceRepositories(database);
   const weapons = new Map(authorizedNoteQuestWeapons.map((weapon) => [weapon.id, weapon]));
   const creationContent: AdventurerCreationContent = {
-    raceTableId: 'creation.notequest.races' as DefinitionId,
-    classTableId: 'creation.notequest.classes' as DefinitionId,
-    spellTableId: 'creation.notequest.basic-spells' as DefinitionId,
+    raceTableId: authorizedNoteQuestAdventurerCreationTableIds.races as DefinitionId,
+    classTableId: authorizedNoteQuestAdventurerCreationTableIds.classes as DefinitionId,
+    spellTableId: authorizedNoteQuestAdventurerCreationTableIds.spells as DefinitionId,
     races: authorizedNoteQuestRaces.map((race) => ({
       ...race,
       id: race.id as DefinitionId,
@@ -144,6 +147,18 @@ export async function createWebComposition(): Promise<AppComposition> {
         { id: spell.id as DefinitionId, label: spell.label },
       ]),
     ),
+
+    effects: Object.fromEntries(
+      authorizedNoteQuestEffects.map((effect) => [
+        effect.id,
+        {
+          ...effect,
+          id: effect.id as DefinitionId,
+          version: authorizedNoteQuestAdventurerCreationContentVersion as ContentVersion,
+        },
+      ]),
+    ),
+    startingState: authorizedNoteQuestStartingState,
   };
   const selected = await database.workspace.get(NOTEQUEST_SELECTED_SLOT_KEY);
   const selectedSlotId =

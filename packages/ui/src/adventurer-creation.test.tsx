@@ -37,10 +37,12 @@ const committed = {
         label: 'Fixture blade',
         equipped: true,
         hands: 1,
+        damage: { diceCount: 1, dieSides: 6, modifier: 0, damageType: 'physical' },
       },
     ],
     spellCharges: [],
     effectIds: [],
+    effects: [],
     rulesVersion: 'rules.fixture',
     contentVersion: 'content.fixture',
   },
@@ -195,7 +197,9 @@ describe('AdventurerCreation', () => {
     ).toBeVisible();
     expect(screen.getAllByText('Fixture folk')).toHaveLength(2);
     expect(screen.getByText('3 + 4 = 7')).toBeVisible();
-    expect(screen.getByText('Fixture blade')).toBeVisible();
+    expect(screen.getByText('Fixture blade (1d6, 1 hand)')).toBeVisible();
+    expect(screen.getByText('Starting effects')).toBeVisible();
+    expect(screen.getByText('Spell charges')).toBeVisible();
     expect(screen.queryByRole('button', { name: /reroll/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Continue to town' }));
     expect(onContinue).toHaveBeenCalledOnce();

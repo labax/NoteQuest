@@ -213,7 +213,32 @@ export function AdventurerCreation({
               </div>
               <div>
                 <dt>Starting equipment</dt>
-                <dd>{state.equipment.map((item) => item.label).join(', ')}</dd>
+                <dd>
+                  {state.equipment
+                    .map(
+                      (item) =>
+                        `${item.label} (${item.damage.diceCount}d${item.damage.dieSides}${item.damage.modifier === 0 ? '' : item.damage.modifier > 0 ? `+${item.damage.modifier}` : item.damage.modifier}, ${item.hands} hand)`,
+                    )
+                    .join(', ')}
+                </dd>
+              </div>
+              <div>
+                <dt>Starting effects</dt>
+                <dd>
+                  {state.effects.length === 0
+                    ? 'None'
+                    : state.effects.map((effect) => effect.id).join(', ')}
+                </dd>
+              </div>
+              <div>
+                <dt>Spell charges</dt>
+                <dd>
+                  {state.spellCharges.length === 0
+                    ? 'None'
+                    : state.spellCharges
+                        .map((spell) => `${spell.label} — ${spell.remainingUses} (${spell.source})`)
+                        .join(', ')}
+                </dd>
               </div>
               <div>
                 <dt>Rules version</dt>

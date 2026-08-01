@@ -43,6 +43,14 @@ export interface AdventurerRaceDefinition extends AdventurerCreationTableRow {
   readonly effectIds: readonly DefinitionId[];
 }
 
+export interface AdventurerEffectDefinition {
+  readonly id: DefinitionId;
+  readonly version: ContentVersion;
+  readonly trigger: string;
+  readonly guards: readonly string[];
+  readonly outcome: Readonly<Record<string, unknown>>;
+}
+
 export interface AdventurerClassDefinition extends AdventurerCreationTableRow {
   readonly hpModifier: number;
   readonly startingSpellCharges: number;
@@ -55,7 +63,7 @@ export interface AdventurerClassDefinition extends AdventurerCreationTableRow {
     readonly definitionId: DefinitionId;
     readonly label: string;
     readonly hands: number;
-    readonly damage?: {
+    readonly damage: {
       readonly diceCount: number;
       readonly dieSides: number;
       readonly modifier: number;
@@ -72,6 +80,15 @@ export interface AdventurerCreationContent {
   readonly races: readonly AdventurerRaceDefinition[];
   readonly classes: readonly AdventurerClassDefinition[];
   readonly spells: Readonly<Record<number, { readonly id: DefinitionId; readonly label: string }>>;
+  readonly effects: Readonly<Record<string, AdventurerEffectDefinition>>;
+  readonly startingState: {
+    readonly usableArms: 2;
+    readonly usableHands: 2;
+    readonly torches: 10;
+    readonly coins: 0;
+    readonly status: 'alive';
+    readonly location: 'town';
+  };
 }
 
 export interface CanonicalAdventurerState {
@@ -95,7 +112,7 @@ export interface CanonicalAdventurerState {
     readonly label: string;
     readonly equipped: true;
     readonly hands: number;
-    readonly damage?: {
+    readonly damage: {
       readonly diceCount: number;
       readonly dieSides: number;
       readonly modifier: number;
@@ -110,6 +127,7 @@ export interface CanonicalAdventurerState {
     readonly source: 'fixed' | 'random';
   }[];
   readonly effectIds: readonly DefinitionId[];
+  readonly effects: readonly AdventurerEffectDefinition[];
   readonly rulesVersion: RulesVersion;
   readonly contentVersion: ContentVersion;
 }
@@ -231,7 +249,9 @@ function validateCreationContent(content: AdventurerCreationContent): string | n
         ) ||
         row.weapon.label.trim() === '' ||
         row.weapon.hands < 0 ||
-        row.weapon.hands > 2,
+        row.weapon.hands > 2 ||
+        row.weapon.damage.diceCount <= 0 ||
+        row.weapon.damage.dieSides <= 1,
     )
   )
     return 'Approved class or equipment creation content is incomplete or invalid.';
@@ -242,6 +262,14 @@ function validateCreationContent(content: AdventurerCreationContent): string | n
     new Set(Object.values(content.spells).map((spell) => spell.id)).size !== 6
   )
     return 'Approved spell creation content is incomplete or invalid.';
+  const referencedEffects = [...content.races, ...content.classes].flatMap((row) => row.effectIds);
+  if (
+    referencedEffects.some((id) => content.effects[id] === undefined) ||
+    Object.values(content.effects).some(
+      (effect) => effect.version.trim() === '' || effect.trigger.trim() === '',
+    )
+  )
+    return 'Approved effect creation content is incomplete or invalid.';
   return null;
 }
 
@@ -465,12 +493,7 @@ export class AdventurerCreationService {
       classId: adventurerClass.id,
       maxHp,
       currentHp: maxHp,
-      usableArms: 2,
-      usableHands: 2,
-      torches: 10,
-      coins: 0,
-      status: 'alive',
-      location: 'town',
+      ...this.dependencies.content.startingState,
       backpackItemIds: [],
       armourItemIds: [],
       death: null,
@@ -481,9 +504,7 @@ export class AdventurerCreationService {
           label: adventurerClass.weapon.label,
           equipped: true,
           hands: adventurerClass.weapon.hands,
-          ...(adventurerClass.weapon.damage === undefined
-            ? {}
-            : { damage: adventurerClass.weapon.damage }),
+          damage: adventurerClass.weapon.damage,
         },
       ],
       spellCharges: [
@@ -497,6 +518,9 @@ export class AdventurerCreationService {
         })),
       ],
       effectIds: [...race.effectIds, ...adventurerClass.effectIds],
+      effects: [...race.effectIds, ...adventurerClass.effectIds].map(
+        (id) => this.dependencies.content.effects[id]!,
+      ),
       rulesVersion: this.dependencies.rulesVersion,
       contentVersion: this.dependencies.contentVersion,
     };

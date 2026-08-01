@@ -55,6 +55,7 @@ const content: AdventurerCreationContent = {
       definitionId: definition('fixture.training_weapon'),
       label: 'Project fixture weapon',
       hands: 1,
+      damage: { diceCount: 1, dieSides: 6, modifier: 0, damageType: 'physical' },
     },
     effectIds: [],
   })),
@@ -64,6 +65,15 @@ const content: AdventurerCreationContent = {
       { id: definition(`fixture.spell_${index + 1}`), label: `Fixture spell ${index + 1}` },
     ]),
   ),
+  effects: {},
+  startingState: {
+    usableArms: 2,
+    usableHands: 2,
+    torches: 10,
+    coins: 0,
+    status: 'alive',
+    location: 'town',
+  },
 };
 
 function success<T>(value: T): RepositoryResult<T> {
