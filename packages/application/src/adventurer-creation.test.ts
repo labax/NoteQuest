@@ -84,7 +84,7 @@ function harness(commitFailure = false) {
   let id = 0;
   const records: PersistedRecord[] = [];
   let commitCalls = 0;
-  let committedEvent: EventRecord | undefined;
+  const committedEvents: EventRecord[] = [];
   let committedSnapshot: SnapshotRecord | undefined;
   let slot: SlotRecord = {
     slotId,
@@ -140,7 +140,7 @@ function harness(commitFailure = false) {
         ...(envelope.randomStreamRecords ?? []),
         ...(envelope.randomResultRecords ?? []),
       );
-      committedEvent = envelope.events[0];
+      if (envelope.events[0]) committedEvents.push(envelope.events[0]);
       committedSnapshot = envelope.recoveryPointers?.snapshots?.[0];
       slot = {
         ...(envelope.slotMetadata ?? slot),
@@ -169,11 +169,11 @@ function harness(commitFailure = false) {
   };
   const events = {
     get: async () =>
-      committedEvent === undefined
+      committedEvents[0] === undefined
         ? { ok: false as const, error: { code: 'missing_record' as const, message: 'missing' } }
-        : success(committedEvent),
+        : success(committedEvents[0]),
     append: async (event: EventRecord) => success(event),
-    listForSlot: async () => success(committedEvent === undefined ? [] : [committedEvent]),
+    listForSlot: async () => success(committedEvents),
   } satisfies EventRepository;
   const snapshots = {
     get: async () =>
@@ -214,6 +214,9 @@ function harness(commitFailure = false) {
     },
     setSlot(value: SlotRecord) {
       slot = value;
+    },
+    addEvent(value: EventRecord) {
+      committedEvents.push(value);
     },
   };
 }
@@ -321,6 +324,83 @@ describe('AdventurerCreationService', () => {
     });
   });
 
+  it.each([
+    [
+      'race identity',
+      (context: ReturnType<typeof harness>) => {
+        const state = context.records.find((record) => record.recordType === 'adventurer')!
+          .body as Record<string, unknown>;
+        state.raceId = 'race.unrelated';
+      },
+    ],
+    [
+      'event module, timestamp, and summary',
+      (context: ReturnType<typeof harness>) => {
+        const evidence = context.records.find(
+          (record) => record.recordType === 'adventurer-creation-evidence',
+        )!.body as { event: Record<string, unknown> };
+        evidence.event.module = 'combat';
+        evidence.event.summary = '';
+        (evidence.event.metadata as Record<string, unknown>).occurredAt = 'not-a-date';
+      },
+    ],
+    [
+      'named stream derivation',
+      (context: ReturnType<typeof harness>) => {
+        const stream = context.records.find((record) => record.recordType === 'random-stream')!
+          .body as Record<string, unknown>;
+        delete stream.derivationId;
+        delete stream.derivationVersion;
+        delete stream.masterSeed;
+        delete stream.rng;
+      },
+    ],
+    [
+      'class result label',
+      (context: ReturnType<typeof harness>) => {
+        const evidence = context.records.find(
+          (record) => record.recordType === 'adventurer-creation-evidence',
+        )!.body as { evidence: { adventurerClass: Record<string, unknown> } };
+        evidence.evidence.adventurerClass.resultLabel = 'Unrelated class';
+      },
+    ],
+    [
+      'equipment mechanics',
+      (context: ReturnType<typeof harness>) => {
+        const state = context.records.find((record) => record.recordType === 'adventurer')!
+          .body as { equipment: { damage: Record<string, unknown> }[] };
+        state.equipment[0]!.damage.dieSides = 20;
+      },
+    ],
+    [
+      'private profile identity',
+      (context: ReturnType<typeof harness>) => {
+        const profile = context.records.find(
+          (record) => record.recordType === 'adventurer-profile',
+        )!.body as Record<string, unknown>;
+        profile.adventurerId = 'adventurer.unrelated';
+      },
+    ],
+    [
+      'snapshot metadata',
+      (context: ReturnType<typeof harness>) => {
+        context.setCommittedSnapshot({ ...context.committedSnapshot!, sourceRevision: 0 });
+      },
+    ],
+  ])('rejects semantic corruption in %s without writes', async (_label, corrupt) => {
+    const context = harness();
+    const prepared = await context.service.prepare(command());
+    if (!prepared.ok) throw new Error(prepared.message);
+    await context.service.commit(prepared.prepared);
+    const recordCount = context.records.length;
+    corrupt(context);
+    await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+      kind: 'incoherent',
+    });
+    expect(context.records).toHaveLength(recordCount);
+    expect(context.commitCalls).toBe(1);
+  });
+
   it('scopes creation RNG evidence while tolerating later records and slot revisions', async () => {
     const context = harness();
     const prepared = await context.service.prepare(command());
@@ -354,6 +434,67 @@ describe('AdventurerCreationService', () => {
       kind: 'committed',
       result: { state: prepared.prepared.state, stateRevision: 2 },
     });
+  });
+
+  it('restores current state through a genuinely later cumulative snapshot', async () => {
+    const context = harness();
+    const prepared = await context.service.prepare(command());
+    if (!prepared.ok) throw new Error(prepared.message);
+    await context.service.commit(prepared.prepared);
+    const stateRecordIndex = context.records.findIndex(
+      (record) => record.recordType === 'adventurer',
+    );
+    const priorRecord = structuredClone(context.records[stateRecordIndex]!);
+    const currentRecord: PersistedRecord = {
+      ...priorRecord,
+      updatedAt: '2026-07-29T01:00:00.000Z',
+      body: {
+        ...(priorRecord.body as Record<string, unknown>),
+        currentHp: prepared.prepared.state.maxHp - 1,
+        torches: 9,
+        location: 'palace.entrance',
+      },
+    };
+    context.records[stateRecordIndex] = currentRecord;
+    context.addEvent({
+      slotId,
+      sequence: 2,
+      timestamp: '2026-07-29T01:00:00.000Z',
+      eventType: 'palace_entered',
+      aggregateType: 'adventurer',
+      aggregateId: prepared.prepared.state.adventurerId,
+      retentionClass: 'mechanical-history',
+      body: { type: 'palace_entered', revision: 2 },
+    });
+    context.records.push({
+      slotId,
+      recordType: 'random-stream',
+      recordId: 'later-stream',
+      updatedAt: '2026-07-29T01:00:00.000Z',
+      body: { streamId: 'later-stream', purpose: 'dungeon-generation', drawCount: 1 },
+    });
+    context.setCommittedSnapshot({
+      slotId,
+      snapshotClass: 'last-valid',
+      createdAt: '2026-07-29T01:00:00.000Z',
+      schemaVersion: 1,
+      sourceRevision: 2,
+      body: { stateRecords: [currentRecord], schema: 'cumulative-state-v1' },
+    });
+    const currentSlot = await context.slots.get();
+    if (!currentSlot.ok) throw new Error(currentSlot.error.message);
+    context.setSlot({ ...currentSlot.value, revision: 2, updatedAt: currentRecord.updatedAt });
+    const recordCount = context.records.length;
+    await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+      kind: 'committed',
+      result: {
+        stateRevision: 2,
+        state: { currentHp: prepared.prepared.state.maxHp - 1, torches: 9 },
+        evidence: prepared.prepared.evidence,
+      },
+    });
+    expect(context.records).toHaveLength(recordCount);
+    expect(context.commitCalls).toBe(1);
   });
 
   it('reconciles a repeated commit from durable state without a duplicate transaction', async () => {

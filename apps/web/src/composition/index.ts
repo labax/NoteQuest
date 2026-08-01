@@ -3,6 +3,7 @@ import {
   createPerSlotActionCommitQueue,
   createUpdateSafetyState,
   type AdventurerCreationContent,
+  type AdventurerCreationLoadResult,
   type PreparedAdventurerCreation,
   type SaveSlotOperationStatusPort,
   type SaveSlotService,
@@ -72,6 +73,25 @@ export interface AppComposition {
 }
 
 export const createPwaStatusAdapter = createPwaLifecycleAdapter;
+
+export function classifyCreationReconciliationObservation(
+  loaded: AdventurerCreationLoadResult,
+  marker: unknown,
+  expected: { readonly actionId: string; readonly adventurerId: string },
+): 'same-action' | 'known-false' | 'unknown' {
+  if (marker === undefined) return loaded.kind === 'empty' ? 'known-false' : 'unknown';
+  if (typeof marker !== 'object' || marker === null) return 'unknown';
+  const actionId = Reflect.get(marker, 'actionId');
+  const revision = Reflect.get(marker, 'stateRevision');
+  return loaded.kind === 'committed' &&
+    actionId === expected.actionId &&
+    Number.isSafeInteger(revision) &&
+    revision === loaded.result.event?.metadata.stateRevision &&
+    loaded.result.event?.metadata.commandId === expected.actionId &&
+    loaded.result.state.adventurerId === expected.adventurerId
+    ? 'same-action'
+    : 'unknown';
+}
 
 /** The only production location that constructs application-level adapters. */
 export async function createWebComposition(): Promise<AppComposition> {
@@ -295,20 +315,11 @@ export async function createWebComposition(): Promise<AppComposition> {
           }),
         );
         const { loaded, marker } = observation;
-        const markerValue = marker?.value;
-        const markerMatches =
-          typeof markerValue === 'object' &&
-          markerValue !== null &&
-          Reflect.get(markerValue, 'actionId') === prepared.command.metadata.commandId &&
-          typeof Reflect.get(markerValue, 'stateRevision') === 'number';
-        if (
-          markerMatches &&
-          loaded.kind === 'committed' &&
-          Reflect.get(markerValue, 'stateRevision') ===
-            loaded.result.event?.metadata.stateRevision &&
-          loaded.result.event?.metadata.commandId === prepared.command.metadata.commandId &&
-          loaded.result.state.adventurerId === prepared.state.adventurerId
-        ) {
+        const classification = classifyCreationReconciliationObservation(loaded, marker?.value, {
+          actionId: prepared.command.metadata.commandId,
+          adventurerId: prepared.state.adventurerId,
+        });
+        if (classification === 'same-action' && loaded.kind === 'committed') {
           const durable = await baseSaveSlots.lookup(prepared.command.slotId);
           if (!durable.ok)
             return {
@@ -325,7 +336,7 @@ export async function createWebComposition(): Promise<AppComposition> {
         }
         // Absence is authoritative only when the same coherent observation contains neither
         // the marker nor any creation records. A present or malformed marker stays ambiguous.
-        if (loaded.kind === 'empty' && marker === undefined) {
+        if (classification === 'known-false') {
           updateSafety.failSave(prepared.command.slotId);
           reconciliationActions.delete(reconciliationToken);
           creationIdentities.delete(prepared.command.slotId);

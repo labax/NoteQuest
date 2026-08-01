@@ -80,7 +80,7 @@ async function expectNoOverlap(controls: Locator): Promise<void> {
   }
 }
 
-async function durableStoreCounts(page: import('@playwright/test').Page) {
+async function durableStoreContents(page: import('@playwright/test').Page) {
   return page.evaluate(async () => {
     const request = indexedDB.open('notequest-local-workspace');
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -93,16 +93,26 @@ async function durableStoreCounts(page: import('@playwright/test').Page) {
       const values = await Promise.all(
         names.map(
           (name) =>
-            new Promise<number>((resolve, reject) => {
-              const count = transaction.objectStore(name).count();
-              count.onsuccess = () => resolve(count.result);
-              count.onerror = () => reject(count.error);
+            new Promise<{ keys: IDBValidKey[]; values: unknown[] }>((resolve, reject) => {
+              const store = transaction.objectStore(name);
+              const keys = store.getAllKeys();
+              const records = store.getAll();
+              records.onsuccess = () => {
+                if (keys.readyState === 'done')
+                  resolve({ keys: keys.result, values: records.result as unknown[] });
+              };
+              keys.onsuccess = () => {
+                if (records.readyState === 'done')
+                  resolve({ keys: keys.result, values: records.result as unknown[] });
+              };
+              keys.onerror = () => reject(keys.error);
+              records.onerror = () => reject(records.error);
             }),
         ),
       );
       return Object.fromEntries(names.map((name, index) => [name, values[index]!])) as Record<
         (typeof names)[number],
-        number
+        { keys: IDBValidKey[]; values: unknown[] }
       >;
     } finally {
       database.close();
@@ -261,16 +271,31 @@ test('creates once and reloads identical durable evidence without extra writes',
   await expect(committed).toBeVisible();
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   const evidence = await page.locator('.creation-result').textContent();
-  const counts = await durableStoreCounts(page);
-  expect(counts.records).toBeGreaterThanOrEqual(7);
-  expect(counts.events).toBe(1);
-  expect(counts.snapshots).toBe(1);
-  expect(counts.workspace).toBeGreaterThanOrEqual(2);
+  const durable = await durableStoreContents(page);
+  expect(durable.records.values.length).toBeGreaterThanOrEqual(7);
+  expect(durable.events.values).toHaveLength(1);
+  expect(durable.snapshots.values).toHaveLength(1);
+  expect(durable.workspace.values.length).toBeGreaterThanOrEqual(2);
+  const evidenceRecord = durable.records.values.find(
+    (value) =>
+      typeof value === 'object' &&
+      value !== null &&
+      Reflect.get(value, 'recordType') === 'adventurer-creation-evidence',
+  );
+  const adventurerRecord = durable.records.values.find(
+    (value) =>
+      typeof value === 'object' &&
+      value !== null &&
+      Reflect.get(value, 'recordType') === 'adventurer',
+  );
+  expect(Reflect.get(Reflect.get(evidenceRecord!, 'body'), 'initialState')).toEqual(
+    Reflect.get(adventurerRecord!, 'body'),
+  );
 
   await page.reload();
   await expect(committed).toBeVisible();
   expect(await page.locator('.creation-result').textContent()).toBe(evidence);
-  expect(await durableStoreCounts(page)).toEqual(counts);
+  expect(await durableStoreContents(page)).toEqual(durable);
   await expectNoHorizontalOverflow(page);
 });
 

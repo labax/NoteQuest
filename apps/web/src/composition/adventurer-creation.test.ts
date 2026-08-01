@@ -8,7 +8,7 @@ import {
 } from '@notequest/content';
 import { NOTEQUEST_SLOT_IDS } from '@notequest/infrastructure';
 
-import { createWebComposition } from './index';
+import { classifyCreationReconciliationObservation, createWebComposition } from './index';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -45,10 +45,46 @@ describe('production adventurer creation composition', () => {
       expect(result.state.effects.map((effect) => effect.version)).toEqual(
         result.state.effects.map(() => result.state.contentVersion),
       );
-      await expect(port!.loadCommitted(NOTEQUEST_SLOT_IDS[0])).resolves.toMatchObject({
+      const loaded = await port!.loadCommitted(NOTEQUEST_SLOT_IDS[0]);
+      expect(loaded).toMatchObject({
         kind: 'committed',
         result: { state: result.ok ? result.state : undefined },
       });
+      if (loaded.kind !== 'committed' || loaded.result.event === undefined)
+        throw new Error('Expected committed creation fixture.');
+      const expected = {
+        actionId: loaded.result.event.metadata.commandId,
+        adventurerId: loaded.result.state.adventurerId,
+      };
+      expect(
+        classifyCreationReconciliationObservation(
+          { ...loaded, result: { ...loaded.result, stateRevision: 5 } },
+          {
+            actionId: expected.actionId,
+            stateRevision: loaded.result.event.metadata.stateRevision,
+          },
+          expected,
+        ),
+      ).toBe('same-action');
+      for (const marker of [
+        undefined,
+        null,
+        {},
+        { actionId: 'different-action', stateRevision: 1 },
+        { actionId: expected.actionId, stateRevision: 99 },
+      ]) {
+        expect(classifyCreationReconciliationObservation(loaded, marker, expected)).toBe('unknown');
+      }
+      expect(
+        classifyCreationReconciliationObservation({ kind: 'empty' }, undefined, expected),
+      ).toBe('known-false');
+      expect(
+        classifyCreationReconciliationObservation(
+          { kind: 'unavailable', message: 'read failed' },
+          { actionId: expected.actionId, stateRevision: 1 },
+          expected,
+        ),
+      ).toBe('unknown');
       expect(composition.services.updateSafety.getSnapshot()).toMatchObject({
         safePoint: 'durable',
         commandPending: false,

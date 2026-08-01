@@ -189,9 +189,58 @@ describe('adventurer creation persistence', () => {
       retentionClass: 'mechanical-history',
       body: { eventId: 'later.event' },
     });
+    const currentAdventurer = await database.records.get([
+      NOTEQUEST_SLOT_IDS[0],
+      'adventurer',
+      prepared.prepared.state.adventurerId,
+    ]);
+    if (currentAdventurer === undefined) throw new Error('Missing committed adventurer fixture.');
+    const laterTimestamp = '2026-07-29T01:00:00.000Z';
+    const updatedAdventurer = {
+      ...currentAdventurer,
+      updatedAt: laterTimestamp,
+      body: {
+        ...(currentAdventurer.body as Record<string, unknown>),
+        currentHp: prepared.prepared.state.maxHp - 1,
+        torches: 9,
+        location: 'palace.entrance',
+      },
+    };
+    await database.records.put(updatedAdventurer);
+    await database.records.bulkPut([
+      {
+        slotId: NOTEQUEST_SLOT_IDS[0],
+        recordType: 'random-stream',
+        recordId: 'later.stream',
+        updatedAt: laterTimestamp,
+        body: { streamId: 'later.stream', purpose: 'dungeon-generation', drawCount: 1 },
+      },
+      {
+        slotId: NOTEQUEST_SLOT_IDS[0],
+        recordType: 'random-result',
+        recordId: 'later.result',
+        updatedAt: laterTimestamp,
+        body: { streamId: 'later.stream', naturalDice: [4], finalValue: 4 },
+      },
+    ]);
+    await database.snapshots.put({
+      slotId: NOTEQUEST_SLOT_IDS[0],
+      snapshotClass: 'last-valid',
+      createdAt: laterTimestamp,
+      schemaVersion: 1,
+      sourceRevision: 2,
+      body: { schema: 'cumulative-state-v1', stateRecords: [updatedAdventurer] },
+    });
+    const laterSlot = await database.slots.get(NOTEQUEST_SLOT_IDS[0]);
+    if (laterSlot === undefined) throw new Error('Missing committed slot fixture.');
+    await database.slots.put({ ...laterSlot, revision: 2, updatedAt: laterTimestamp });
     await expect(reloadedService.loadCommitted(NOTEQUEST_SLOT_IDS[0])).resolves.toMatchObject({
       kind: 'committed',
-      result: { event: prepared.prepared.event },
+      result: {
+        stateRevision: 2,
+        state: { currentHp: prepared.prepared.state.maxHp - 1, torches: 9 },
+        event: prepared.prepared.event,
+      },
     });
     const durableBeforeInspection = {
       records: await database.records.toArray(),
@@ -200,7 +249,11 @@ describe('adventurer creation persistence', () => {
     };
     await expect(reloadedService.loadCommitted(NOTEQUEST_SLOT_IDS[0])).resolves.toMatchObject({
       kind: 'committed',
-      result: { ok: true, state: prepared.prepared.state, evidence: prepared.prepared.evidence },
+      result: {
+        ok: true,
+        state: { currentHp: prepared.prepared.state.maxHp - 1, torches: 9 },
+        evidence: prepared.prepared.evidence,
+      },
     });
     expect(await database.records.toArray()).toEqual(durableBeforeInspection.records);
     expect(await database.events.toArray()).toEqual(durableBeforeInspection.events);
