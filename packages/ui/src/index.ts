@@ -16,6 +16,8 @@ export type {
   AnnouncementService,
   FocusContainment,
 } from './accessibility';
+export { AdventurerCreation } from './adventurer-creation';
+export type { AdventurerCreationProps, AdventurerCreationUiPort } from './adventurer-creation';
 
 export const uiLayerName = 'ui' as const;
 

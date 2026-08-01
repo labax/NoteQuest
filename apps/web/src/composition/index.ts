@@ -5,7 +5,7 @@ import {
   type UpdateSafetyStatePort,
 } from '@notequest/application';
 import type { SaveSlotId } from '@notequest/domain';
-import type { RouteAdapter } from '@notequest/ui';
+import type { AdventurerCreationUiPort, RouteAdapter } from '@notequest/ui';
 import {
   createDexieSaveSlotService,
   createNoteQuestDatabase,
@@ -27,6 +27,8 @@ export interface AppServices {
   readonly saveSlots: SaveSlotService;
   readonly saveSlotOperations: SaveSlotOperationStatusPort;
   readonly updateSafety: UpdateSafetyStatePort;
+  /** Available once approved Palace creation content is composed at the web boundary. */
+  readonly adventurerCreation?: AdventurerCreationUiPort;
 }
 
 export interface AppComposition {

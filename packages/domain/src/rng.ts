@@ -10,6 +10,10 @@ export const randomStreamDerivationId = 'notequest-pcg32-named-stream' as const;
 export const randomStreamDerivationVersion = '1' as const;
 
 export const randomStreamPurposeRegistry = {
+  adventurerCreation: {
+    name: 'adventurer-creation',
+    description: 'Canonical adventurer race, class, and starting-effect rolls.',
+  },
   dungeonGeneration: {
     name: 'dungeon-generation',
     description: 'Dungeon graph, room, door, trap, and table generation outcomes.',
