@@ -153,7 +153,7 @@ test('navigates every top-level destination after a synthetic empty slot is sele
   page,
 }) => {
   await page.getByRole('article').first().getByRole('button', { name: 'Start new game' }).click();
-  await expect(page.getByRole('heading', { name: 'Create adventurer' })).toBeFocused();
+  await expect(page.getByLabel('Adventurer name')).toBeFocused();
 
   for (const destination of shellFixture.unlockedDestinations) {
     const control = page.getByRole('button', { name: destination.heading, exact: true });
