@@ -11,6 +11,7 @@ import {
   generateAndEnterPalace,
   loadPalaceRun,
   projectPalaceMapSurfaces,
+  resolvePalaceFinalLightTransition,
 } from './palace-generation.ts';
 
 const content = {
@@ -18,7 +19,22 @@ const content = {
   contentVersion: '0.1.0',
   rulesVersion: 'digital-rules-specification-v0.1',
   entranceDefinitionId: 'palace.entrance.prototype',
-  entranceConnectionCount: 2,
+  entranceConnections: [
+    {
+      definitionId: 'palace.fixture.connection-a',
+      directionLabel: 'Exit A',
+      connectionState: 'unresolved',
+      doorState: 'unknown',
+      alertState: 'quiet',
+    },
+    {
+      definitionId: 'palace.fixture.connection-b',
+      directionLabel: 'Exit B',
+      connectionState: 'unresolved',
+      doorState: 'unknown',
+      alertState: 'quiet',
+    },
+  ],
   validationEvidence: ['manifest:palace@0.1.0', 'range:entrance.connections=2'],
 } as const;
 
@@ -67,6 +83,40 @@ function coordinator(
 }
 
 describe('Palace generation and entry application flow', () => {
+  it.each([
+    [
+      'ordinary entry',
+      { torchesBeforeEntry: 2, lightCharges: [], hasPersistentLamp: false, isMiner: false },
+      'continue',
+    ],
+    [
+      'Light charge conversion',
+      {
+        torchesBeforeEntry: 1,
+        lightCharges: [{ chargeId: 'light-1', available: true }],
+        hasPersistentLamp: false,
+        isMiner: false,
+      },
+      'light-charge-cast',
+    ],
+    [
+      'persistent lamp',
+      { torchesBeforeEntry: 1, lightCharges: [], hasPersistentLamp: true, isMiner: false },
+      'lamp-sustained',
+    ],
+    [
+      'Miner emergency exit',
+      { torchesBeforeEntry: 1, lightCharges: [], hasPersistentLamp: false, isMiner: true },
+      'miner-emergency-exit',
+    ],
+    [
+      'ordinary darkness death',
+      { torchesBeforeEntry: 1, lightCharges: [], hasPersistentLamp: false, isMiner: false },
+      'darkness-death',
+    ],
+  ] as const)('resolves %s after entry atomically', (_label, input, outcome) => {
+    expect(resolvePalaceFinalLightTransition(input)).toMatchObject({ outcome });
+  });
   it.each(['0x0000000000000001', '0xffffffffffffffff'])(
     'is deterministic for representative seed %s',
     async (seed) => {
@@ -195,9 +245,11 @@ describe('Palace generation and entry application flow', () => {
     if (!generated.ok) throw new Error(generated.error.message);
     const envelope = target.commit.mock.calls[0]?.[0];
     const persisted = new Map(
-      [...(envelope?.stateRecords ?? []), ...(envelope?.randomStreamRecords ?? [])].map(
-        (record) => [`${record.recordType}:${record.recordId}`, structuredClone(record)],
-      ),
+      [
+        ...(envelope?.stateRecords ?? []),
+        ...(envelope?.randomStreamRecords ?? []),
+        ...(envelope?.randomResultRecords ?? []),
+      ].map((record) => [`${record.recordType}:${record.recordId}`, structuredClone(record)]),
     );
     const get = vi.fn(async (_slotId: SaveSlotId, recordType: string, recordId: string) => {
       const value = persisted.get(`${recordType}:${recordId}`);
@@ -212,7 +264,7 @@ describe('Palace generation and entry application flow', () => {
       { get },
     );
     expect(reloaded).toMatchObject({ ok: true, dungeon: generated.dungeon });
-    expect(get).toHaveBeenCalledTimes(8);
+    expect(get).toHaveBeenCalledTimes(9);
   });
 
   it('rejects mismatched persisted components and leaves committed records untouched', async () => {
@@ -223,6 +275,7 @@ describe('Palace generation and entry application flow', () => {
     const records: PersistedRecord[] = [
       ...(envelope?.stateRecords ?? []),
       ...(envelope?.randomStreamRecords ?? []),
+      ...(envelope?.randomResultRecords ?? []),
     ].map((record) => structuredClone(record));
     const connectionIndex = records.findIndex(
       (record) => record.recordType === 'dungeon-connection',

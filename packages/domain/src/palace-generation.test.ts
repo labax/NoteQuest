@@ -22,12 +22,35 @@ function content(entranceConnectionCount: number) {
     contentVersion: '0.1.0',
     rulesVersion: 'digital-rules-specification-v0.1',
     entranceDefinitionId: 'palace.entrance.prototype' as const,
-    entranceConnectionCount,
+    entranceConnections: Array.from({ length: entranceConnectionCount }, (_value, index) => ({
+      definitionId: `palace.fixture.connection-${index + 1}` as const,
+      directionLabel: `Fixture exit ${index + 1}`,
+      connectionState: 'unresolved' as const,
+      doorState: 'unknown' as const,
+      alertState: 'quiet' as const,
+    })),
     validationEvidence: ['fixture:palace-generation-seeds@v0.1'],
   };
 }
 
 describe('Palace generation seed fixtures', () => {
+  it('keeps connection identities stable when entrance definitions are reordered', () => {
+    const originalContent = content(3);
+    const reorderedContent = {
+      ...originalContent,
+      entranceConnections: [...originalContent.entranceConnections].reverse(),
+    };
+    const original = generatePalaceDungeon('0x0000000000000001', originalContent);
+    const reordered = generatePalaceDungeon('0x0000000000000001', reorderedContent);
+    if (!original.ok || !reordered.ok) throw new Error('expected valid fixtures');
+    const identities = (connections: typeof original.dungeon.connections) =>
+      Object.fromEntries(
+        connections.map((connection) => [connection.definitionId, connection.connectionId]),
+      );
+    expect(identities(reordered.dungeon.connections)).toEqual(
+      identities(original.dungeon.connections),
+    );
+  });
   it.each(seedFixtures.filter((fixture) => fixture.kind !== 'failure'))(
     'reproduces $id',
     (fixture) => {

@@ -80,6 +80,46 @@ async function expectNoOverlap(controls: Locator): Promise<void> {
   }
 }
 
+async function durableStoreContents(page: import('@playwright/test').Page) {
+  return page.evaluate(async () => {
+    const request = indexedDB.open('notequest-local-workspace');
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const names = ['workspace', 'slots', 'records', 'events', 'snapshots'] as const;
+      const transaction = database.transaction(names, 'readonly');
+      const values = await Promise.all(
+        names.map(
+          (name) =>
+            new Promise<{ keys: IDBValidKey[]; values: unknown[] }>((resolve, reject) => {
+              const store = transaction.objectStore(name);
+              const keys = store.getAllKeys();
+              const records = store.getAll();
+              records.onsuccess = () => {
+                if (keys.readyState === 'done')
+                  resolve({ keys: keys.result, values: records.result as unknown[] });
+              };
+              keys.onsuccess = () => {
+                if (records.readyState === 'done')
+                  resolve({ keys: keys.result, values: records.result as unknown[] });
+              };
+              keys.onerror = () => reject(keys.error);
+              records.onerror = () => reject(records.error);
+            }),
+        ),
+      );
+      return Object.fromEntries(names.map((name, index) => [name, values[index]!])) as Record<
+        (typeof names)[number],
+        { keys: IDBValidKey[]; values: unknown[] }
+      >;
+    } finally {
+      database.close();
+    }
+  });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto(shellFixture.initialPath);
   await expect(page.getByRole('heading', { name: shellFixture.initialHeading })).toBeVisible();
@@ -153,7 +193,7 @@ test('navigates every top-level destination after a synthetic empty slot is sele
   page,
 }) => {
   await page.getByRole('article').first().getByRole('button', { name: 'Start new game' }).click();
-  await expect(page.getByRole('heading', { name: 'Create adventurer' })).toBeFocused();
+  await expect(page.getByLabel('Adventurer name')).toBeFocused();
 
   for (const destination of shellFixture.unlockedDestinations) {
     const control = page.getByRole('button', { name: destination.heading, exact: true });
@@ -219,6 +259,73 @@ test('reloads the selected route without losing save-slot readiness', async ({ p
   await expect(page.getByRole('article')).toHaveCount(3);
   await expect(page.getByRole('article').first()).toContainText('Empty — no local adventure yet.');
   await expect(page).toHaveTitle('Save Slots · NoteQuest');
+});
+
+test('creates once and reloads identical durable evidence without extra writes', async ({
+  page,
+}) => {
+  await page.getByRole('article').first().getByRole('button', { name: 'Start new game' }).click();
+  await page.getByLabel('Adventurer name').fill('Browser Hero');
+  await page.getByRole('button', { name: 'Create and save adventurer' }).click();
+  const committed = page.getByRole('heading', { name: 'Browser Hero' });
+  await expect(committed).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  const evidence = await page.locator('.creation-result').textContent();
+  const durable = await durableStoreContents(page);
+  expect(durable.records.values.length).toBeGreaterThanOrEqual(7);
+  expect(durable.events.values).toHaveLength(1);
+  expect(durable.snapshots.values).toHaveLength(1);
+  expect(durable.workspace.values.length).toBeGreaterThanOrEqual(2);
+  const evidenceRecord = durable.records.values.find(
+    (value) =>
+      typeof value === 'object' &&
+      value !== null &&
+      Reflect.get(value, 'recordType') === 'adventurer-creation-evidence',
+  );
+  const adventurerRecord = durable.records.values.find(
+    (value) =>
+      typeof value === 'object' &&
+      value !== null &&
+      Reflect.get(value, 'recordType') === 'adventurer',
+  );
+  expect(Reflect.get(Reflect.get(evidenceRecord!, 'body'), 'initialState')).toEqual(
+    Reflect.get(adventurerRecord!, 'body'),
+  );
+
+  await page.reload();
+  await expect(committed).toBeVisible();
+  expect(await page.locator('.creation-result').textContent()).toBe(evidence);
+  expect(await durableStoreContents(page)).toEqual(durable);
+  await expectNoHorizontalOverflow(page);
+});
+
+test('creates an adventurer, enters Palace, switches equivalent maps, and reloads the same run', async ({
+  page,
+}) => {
+  await page.getByRole('article').first().getByRole('button', { name: 'Start new game' }).click();
+  await page.getByLabel('Adventurer name').fill('Palace Browser Hero');
+  await page.getByRole('button', { name: 'Create and save adventurer' }).click();
+  await expect(page.getByRole('heading', { name: 'Palace Browser Hero' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to town' }).click();
+  await expect(page.getByRole('button', { name: 'Enter Palace' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Enter Palace' }).click();
+  await expect(page.getByRole('heading', { name: 'Palace map' })).toBeVisible();
+  const visualPosition = page.getByRole('heading', { name: 'Current position: Entrance' });
+  await expect(visualPosition).toBeVisible();
+  const visualActions = await page.getByRole('button', { name: /Open exit/ }).allTextContents();
+  await page.getByRole('button', { name: 'Textual map' }).click();
+  await expect(page.getByRole('heading', { name: 'Current position: Entrance' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Connections' })).toBeVisible();
+  expect(await page.getByRole('button', { name: /Open exit/ }).allTextContents()).toEqual(
+    visualActions,
+  );
+  const beforeReload = await durableStoreContents(page);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Palace map' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Current position: Entrance' })).toBeVisible();
+  const afterReload = await durableStoreContents(page);
+  expect(afterReload.events.values).toEqual(beforeReload.events.values);
+  expect(afterReload.records.values).toEqual(beforeReload.records.values);
 });
 
 test('falls back safely from an unknown top-level route', async ({ page }) => {

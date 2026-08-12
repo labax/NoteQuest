@@ -13,7 +13,22 @@ function model() {
     contentVersion: '0.1.0',
     rulesVersion: 'digital-rules-specification-v0.1',
     entranceDefinitionId: 'palace.entrance.prototype',
-    entranceConnectionCount: 2,
+    entranceConnections: [
+      {
+        definitionId: 'palace.fixture.connection-a',
+        directionLabel: 'Exit A',
+        connectionState: 'unresolved',
+        doorState: 'unknown',
+        alertState: 'quiet',
+      },
+      {
+        definitionId: 'palace.fixture.connection-b',
+        directionLabel: 'Exit B',
+        connectionState: 'unresolved',
+        doorState: 'unknown',
+        alertState: 'quiet',
+      },
+    ],
     validationEvidence: ['synthetic-test-evidence'],
   });
   if (!generated.ok) throw new Error(generated.error.message);

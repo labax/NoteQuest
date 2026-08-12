@@ -12,7 +12,13 @@ export interface ValidatedPalaceGenerationContent {
   readonly contentVersion: string;
   readonly rulesVersion: string;
   readonly entranceDefinitionId: `palace.${string}`;
-  readonly entranceConnectionCount: number;
+  readonly entranceConnections: readonly {
+    readonly definitionId: `palace.${string}`;
+    readonly directionLabel: string;
+    readonly connectionState: 'unresolved';
+    readonly doorState: 'unknown';
+    readonly alertState: 'quiet';
+  }[];
   readonly validationEvidence: readonly string[];
 }
 
@@ -31,6 +37,10 @@ export interface PalaceConnectionState {
   readonly destinationSegmentId: null;
   readonly state: 'unresolved';
   readonly directionLabel: string;
+  readonly definitionId: `palace.${string}`;
+  readonly definitionVersion: string;
+  readonly doorState: 'unknown';
+  readonly alertState: 'quiet';
 }
 
 export interface PalaceFloorState {
@@ -114,8 +124,10 @@ export function generatePalaceDungeon(
     ]);
   }
   if (
-    !Number.isSafeInteger(content.entranceConnectionCount) ||
-    content.entranceConnectionCount < 1
+    !Array.isArray(content.entranceConnections) ||
+    content.entranceConnections.length < 1 ||
+    new Set(content.entranceConnections.map((connection) => connection.definitionId)).size !==
+      content.entranceConnections.length
   ) {
     return failure('invalid_entrance', 'The Palace entrance needs a connection.', [
       'validate-entrance-connection-count',
@@ -138,16 +150,20 @@ export function generatePalaceDungeon(
     const entranceId = deterministicUuid(draws[0] ?? 0, 'entrance');
     const floorId = deterministicUuid(draws[0] ?? 0, 'floor-1');
     const connections: PalaceConnectionState[] = [];
-    for (let index = 0; index < content.entranceConnectionCount; index += 1) {
+    for (const definition of content.entranceConnections) {
       const draw = rng.next();
       rng = draw.state;
       draws.push(draw.value);
       connections.push({
-        connectionId: deterministicUuid(draw.value, `connection-${index}`),
+        connectionId: deterministicUuid(entranceDraw.value, definition.definitionId),
         sourceSegmentId: entranceId,
         destinationSegmentId: null,
         state: 'unresolved',
-        directionLabel: `Exit ${index + 1}`,
+        directionLabel: definition.directionLabel,
+        definitionId: definition.definitionId,
+        definitionVersion: content.contentVersion,
+        doorState: definition.doorState,
+        alertState: definition.alertState,
       });
     }
     return {

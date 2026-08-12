@@ -1,35 +1,32 @@
-# STORY-M6-002 subtask 6 verification
+# STORY-M6-002 integrated verification
 
 Verification date: 2026-08-12
+Integrated base: `develop` at `b49d8c56fbe69b8ade28dc3315567633358d6820`.
 
 ## Passing checks
 
 - `npm run format:check`
 - `npm run lint`
 - `npm run typecheck`
-- `npm test` — 39 files and 427 tests passed, including Palace generation, entry guards,
-  persistence/reload, and visual/textual map component parity.
-- `NOTEQUEST_RELEASE_ID=81abcdef81abcdef81abcdef81abcdef81abcdef npm run build` — static
-  web build, PWA artifact verification, and production fault-boundary verification passed.
-- `npm run test:browser:smoke` — 23 Chromium desktop and phone shell smoke tests passed after
-  installing the Playwright Chromium runtime and its system dependencies.
+- `npm test` — 47 files and 541 tests passed after integration with the issue #80 adventurer flow.
+- `npm run simulation:palace-smoke` — the two configured deterministic harness seeds completed and reports were written.
+- `NOTEQUEST_RELEASE_ID=81abcdef81abcdef81abcdef81abcdef81abcdef npm run build` — static build, PWA artifact verification, and production fault-boundary verification passed.
 
-## Documented gaps
+## Browser evidence
 
-- `npm run simulation:palace-smoke` cannot currently start under Node's strip-only TypeScript
-  runner because `packages/application/src/action-commit-queue.ts` uses a TypeScript parameter
-  property. This is a simulation-runner/tooling gap; the command exits before selecting or running
-  either smoke seed.
-- The current simulation smoke is a two-seed harness smoke, not the required 100,000-seed Palace
-  termination and boss-reachability release gate. The implemented generator currently covers the
-  entrance topology only, so claiming the full generation-volume gate would be incorrect.
-- The production web shell does not yet compose a loaded Palace run into the expedition route.
-  Component, application, persistence, and generic shell browser checks pass, but there is no
-  end-to-end browser Palace entry/map journey to execute in this subtask.
+A production browser journey now creates and saves the issue #80 adventurer, continues to Town,
+enters the Palace through canonical persisted state, switches between equivalent visual/textual map
+surfaces, reloads, and compares the durable records/events before and after reload. It is included in
+`tests/browser/shell.spec.ts` for desktop, 360 px, and 390 px Chromium projects.
 
-## Environment remediation
+The browser command could not be completed in the final container state because the Playwright
+Chromium runtime dependency `libatk-1.0.so.0` is absent. An earlier run after installing Playwright
+system dependencies passed the existing 23 shell checks; system packages were not retained by the
+execution environment. This is an environment limitation, not a suppressed application failure.
 
-`npm install` aligned the installed `react` and `react-dom` versions at the lockfile's 19.2.7
-resolution. The Palace map test was also assigned the repository's jsdom test environment, matching the
-existing React accessibility suite. These changes allow the complete Vitest suite to execute rather
-than failing during test setup.
+## Honest remaining gates
+
+The two-seed simulation smoke is not the 100,000-seed multi-floor termination and boss-reachability
+release gate. This story persists a governed entrance topology; later incremental floor generation
+must complete before that release gate can be claimed. Issue #81 and epic #36 remain open for review,
+and this work does not bypass the separate release blocker #170.

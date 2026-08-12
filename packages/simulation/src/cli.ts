@@ -3,7 +3,6 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { applicationLayerName } from '@notequest/application';
 import { bundledContentStatus, palaceManifestExpectedHashFixtures } from '@notequest/content';
 import {
   createNamedRandomStream,
@@ -13,7 +12,8 @@ import {
   randomStreamDerivationVersion,
   randomStreamPurposeRegistry,
 } from '@notequest/domain';
-import { serializeCanonicalJson, sha256Hasher } from '@notequest/infrastructure';
+import { serializeCanonicalJson } from '../../infrastructure/src/canonical-json.ts';
+import { sha256Hasher } from '../../infrastructure/src/sha256.ts';
 import {
   getContiguousIndexPartitionSlice,
   makeSeedManifestHashPayload,
@@ -22,6 +22,8 @@ import {
   type SeedManifest,
   validateSeedManifest,
 } from './index.ts';
+
+const applicationLayerName = 'application' as const;
 
 const usageText = `NoteQuest simulation CLI
 

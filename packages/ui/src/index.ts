@@ -18,6 +18,8 @@ export type {
 } from './accessibility';
 export { PalaceMap, TextualPalaceMap, VisualPalaceMap } from './palace-map';
 export type { PalaceMapProps } from './palace-map';
+export { AdventurerCreation } from './adventurer-creation';
+export type { AdventurerCreationProps, AdventurerCreationUiPort } from './adventurer-creation';
 
 export const uiLayerName = 'ui' as const;
 

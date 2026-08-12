@@ -5,7 +5,13 @@ export interface PalaceGenerationContentDefinition {
   readonly contentVersion: string;
   readonly rulesVersion: string;
   readonly entranceDefinitionId: `palace.${string}`;
-  readonly entranceConnectionCount: number;
+  readonly entranceConnections: readonly {
+    readonly definitionId: `palace.${string}`;
+    readonly directionLabel: string;
+    readonly connectionState: 'unresolved';
+    readonly doorState: 'unknown';
+    readonly alertState: 'quiet';
+  }[];
   readonly validationEvidence: readonly string[];
 }
 
@@ -41,14 +47,14 @@ export function validatePalaceGenerationContent(
     };
   }
   const entrance = entrances[0]!;
-  const connectionCount = entrance?.structuredDefinition['connectionCount'];
-  if (!Number.isSafeInteger(connectionCount) || (connectionCount as number) < 1) {
+  const connections = entrance.structuredDefinition['connections'];
+  if (!isEntranceConnections(connections)) {
     return {
       ok: false,
       errors: [
         {
-          field: `${entrance?.id ?? 'entrance'}.structuredDefinition.connectionCount`,
-          reason: 'entrance connectionCount must be a positive safe integer',
+          field: `${entrance.id}.structuredDefinition.connections`,
+          reason: 'entrance connections must have unique stable definitions and valid states',
         },
       ],
     };
@@ -61,11 +67,35 @@ export function validatePalaceGenerationContent(
       contentVersion: manifest.contentVersion,
       rulesVersion: manifest.rulesVersion,
       entranceDefinitionId: entrance.id,
-      entranceConnectionCount: connectionCount as number,
+      entranceConnections: connections,
       validationEvidence: [
         `manifest:${manifest.packageId}@${manifest.contentVersion}`,
         `entry:${entrance.id}@${entrance.version}`,
       ],
     },
   };
+}
+
+function isEntranceConnections(
+  value: unknown,
+): value is PalaceGenerationContentDefinition['entranceConnections'] {
+  if (!Array.isArray(value) || value.length < 1) return false;
+  const definitions = value.map((candidate) =>
+    typeof candidate === 'object' && candidate !== null
+      ? Reflect.get(candidate, 'definitionId')
+      : undefined,
+  );
+  return (
+    definitions.every(
+      (definition) => typeof definition === 'string' && definition.startsWith('palace.'),
+    ) &&
+    new Set(definitions).size === definitions.length &&
+    value.every(
+      (candidate) =>
+        typeof Reflect.get(candidate, 'directionLabel') === 'string' &&
+        Reflect.get(candidate, 'connectionState') === 'unresolved' &&
+        Reflect.get(candidate, 'doorState') === 'unknown' &&
+        Reflect.get(candidate, 'alertState') === 'quiet',
+    )
+  );
 }
