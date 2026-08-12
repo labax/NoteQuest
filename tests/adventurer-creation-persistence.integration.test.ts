@@ -229,7 +229,20 @@ describe('adventurer creation persistence', () => {
       createdAt: laterTimestamp,
       schemaVersion: 1,
       sourceRevision: 2,
-      body: { schema: 'cumulative-state-v1', stateRecords: [updatedAdventurer] },
+      body: {
+        schema: 'cumulative-state-v1',
+        stateRecords: [
+          updatedAdventurer,
+          ...(await database.records
+            .where('[slotId+recordType]')
+            .equals([NOTEQUEST_SLOT_IDS[0], 'adventurer-profile'])
+            .toArray()),
+          ...(await database.records
+            .where('[slotId+recordType]')
+            .equals([NOTEQUEST_SLOT_IDS[0], 'adventurer-creation-evidence'])
+            .toArray()),
+        ],
+      },
     });
     const laterSlot = await database.slots.get(NOTEQUEST_SLOT_IDS[0]);
     if (laterSlot === undefined) throw new Error('Missing committed slot fixture.');

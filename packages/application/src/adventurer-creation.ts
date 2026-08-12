@@ -449,7 +449,6 @@ function isCanonicalAdventurerState(value: unknown): value is CanonicalAdventure
     nonEmptyUniqueStrings(value.armourItemIds) &&
     (value.death === null || (object(value.death) && isJsonValue(value.death))) &&
     Array.isArray(value.equipment) &&
-    value.equipment.length === 1 &&
     value.equipment.every(
       (item) =>
         object(item) &&
@@ -467,14 +466,6 @@ function isCanonicalAdventurerState(value: unknown): value is CanonicalAdventure
     ) &&
     new Set((value.equipment as readonly { readonly itemId: string }[]).map((item) => item.itemId))
       .size === (value.equipment as readonly unknown[]).length &&
-    [
-      ...(value.backpackItemIds as readonly string[]),
-      ...(value.armourItemIds as readonly string[]),
-    ].every((itemId) =>
-      (value.equipment as readonly { readonly itemId: string }[]).some(
-        (item) => item.itemId === itemId,
-      ),
-    ) &&
     Array.isArray(value.spellCharges) &&
     value.spellCharges.every(
       (charge) =>
@@ -711,46 +702,15 @@ function governedCreationPlan(
 }
 
 function currentStateRetainsCreationSemantics(
-  content: AdventurerCreationContent,
   current: CanonicalAdventurerState,
   initial: CanonicalAdventurerState,
 ): boolean {
-  const initialWeapon = initial.equipment[0];
-  const currentWeapon = current.equipment.find((item) => item.itemId === initialWeapon?.itemId);
-  const knownSpells = new Map(
-    Object.values(content.spells).map((spell) => [spell.id, spell.label] as const),
-  );
   return (
     current.adventurerId === initial.adventurerId &&
     current.raceId === initial.raceId &&
     current.classId === initial.classId &&
     current.rulesVersion === initial.rulesVersion &&
-    current.contentVersion === initial.contentVersion &&
-    initialWeapon !== undefined &&
-    currentWeapon !== undefined &&
-    currentWeapon.definitionId === initialWeapon.definitionId &&
-    currentWeapon.label === initialWeapon.label &&
-    currentWeapon.hands === initialWeapon.hands &&
-    sameValue(currentWeapon.damage, initialWeapon.damage) &&
-    initial.spellCharges.every((initialCharge) => {
-      const currentCharge = current.spellCharges.find(
-        (charge) => charge.chargeId === initialCharge.chargeId,
-      );
-      return (
-        currentCharge !== undefined &&
-        currentCharge.definitionId === initialCharge.definitionId &&
-        currentCharge.label === initialCharge.label &&
-        currentCharge.source === initialCharge.source
-      );
-    }) &&
-    current.spellCharges.every((charge) => knownSpells.get(charge.definitionId) === charge.label) &&
-    initial.effectIds.every((id) => current.effectIds.includes(id)) &&
-    current.effects.every(
-      (effect, index) =>
-        effect.id === current.effectIds[index] &&
-        content.effects[effect.id] !== undefined &&
-        sameValue(effect, content.effects[effect.id]),
-    )
+    current.contentVersion === initial.contentVersion
   );
 }
 
@@ -1364,6 +1324,18 @@ export class AdventurerCreationService {
         isCanonicalAdventurerState(record.body) &&
         sameValue(record, stateRecord),
     );
+    const snapshotAdventurerClaims = snapshotBody.stateRecords.filter(
+      (record) => record.recordType === 'adventurer' && record.recordId === stateBody.adventurerId,
+    );
+    const snapshotProfileClaims = snapshotBody.stateRecords.filter(
+      (record) =>
+        record.recordType === 'adventurer-profile' && record.recordId === stateBody.adventurerId,
+    );
+    const snapshotEvidenceClaims = snapshotBody.stateRecords.filter(
+      (record) =>
+        record.recordType === 'adventurer-creation-evidence' &&
+        record.recordId === stateBody.adventurerId,
+    );
     const snapshotCreationRecordsMatch =
       (snapshotBody.randomStreamRecords ?? []).filter(
         (record) => record.recordId === creationStreamId && sameValue(record, streamRecord),
@@ -1395,7 +1367,7 @@ export class AdventurerCreationService {
       evidenceBody.event.adventurerId !== stateBody.adventurerId ||
       !sameValue(evidenceBody.event, eventBody) ||
       !creationSemanticsMatch(this.dependencies.content, creationState, evidenceBody.evidence) ||
-      !currentStateRetainsCreationSemantics(this.dependencies.content, stateBody, creationState) ||
+      !currentStateRetainsCreationSemantics(stateBody, creationState) ||
       creationState.rulesVersion !== this.dependencies.rulesVersion ||
       creationState.contentVersion !== this.dependencies.contentVersion ||
       eventBody.metadata.eventId !== evidenceBody.event.metadata.eventId ||
@@ -1418,6 +1390,10 @@ export class AdventurerCreationService {
       }) ||
       eventBody.metadata.sequence !== eventRecord?.sequence ||
       eventBody.metadata.occurredAt !== eventRecord?.timestamp ||
+      eventRecord?.slotId !== slotId ||
+      eventRecord?.eventType !== 'adventurer_created' ||
+      eventRecord?.aggregateType !== 'adventurer' ||
+      eventRecord?.aggregateId !== stateBody.adventurerId ||
       eventRecord?.retentionClass !== 'mechanical-history' ||
       (eventRecord?.timestamp !== stateRecord.updatedAt && snapshotIsCreation) ||
       profileRecord.updatedAt !== eventRecord?.timestamp ||
@@ -1478,6 +1454,12 @@ export class AdventurerCreationService {
         .some((record) => record.updatedAt !== eventBody.metadata.occurredAt) ||
       snapshot.value.sourceRevision < creationRevision ||
       snapshotCurrentStates.length !== 1 ||
+      snapshotAdventurerClaims.length !== 1 ||
+      snapshotProfileClaims.length !== 1 ||
+      snapshotEvidenceClaims.length !== 1 ||
+      (!snapshotIsCreation &&
+        (!sameValue(snapshotProfileClaims[0], profileRecord) ||
+          !sameValue(snapshotEvidenceClaims[0], evidenceRecord))) ||
       (snapshotIsCreation &&
         (snapshotBody.stateRecords.length !== 3 ||
           (snapshotBody.randomStreamRecords ?? []).length !== 1 ||

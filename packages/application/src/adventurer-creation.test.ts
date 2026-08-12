@@ -238,6 +238,9 @@ function harness(commitFailure = false, creationContent = content) {
     addEvent(value: EventRecord) {
       committedEvents.push(value);
     },
+    get committedEvents() {
+      return committedEvents;
+    },
     removeEvent(index: number) {
       committedEvents.splice(index, 1);
     },
@@ -498,6 +501,37 @@ describe('AdventurerCreationService', () => {
     expect(context.commitCalls).toBe(writes);
     expect(context.records).toHaveLength(recordCount);
   });
+
+  it.each([
+    ['eventType', (event: EventRecord) => ({ ...event, eventType: 'palace_entered' })],
+    ['aggregateType', (event: EventRecord) => ({ ...event, aggregateType: 'dungeon' })],
+    ['aggregateId', (event: EventRecord) => ({ ...event, aggregateId: 'other-adventurer' })],
+    ['slotId', (event: EventRecord) => ({ ...event, slotId: 'other-slot' as SaveSlotId })],
+    ['sequence', (event: EventRecord) => ({ ...event, sequence: 2 })],
+    ['timestamp', (event: EventRecord) => ({ ...event, timestamp: '2026-07-30T00:00:00.000Z' })],
+  ] as const)(
+    'rejects corrupted creation event envelope %s without restore side effects',
+    async (_label, corrupt) => {
+      const context = harness();
+      const prepared = await context.service.prepare(command());
+      if (!prepared.ok) throw new Error(prepared.message);
+      await context.service.commit(prepared.prepared);
+      context.committedEvents[0] = corrupt(context.committedEvents[0]!);
+      const before = {
+        records: context.records.length,
+        commits: context.commitCalls,
+        ids: context.idAllocations,
+        clocks: context.clockReads,
+      };
+      await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+        kind: 'incoherent',
+      });
+      expect(context.records).toHaveLength(before.records);
+      expect(context.commitCalls).toBe(before.commits);
+      expect(context.idAllocations).toBe(before.ids);
+      expect(context.clockReads).toBe(before.clocks);
+    },
+  );
 
   it.each([
     [
@@ -905,7 +939,40 @@ describe('AdventurerCreationService', () => {
         ...(priorRecord.body as Record<string, unknown>),
         currentHp: prepared.prepared.state.maxHp - 1,
         torches: 9,
+        coins: 4,
+        status: 'alive',
         location: 'palace.entrance',
+        equipment: [
+          {
+            itemId: 'later-item',
+            definitionId: 'palace.item',
+            label: 'Later item',
+            equipped: false,
+            hands: 0,
+            damage: { diceCount: 0, dieSides: 1, modifier: 0, damageType: 'none' },
+          },
+          {
+            itemId: 'later-weapon',
+            definitionId: 'palace.weapon',
+            label: 'Later weapon',
+            equipped: true,
+            hands: 1,
+            damage: { diceCount: 1, dieSides: 4, modifier: 0, damageType: 'physical' },
+          },
+        ],
+        backpackItemIds: ['later-item'],
+        spellCharges: [],
+        effectIds: ['palace.effect'],
+        effects: [
+          {
+            id: 'palace.effect',
+            label: 'Later gameplay effect',
+            version: contentVersion,
+            trigger: 'palace-trigger',
+            guards: [],
+            outcome: { operation: 'palace-operation' },
+          },
+        ],
       },
     };
     context.records[stateRecordIndex] = currentRecord;
@@ -926,13 +993,22 @@ describe('AdventurerCreationService', () => {
       updatedAt: '2026-07-29T01:00:00.000Z',
       body: { streamId: 'later-stream', purpose: 'dungeon-generation', drawCount: 1 },
     });
+    const profileRecord = context.records.find(
+      (record) => record.recordType === 'adventurer-profile',
+    )!;
+    const evidenceRecord = context.records.find(
+      (record) => record.recordType === 'adventurer-creation-evidence',
+    )!;
     context.setCommittedSnapshot({
       slotId,
       snapshotClass: 'last-valid',
       createdAt: '2026-07-29T01:00:00.000Z',
       schemaVersion: 1,
       sourceRevision: 2,
-      body: { stateRecords: [currentRecord], schema: 'cumulative-state-v1' },
+      body: {
+        stateRecords: [currentRecord, profileRecord, evidenceRecord],
+        schema: 'cumulative-state-v1',
+      },
     });
     const currentSlot = await context.slots.get();
     if (!currentSlot.ok) throw new Error(currentSlot.error.message);
@@ -947,13 +1023,53 @@ describe('AdventurerCreationService', () => {
       kind: 'committed',
       result: {
         stateRevision: 2,
-        state: { currentHp: prepared.prepared.state.maxHp - 1, torches: 9 },
+        state: {
+          currentHp: prepared.prepared.state.maxHp - 1,
+          torches: 9,
+          coins: 4,
+          equipment: [{ itemId: 'later-item' }, { itemId: 'later-weapon' }],
+          spellCharges: [],
+          effectIds: ['palace.effect'],
+        },
         evidence: prepared.prepared.evidence,
       },
     });
     expect(context.records).toHaveLength(recordCount);
     expect(context.commitCalls).toBe(1);
   });
+
+  it.each(['adventurer', 'adventurer-profile', 'adventurer-creation-evidence'])(
+    'rejects duplicate cumulative %s ownership records',
+    async (recordType) => {
+      const context = harness();
+      const prepared = await context.service.prepare(command());
+      if (!prepared.ok) throw new Error(prepared.message);
+      await context.service.commit(prepared.prepared);
+      const records = context.records.filter((record) =>
+        ['adventurer', 'adventurer-profile', 'adventurer-creation-evidence'].includes(
+          record.recordType,
+        ),
+      );
+      const duplicate = structuredClone(
+        records.find((record) => record.recordType === recordType)!,
+      );
+      (duplicate.body as Record<string, unknown>).corrupt = true;
+      context.setCommittedSnapshot({
+        slotId,
+        snapshotClass: 'last-valid',
+        createdAt: '2026-07-29T01:00:00.000Z',
+        schemaVersion: 1,
+        sourceRevision: 2,
+        body: { stateRecords: [...records, duplicate], schema: 'cumulative-state-v1' },
+      });
+      const currentSlot = await context.slots.get();
+      if (!currentSlot.ok) throw new Error(currentSlot.error.message);
+      context.setSlot({ ...currentSlot.value, revision: 2, status: 'active' });
+      await expect(context.service.loadCommitted(slotId)).resolves.toMatchObject({
+        kind: 'incoherent',
+      });
+    },
+  );
 
   it('reconciles a repeated commit from durable state without a duplicate transaction', async () => {
     const context = harness();

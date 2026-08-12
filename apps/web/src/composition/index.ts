@@ -5,8 +5,10 @@ import {
   type AdventurerCreationContent,
   type AdventurerCreationLoadResult,
   type PreparedAdventurerCreation,
+  type RepositoryResult,
   type SaveSlotOperationStatusPort,
   type SaveSlotService,
+  type SlotRecord,
   type UpdateSafetyStatePort,
 } from '@notequest/application';
 import type {
@@ -79,9 +81,11 @@ export interface WebCompositionCreationTestOverrides {
   readonly service?: Pick<AdventurerCreationService, 'prepare' | 'commit' | 'loadCommitted'>;
   readonly commit?: AdventurerCreationService['commit'];
   readonly newId?: () => string;
-  readonly observe?: (
-    prepared: PreparedAdventurerCreation,
-  ) => Promise<{ readonly loaded: AdventurerCreationLoadResult; readonly marker: unknown }>;
+  readonly observe?: (prepared: PreparedAdventurerCreation) => Promise<{
+    readonly loaded: AdventurerCreationLoadResult;
+    readonly marker: unknown;
+    readonly slot: RepositoryResult<SlotRecord>;
+  }>;
   readonly lookupDurableSlot?: SaveSlotService['lookup'];
 }
 
@@ -102,6 +106,24 @@ export function classifyCreationReconciliationObservation(
     loaded.result.state.adventurerId === expected.adventurerId
     ? 'same-action'
     : 'unknown';
+}
+
+function coherentReconciliationSlot(
+  slot: RepositoryResult<SlotRecord>,
+  loaded: Extract<AdventurerCreationLoadResult, { readonly kind: 'committed' }>,
+  expectedSlotId: SaveSlotId,
+): SlotRecord | null {
+  if (!slot.ok) return null;
+  const value = slot.value;
+  return value.slotId === expectedSlotId &&
+    (value.status === 'ready' || value.status === 'active') &&
+    value.integrityStatus === 'valid' &&
+    value.schemaVersion === 1 &&
+    value.revision === loaded.result.stateRevision &&
+    value.currentSnapshotId === 'last-valid' &&
+    value.lastValidSnapshotId === 'last-valid'
+    ? value
+    : null;
 }
 
 /** The only production location that constructs application-level adapters. */
@@ -330,20 +352,21 @@ export async function createWebComposition(
           ? await creationTestOverrides.observe(prepared)
           : await database.transaction('r', ...actionCommitDexieStores(database), async () => ({
               loaded: await creationService.loadCommitted(prepared.command.slotId),
+              slot: await repositories.slots.get(prepared.command.slotId),
               marker: (
                 await database.workspace.get(
                   actionCommitIdempotencyWorkspaceKey(prepared.command.slotId, idempotencyKey),
                 )
               )?.value,
             }));
-        const { loaded, marker } = observation;
+        const { loaded, marker, slot } = observation;
         const classification = classifyCreationReconciliationObservation(loaded, marker, {
           actionId: prepared.command.metadata.commandId,
           adventurerId: prepared.state.adventurerId,
         });
         if (classification === 'same-action' && loaded.kind === 'committed') {
-          const durable = await lookupDurableSlot(prepared.command.slotId);
-          if (!durable.ok)
+          const durable = coherentReconciliationSlot(slot, loaded, prepared.command.slotId);
+          if (durable === null)
             return {
               ok: false,
               committed: 'unknown',
@@ -351,7 +374,7 @@ export async function createWebComposition(
               message: 'Durable save could not be verified.',
               reconciliationToken,
             };
-          updateSafety.acceptDurableSlot(durable.value);
+          updateSafety.acceptDurableSlot(durable);
           reconciliationActions.delete(reconciliationToken);
           creationIdentities.delete(prepared.command.slotId);
           return loaded.result;

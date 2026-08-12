@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AdventurerCreationLoadResult,
   PreparedAdventurerCreation,
+  RepositoryResult,
+  SlotRecord,
 } from '@notequest/application';
 import { bundledContentStatus } from '@notequest/content';
 import {
@@ -108,8 +110,27 @@ describe('production adventurer creation composition', () => {
     let loaded: AdventurerCreationLoadResult = { kind: 'empty' };
     let marker: unknown;
     let observationFailure = false;
-    let lookupFailure = false;
     let durableRevision = 1;
+    const observedSlot = (): RepositoryResult<SlotRecord> => ({
+      ok: true,
+      value: {
+        slotId: NOTEQUEST_SLOT_IDS[1],
+        slotIndex: 1,
+        displayName: 'Slot 1',
+        revision: durableRevision,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        status: durableRevision > 1 ? 'active' : 'ready',
+        schemaVersion: 1,
+        rulesVersion: 'notequest-palace-v0.1',
+        contentVersion: 'authorized-notequest-adventurer-creation-v0.1',
+        currentSnapshotId: 'last-valid',
+        lastValidSnapshotId: 'last-valid',
+        recoveryAvailable: true,
+        integrityStatus: 'valid',
+      },
+    });
+    let slotObservation: RepositoryResult<SlotRecord> = observedSlot();
     const ids = Array.from({ length: 30 }, (_, index) => `composition-id-${index}`);
     const composition = await createWebComposition({
       newId: () => ids.shift()!,
@@ -124,30 +145,11 @@ describe('production adventurer creation composition', () => {
       },
       observe: async () => {
         if (observationFailure) throw new Error('read failed');
-        return { loaded, marker };
+        return { loaded, marker, slot: slotObservation };
       },
-      lookupDurableSlot: async (slotId) =>
-        lookupFailure
-          ? { ok: false, error: { code: 'read_failure', message: 'read failed' } }
-          : {
-              ok: true,
-              value: {
-                slotId,
-                slotIndex: 1,
-                displayName: 'Slot 1',
-                revision: durableRevision,
-                createdAt: '2026-01-01T00:00:00.000Z',
-                updatedAt: '2026-01-01T00:00:00.000Z',
-                status: durableRevision > 1 ? 'active' : 'ready',
-                schemaVersion: 1,
-                rulesVersion: 'notequest-palace-v0.1',
-                contentVersion: 'authorized-notequest-adventurer-creation-v0.1',
-                currentSnapshotId: 'snapshot',
-                lastValidSnapshotId: 'snapshot',
-                recoveryAvailable: true,
-                integrityStatus: 'valid',
-              },
-            },
+      lookupDurableSlot: async () => {
+        throw new Error('Reconciliation must not perform a split acceptance read.');
+      },
     });
     try {
       const port = composition.services.adventurerCreation!;
@@ -161,7 +163,7 @@ describe('production adventurer creation composition', () => {
         result: {
           ok: true as const,
           committed: true as const,
-          stateRevision: 1,
+          stateRevision: durableRevision,
           state: prepared!.state,
           playerAuthoredName: prepared!.playerAuthoredName,
           evidence: prepared!.evidence,
@@ -171,13 +173,14 @@ describe('production adventurer creation composition', () => {
 
       loaded = committedResult();
       marker = { actionId: firstCommandId, stateRevision: 1 };
-      lookupFailure = true;
+      slotObservation = { ok: false, error: { code: 'read_failure', message: 'read failed' } };
       await expect(port.reconcile(firstToken)).resolves.toMatchObject({ committed: 'unknown' });
       expect(composition.services.updateSafety.getSnapshot()).toMatchObject({
         safePoint: 'saving',
       });
-      lookupFailure = false;
       durableRevision = 5;
+      loaded = committedResult();
+      slotObservation = observedSlot();
       await expect(port.reconcile(firstToken)).resolves.toMatchObject({ committed: true });
       expect(composition.services.updateSafety.getSnapshot()).toMatchObject({
         safePoint: 'durable',
@@ -200,6 +203,7 @@ describe('production adventurer creation composition', () => {
       const third = await port.create(NOTEQUEST_SLOT_IDS[1], 'Third Hero');
       const thirdToken = third.reconciliationToken!;
       const thirdCommandId = prepared!.command.metadata.commandId;
+      durableRevision = 1;
       loaded = committedResult();
       for (const ambiguousMarker of [
         undefined,
@@ -215,7 +219,20 @@ describe('production adventurer creation composition', () => {
       await expect(port.reconcile(thirdToken)).resolves.toMatchObject({ committed: 'unknown' });
       observationFailure = false;
       marker = { actionId: thirdCommandId, stateRevision: 1 };
-      durableRevision = 1;
+      const validSlot = observedSlot();
+      if (!validSlot.ok) throw new Error('Expected valid slot fixture.');
+      for (const invalidSlot of [
+        { ...validSlot.value, status: 'resetting' as const },
+        { ...validSlot.value, status: 'isolated' as const },
+        { ...validSlot.value, integrityStatus: 'invalid' as const },
+        { ...validSlot.value, revision: 2 },
+        { ...validSlot.value, currentSnapshotId: 'different-snapshot' },
+      ]) {
+        slotObservation = { ok: true, value: invalidSlot };
+        await expect(port.reconcile(thirdToken)).resolves.toMatchObject({ committed: 'unknown' });
+        expect(composition.services.updateSafety.getSnapshot().safePoint).toBe('saving');
+      }
+      slotObservation = observedSlot();
       await expect(port.reconcile(thirdToken)).resolves.toMatchObject({ committed: true });
     } finally {
       composition.close();
