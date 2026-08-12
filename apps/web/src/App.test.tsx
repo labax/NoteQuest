@@ -702,6 +702,33 @@ describe('App shell', () => {
     });
   });
 
+  it('renders the creation workflow for a selected slot and returns through the route adapter', async () => {
+    const route = fixtureRoute({
+      destination: 'adventurer-creation',
+      slotId: emptySlots[0]!.slotId,
+      metadata: routeMetadata['adventurer-creation'],
+      fallback: null,
+    });
+    const base = fixtureComposition(undefined, undefined, route);
+    const composition: AppComposition = {
+      ...base,
+      services: {
+        ...base.services,
+        adventurerCreation: {
+          loadCommitted: vi.fn().mockResolvedValue({ kind: 'empty' }),
+          reconcile: vi.fn(),
+          create: vi.fn(),
+        },
+      },
+    };
+    render(<App compose={() => Promise.resolve(composition)} />);
+
+    expect(await screen.findByRole('textbox', { name: 'Adventurer name' })).toBeInTheDocument();
+    expect(screen.getByText(/Results appear only after the complete save succeeds/)).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to save slots' }));
+    expect(route.navigate).toHaveBeenCalledWith({ destination: 'save-slots' });
+  });
+
   it('routes a recoverable slot to safe data explanation without selecting or resetting it', async () => {
     const route = fixtureRoute();
     const recoverable = {

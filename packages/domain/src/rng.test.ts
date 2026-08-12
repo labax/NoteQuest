@@ -166,16 +166,19 @@ describe('named deterministic random streams', () => {
     );
 
     expect(streams.map((stream) => stream.identity.purpose)).toEqual([
+      'adventurer-creation',
       'dungeon-generation',
       'combat',
       'expedition-repopulation',
     ]);
     expect(streams.map((stream) => stream.rng.serialize().streamSelector)).toEqual([
+      '0x4e0bb92d1a8db519',
       '0xaf34abb34bdcb2b4',
       '0x2ec16124cd842ccf',
       '0x0a575e8371d2c93d',
     ]);
     expect(streams.map((stream) => formatHexUint32(stream.rng.next().value))).toEqual([
+      '0x533eb08b',
       '0xde27295d',
       '0x44c39925',
       '0x1e4e9080',
