@@ -16,6 +16,8 @@ export type {
   AnnouncementService,
   FocusContainment,
 } from './accessibility';
+export { PalaceMap, TextualPalaceMap, VisualPalaceMap } from './palace-map';
+export type { PalaceMapProps } from './palace-map';
 
 export const uiLayerName = 'ui' as const;
 

@@ -9,3 +9,4 @@ export * from './action-commit.ts';
 export * from './action-commit-queue.ts';
 export * from './save-slots.ts';
 export * from './update-safety.ts';
+export * from './palace-generation.ts';

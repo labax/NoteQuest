@@ -4,6 +4,9 @@ Run all committed tests in non-watch mode with `npm test` or the explicit CI ali
 The root Vitest config defaults to the `node` environment so pure domain and application tests do not depend on browser-only APIs.
 React/UI tests that need DOM APIs must opt in explicitly, for example with `// @vitest-environment jsdom` or a later dedicated UI test project.
 
+Issue-specific build and smoke evidence for STORY-M6-002 subtask 6 is recorded in
+[`docs/process/story-m6-002-subtask-6-verification.md`](../docs/process/story-m6-002-subtask-6-verification.md).
+
 - `packages/domain/**/*.test.ts`: pure domain unit/property tests with no React, browser storage, routing, service-worker, adapter, app, or UI imports.
 - `packages/application/**/*.test.ts`: command/query and port-contract tests using domain and test doubles.
 - `packages/infrastructure/**/*.test.ts`: adapter tests for persistence, migration, hashing, import/export, and service-worker coordination once implemented.

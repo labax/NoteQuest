@@ -3,6 +3,10 @@
 These fixtures protect deterministic core boundaries without copying official NoteQuest prose,
 tables, art, or trade dress.
 
+`palace-generation-seeds.json` contains synthetic, public-safe deterministic seeds for normal,
+64-bit boundary, and rejected failure-path Palace generation. It contains no user data or
+permissioned NoteQuest prose/table content.
+
 - `packages/domain/src/rng.test.ts` locks PCG32 outputs, serialized state restoration, bounded draws, and named stream derivation so rules work cannot accidentally reroll committed outcomes.
 - `packages/infrastructure/src/canonical-json-fixtures.ts` locks small canonical JSON values plus their UTF-8 byte hex for future browser-equivalence checks.
 - `packages/infrastructure/src/sha256-fixtures.ts` locks SHA-256 checksums over canonical UTF-8 bytes.
