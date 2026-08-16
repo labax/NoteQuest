@@ -17,7 +17,9 @@ import {
   routeMetadata,
   shellDestinations,
   type RouteState,
+  PalaceMap,
 } from '@notequest/ui';
+import type { PalaceMapSurface } from '@notequest/application';
 import { createWebComposition, type AppComposition } from './composition';
 import { presentPwaShellStatus } from './pwa/status-presentation';
 
@@ -195,6 +197,136 @@ function AboutAndCredits({ version }: { readonly version: string }) {
         <NoticeSection key={notice.id} notice={notice} />
       ))}
     </div>
+  );
+}
+
+function PalaceJourney({
+  slotId,
+  composition,
+}: {
+  readonly slotId: string;
+  readonly composition: AppComposition;
+}) {
+  const [state, setState] = useState<
+    | { status: 'loading' }
+    | { status: 'town'; adventurerId: string; error?: string; confirmation?: boolean }
+    | { status: 'expedition'; map: PalaceMapSurface }
+  >({ status: 'loading' });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const loaded = await composition.services.palace?.load(slotId);
+      if (!active) return;
+      if (loaded?.ok) {
+        if (loaded.outcome === 'active') {
+          setState({ status: 'expedition', map: loaded.map });
+          if (composition.route.current().destination !== 'expedition')
+            composition.route.navigate({ destination: 'expedition', slotId });
+        } else {
+          setState({
+            status: 'town',
+            adventurerId: '',
+            error:
+              loaded.outcome === 'miner-emergency-exit'
+                ? 'The Miner returned safely to Town when the light was exhausted.'
+                : 'The adventurer died in darkness. The committed expedition has ended.',
+          });
+          if (composition.route.current().destination !== 'town')
+            composition.route.navigate({ destination: 'town', slotId });
+        }
+        return;
+      }
+      const adventurer = await composition.services.adventurerCreation?.loadCommitted(slotId);
+      if (!active) return;
+      setState(
+        adventurer?.kind === 'committed'
+          ? { status: 'town', adventurerId: adventurer.result.state.adventurerId }
+          : {
+              status: 'town',
+              adventurerId: '',
+              error: 'Create a committed adventurer before entering the Palace.',
+            },
+      );
+    })();
+    return () => {
+      active = false;
+    };
+  }, [attempt, composition, slotId]);
+  if (state.status === 'loading') return <p role="status">Loading committed Palace state…</p>;
+  if (state.status === 'expedition') {
+    return <PalaceMap model={state.map} />;
+  }
+  const enter = async (confirmed: boolean) => {
+    if (state.adventurerId === '' || composition.services.palace === undefined) return;
+    const result = await composition.services.palace.enter(slotId, state.adventurerId, confirmed);
+    if (result.ok) {
+      if (result.outcome !== 'active') {
+        setState({
+          status: 'town',
+          adventurerId: state.adventurerId,
+          error:
+            result.outcome === 'miner-emergency-exit'
+              ? 'The Miner returned safely to Town when the light was exhausted.'
+              : 'The adventurer died in darkness. The committed expedition has ended.',
+          confirmation: false,
+        });
+        composition.route.navigate({ destination: 'town', slotId });
+        return;
+      }
+      const loaded = await composition.services.palace.load(slotId);
+      if (loaded.ok) {
+        setState({ status: 'expedition', map: loaded.map });
+        composition.route.navigate({ destination: 'expedition', slotId });
+      } else {
+        setState({ ...state, error: 'The durable Palace entry could not be reloaded.' });
+      }
+      return;
+    }
+    if (result.code === 'final_light_confirmation_required') {
+      setState({ ...state, error: result.message, confirmation: true });
+    } else setState({ ...state, error: result.message });
+  };
+  return (
+    <section className="palace-entry" aria-labelledby="palace-entry-title">
+      <h3 id="palace-entry-title">Palace expedition</h3>
+      <p>Entry spends one torch and saves the generated entrance before exploration.</p>
+      {state.error ? <p role="alert">{state.error}</p> : null}
+      {state.confirmation ? (
+        <div role="alertdialog" aria-labelledby="final-light-title">
+          <h4 id="final-light-title">Confirm final-light entry</h4>
+          <p>Without another light source, entry causes an emergency exit or darkness death.</p>
+          <button type="button" onClick={() => void enter(true)}>
+            Enter and resolve consequence
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setState({ status: 'town', adventurerId: state.adventurerId, confirmation: false })
+            }
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={state.adventurerId === ''}
+          onClick={() => void enter(false)}
+        >
+          Enter Palace
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          setState({ status: 'loading' });
+          setAttempt((value) => value + 1);
+        }}
+      >
+        Reload committed state
+      </button>
+    </section>
   );
 }
 
@@ -552,6 +684,10 @@ function ApplicationShell({ composition }: { readonly composition: AppCompositio
               })()
             : null}
           {route.destination === 'about' ? <AboutAndCredits version={composition.version} /> : null}
+          {(route.destination === 'town' || route.destination === 'expedition') &&
+          route.slotId !== undefined ? (
+            <PalaceJourney slotId={route.slotId} composition={composition} />
+          ) : null}
           {route.destination === 'adventurer-creation' && route.slotId !== undefined ? (
             composition.services.adventurerCreation === undefined ? (
               <div className="inline-error" role="alert">

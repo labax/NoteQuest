@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "palace-generation-fixtures.v0.1",
+  "fixtures": [
+    {
+      "id": "normal-low-seed",
+      "kind": "normal",
+      "seed": "0x0000000000000001",
+      "entranceConnectionCount": 2
+    },
+    {
+      "id": "boundary-zero-seed",
+      "kind": "boundary",
+      "seed": "0x0000000000000000",
+      "entranceConnectionCount": 1
+    },
+    {
+      "id": "boundary-maximum-seed",
+      "kind": "boundary",
+      "seed": "0xffffffffffffffff",
+      "entranceConnectionCount": 3
+    },
+    {
+      "id": "failure-invalid-seed",
+      "kind": "failure",
+      "seed": "0x10000000000000000",
+      "entranceConnectionCount": 2,
+      "expectedError": "invalid_seed"
+    },
+    {
+      "id": "failure-invalid-entrance",
+      "kind": "failure",
+      "seed": "0x0000000000000001",
+      "entranceConnectionCount": 0,
+      "expectedError": "invalid_entrance"
+    }
+  ]
+}

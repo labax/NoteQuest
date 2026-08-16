@@ -7,3 +7,5 @@ export * from './palace-manifest.ts';
 export * from './palace-manifest-integrity.ts';
 export * from './palace-manifest-integrity-fixtures.ts';
 export * from './shell-notices.ts';
+export * from './palace-generation-content.ts';
+export * from './authorized-palace-entrance.ts';

@@ -299,6 +299,35 @@ test('creates once and reloads identical durable evidence without extra writes',
   await expectNoHorizontalOverflow(page);
 });
 
+test('creates an adventurer, enters Palace, switches equivalent maps, and reloads the same run', async ({
+  page,
+}) => {
+  await page.getByRole('article').first().getByRole('button', { name: 'Start new game' }).click();
+  await page.getByLabel('Adventurer name').fill('Palace Browser Hero');
+  await page.getByRole('button', { name: 'Create and save adventurer' }).click();
+  await expect(page.getByRole('heading', { name: 'Palace Browser Hero' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to town' }).click();
+  await expect(page.getByRole('button', { name: 'Enter Palace' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Enter Palace' }).click();
+  await expect(page.getByRole('heading', { name: 'Palace map' })).toBeVisible();
+  const visualPosition = page.getByRole('heading', { name: 'Current position: Entrance' });
+  await expect(visualPosition).toBeVisible();
+  const visualActions = await page.getByRole('button', { name: /Open exit/ }).allTextContents();
+  await page.getByRole('button', { name: 'Textual map' }).click();
+  await expect(page.getByRole('heading', { name: 'Current position: Entrance' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Connections' })).toBeVisible();
+  expect(await page.getByRole('button', { name: /Open exit/ }).allTextContents()).toEqual(
+    visualActions,
+  );
+  const beforeReload = await durableStoreContents(page);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Palace map' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Current position: Entrance' })).toBeVisible();
+  const afterReload = await durableStoreContents(page);
+  expect(afterReload.events.values).toEqual(beforeReload.events.values);
+  expect(afterReload.records.values).toEqual(beforeReload.records.values);
+});
+
 test('falls back safely from an unknown top-level route', async ({ page }) => {
   await page.goto(shellFixture.unknownPath);
   await expect(page.getByRole('heading', { name: shellFixture.initialHeading })).toBeVisible();

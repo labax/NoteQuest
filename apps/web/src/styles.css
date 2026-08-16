@@ -25,6 +25,65 @@ button {
 button:disabled {
   opacity: 0.65;
 }
+.palace-map {
+  display: grid;
+  gap: 1rem;
+}
+.map-switch,
+.map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.map-switch button[aria-pressed='true'] {
+  border-color: #172033;
+  background: #172033;
+  color: #fff;
+}
+.visual-map-surface,
+.textual-map-surface {
+  display: grid;
+  gap: 1rem;
+}
+.map-current-position,
+.map-diagram,
+.textual-map-surface > section {
+  border: 1px solid #d4ccbb;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: #fff;
+}
+.map-current-position dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0;
+}
+.map-current-position dt {
+  color: #536174;
+  font-size: 0.8rem;
+}
+.map-current-position dd {
+  margin: 0.2rem 0 0;
+  font-weight: 700;
+}
+.map-diagram {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+}
+.map-node {
+  border: 2px dashed #66768a;
+  border-radius: 0.65rem;
+  padding: 1rem;
+  text-align: center;
+}
+.map-node-current {
+  border-style: solid;
+  border-color: #245ea8;
+  background: #edf5ff;
+  font-weight: 800;
+}
 .app-shell {
   width: 100%;
   min-width: 0;

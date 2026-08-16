@@ -1,5 +1,7 @@
 import {
   AdventurerCreationService,
+  PalaceEntryService,
+  projectPalaceMapSurfaces,
   createPerSlotActionCommitQueue,
   createUpdateSafetyState,
   type AdventurerCreationContent,
@@ -10,6 +12,8 @@ import {
   type SaveSlotService,
   type SlotRecord,
   type UpdateSafetyStatePort,
+  type CanonicalPalaceEntryResult,
+  type PalaceMapSurface,
 } from '@notequest/application';
 import type {
   ContentVersion,
@@ -30,6 +34,8 @@ import {
   authorizedNoteQuestStartingState,
   authorizedNoteQuestAdventurerCreationTableIds,
   authorizedNoteQuestWeapons,
+  authorizedPalaceEntranceManifest,
+  validatePalaceGenerationContent,
   validatePalaceContentManifest,
   validatePalaceManifestIntegrity,
 } from '@notequest/content';
@@ -62,6 +68,21 @@ export interface AppServices {
   readonly updateSafety: UpdateSafetyStatePort;
   /** Available once approved Palace creation content is composed at the web boundary. */
   readonly adventurerCreation?: AdventurerCreationUiPort;
+  readonly palace?: {
+    load(slotId: string): Promise<
+      | {
+          readonly ok: true;
+          readonly map: PalaceMapSurface;
+          readonly outcome: 'active' | 'miner-emergency-exit' | 'darkness-death';
+        }
+      | { readonly ok: false; readonly message: string }
+    >;
+    enter(
+      slotId: string,
+      adventurerId: string,
+      finalLightConfirmed: boolean,
+    ): Promise<CanonicalPalaceEntryResult>;
+  };
 }
 
 export interface AppComposition {
@@ -167,6 +188,22 @@ export async function createWebComposition(
   if (!manifestValidation.valid || !integrityValidation.valid) {
     database.close();
     throw new Error('Selected adventurer creation content failed governance validation.');
+  }
+  const entranceManifestValidation = validatePalaceContentManifest(
+    authorizedPalaceEntranceManifest,
+  );
+  const entranceIntegrityValidation = await validatePalaceManifestIntegrity(
+    authorizedPalaceEntranceManifest,
+    { canonicalJson: { serializeCanonicalJson }, sha256: createSha256Hasher() },
+  );
+  const entranceContent = validatePalaceGenerationContent(authorizedPalaceEntranceManifest);
+  if (
+    !entranceManifestValidation.valid ||
+    !entranceIntegrityValidation.valid ||
+    !entranceContent.ok
+  ) {
+    database.close();
+    throw new Error('Selected Palace entrance content failed governance validation.');
   }
   const repositories = createDexiePersistenceRepositories(database);
   const weapons = new Map(authorizedNoteQuestWeapons.map((weapon) => [weapon.id, weapon]));
@@ -410,6 +447,45 @@ export async function createWebComposition(
       }
     },
   };
+  const palaceEntry = new PalaceEntryService({
+    slots: repositories.slots,
+    records: repositories.records,
+    events: repositories.events,
+    snapshots: repositories.snapshots,
+    coordinator: createPerSlotActionCommitQueue(createDexieActionTransactionCoordinator(database)),
+    content: entranceContent.content,
+    newId: () => crypto.randomUUID(),
+    now: () => new Date().toISOString(),
+  });
+  const palaceIdentities = new Map<string, { actionId: string; idempotencyKey: IdempotencyKey }>();
+  const palace: NonNullable<AppServices['palace']> = {
+    async load(rawSlotId) {
+      const loaded = await palaceEntry.load(rawSlotId as SaveSlotId);
+      return loaded.ok
+        ? {
+            ok: true,
+            map: projectPalaceMapSurfaces(loaded.dungeon).visual,
+            outcome: loaded.outcome,
+          }
+        : { ok: false, message: loaded.error.message };
+    },
+    async enter(rawSlotId, adventurerId, finalLightConfirmed) {
+      const identity = palaceIdentities.get(rawSlotId) ?? {
+        actionId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID() as IdempotencyKey,
+      };
+      palaceIdentities.set(rawSlotId, identity);
+      const result = await palaceEntry.enter({
+        ...identity,
+        slotId: rawSlotId as SaveSlotId,
+        adventurerId,
+        seed: `0x${rawSlotId.replaceAll('-', '').slice(-16)}`,
+        finalLightConfirmed,
+      });
+      if (result.ok || result.committed === false) palaceIdentities.delete(rawSlotId);
+      return result;
+    },
+  };
   if (import.meta.env.PROD) void pwa.register();
 
   return {
@@ -418,6 +494,7 @@ export async function createWebComposition(
       saveSlotOperations: updateSafety,
       updateSafety,
       adventurerCreation,
+      palace,
     },
     route: createBrowserRouteAdapter(initialized.value.catalogue.slotIds),
     pwa,
