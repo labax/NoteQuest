@@ -711,32 +711,16 @@ export class PalaceEntryService {
         message: 'Canonical carried-item state could not be read coherently.',
       };
     }
-    const itemIds = itemRecords.value.map((record) => record.recordId);
-    if (new Set(itemIds).size !== itemIds.length) {
+    const inventory = validateCanonicalInventory(itemRecords.value, adventurer);
+    if (!inventory.ok) {
       return {
         ok: false,
         committed: false,
         code: 'invalid_item_state',
-        message: 'Canonical item identities are duplicated.',
+        message: inventory.message,
       };
     }
-    const lampRecords = itemRecords.value.filter(
-      (record) => Reflect.get(record.body as object, 'definitionId') === 'item.lamp',
-    );
-    const lampMembershipCoherent = lampRecords.every(
-      (record) =>
-        adventurer.backpackItemIds.includes(record.recordId) &&
-        isCarriedActiveLamp(record.body, command.adventurerId),
-    );
-    if (!lampMembershipCoherent) {
-      return {
-        ok: false,
-        committed: false,
-        code: 'invalid_item_state',
-        message: 'A Lamp record is orphaned from the selected adventurer backpack.',
-      };
-    }
-    const hasLamp = lampRecords.length > 0;
+    const hasLamp = inventory.hasActiveLamp;
     const isMiner = adventurer.classId === 'class.miner';
     const entryCharge = adventurer.torches === 0 ? lightCharge : undefined;
     if (adventurer.torches === 0 && entryCharge === undefined) {
@@ -818,6 +802,20 @@ export class PalaceEntryService {
     const remainingTorches = transition.physicalLight;
     const minerExit = transition.outcome === 'miner-emergency-exit';
     const darknessDeath = transition.outcome === 'darkness-death';
+    const transitionAt = captured.events[0]?.timestamp ?? this.dependencies.now();
+    const recoveryRecordId = `${expeditionId}:recoverable-belongings`;
+    const transferredItems = darknessDeath
+      ? inventory.items.filter((record) => isTransferableItem(record, adventurer))
+      : [];
+    const transferredItemIds = transferredItems.map((record) => record.recordId);
+    const excludedItemIds = new Set(
+      inventory.items
+        .filter(
+          (record) =>
+            record.body.status !== undefined && nonRecoverableItemStatuses.has(record.body.status),
+        )
+        .map((record) => record.recordId),
+    );
     const updatedAdventurer = {
       ...adventurer,
       torches: remainingTorches,
@@ -829,6 +827,10 @@ export class PalaceEntryService {
           ? { ...charge, remainingUses: 0 as const }
           : charge,
       ),
+      backpackItemIds: darknessDeath ? [] : adventurer.backpackItemIds,
+      armourItemIds: darknessDeath ? [] : adventurer.armourItemIds,
+      equipment: darknessDeath ? [] : adventurer.equipment,
+      coins: darknessDeath ? 0 : adventurer.coins,
       death: darknessDeath
         ? {
             cause: 'darkness',
@@ -836,14 +838,17 @@ export class PalaceEntryService {
             expeditionId,
             floor: 1,
             segmentId: generated.dungeon.currentSegmentId,
-            occurredAt: this.dependencies.now(),
-            recoveryRecordId: `${expeditionId}:recoverable-belongings`,
+            occurredAt: transitionAt,
+            recoveryRecordId,
           }
         : adventurer.death,
     };
     const stateRecords = [
       ...captured.stateRecords.filter((record) => record.recordType !== 'expedition'),
-      { ...adventurerRecord.value, updatedAt: this.dependencies.now(), body: updatedAdventurer },
+      { ...adventurerRecord.value, updatedAt: transitionAt, body: updatedAdventurer },
+      ...transferredItems.map((record) =>
+        transferItemToRecovery(record, recoveryRecordId, transitionAt),
+      ),
       ...captured.stateRecords
         .filter((record) => record.recordType === 'expedition')
         .map((record) => ({
@@ -864,7 +869,7 @@ export class PalaceEntryService {
               recordId: this.dependencies.newId(),
               dungeonId: generated.dungeon.dungeonId,
               expeditionId,
-              updatedAt: this.dependencies.now(),
+              updatedAt: transitionAt,
               body: {
                 adventurerId: command.adventurerId,
                 profileRecordId: profileRecord.value.recordId,
@@ -873,38 +878,42 @@ export class PalaceEntryService {
                 expeditionId,
                 floor: 1,
                 segmentId: generated.dungeon.currentSegmentId,
-                occurredAt: this.dependencies.now(),
+                occurredAt: transitionAt,
                 recoveryStatus: 'recoverable-belongings-available',
-                recoveryRecordId: `${expeditionId}:recoverable-belongings`,
+                recoveryRecordId,
               },
             } satisfies PersistedRecord,
             {
               slotId: command.slotId,
               recordType: 'recoverable-belongings',
-              recordId: `${expeditionId}:recoverable-belongings`,
+              recordId: recoveryRecordId,
               dungeonId: generated.dungeon.dungeonId,
               expeditionId,
-              ownerType: 'adventurer',
-              ownerId: command.adventurerId,
+              ownerType: 'expedition-recovery',
+              ownerId: recoveryRecordId,
               locationType: 'dungeon-segment',
               locationId: generated.dungeon.currentSegmentId,
-              updatedAt: this.dependencies.now(),
+              updatedAt: transitionAt,
               body: {
                 adventurerId: command.adventurerId,
                 dungeonId: generated.dungeon.dungeonId,
                 expeditionId,
                 floor: 1,
                 segmentId: generated.dungeon.currentSegmentId,
-                createdAt: this.dependencies.now(),
+                createdAt: transitionAt,
                 recoveryStatus: 'available',
                 corpsePresent: false,
-                backpackItemIds: [...adventurer.backpackItemIds],
-                armourItemIds: Array.isArray(adventurer.armourItemIds)
-                  ? [...adventurer.armourItemIds]
-                  : [],
-                equipment: Array.isArray(adventurer.equipment)
-                  ? structuredClone(adventurer.equipment)
-                  : [],
+                itemIds: transferredItemIds,
+                backpackItemIds: adventurer.backpackItemIds.filter((id) =>
+                  transferredItemIds.includes(id),
+                ),
+                armourItemIds: adventurer.armourItemIds.filter((id) =>
+                  transferredItemIds.includes(id),
+                ),
+                equipment: structuredClone(
+                  adventurer.equipment.filter((item) => !excludedItemIds.has(item.itemId)),
+                ),
+                coins: adventurer.coins,
               },
             } satisfies PersistedRecord,
           ]
@@ -915,7 +924,7 @@ export class PalaceEntryService {
         recordId: 'current',
         dungeonId: generated.dungeon.dungeonId,
         expeditionId,
-        updatedAt: this.dependencies.now(),
+        updatedAt: transitionAt,
         body: {
           dungeonId: generated.dungeon.dungeonId,
           expeditionId,
@@ -928,7 +937,7 @@ export class PalaceEntryService {
       ...slot.value,
       revision: slot.value.revision,
       status: minerExit || darknessDeath ? 'ready' : 'active',
-      updatedAt: this.dependencies.now(),
+      updatedAt: transitionAt,
       schemaVersion: 1,
       rulesVersion: generated.dungeon.rulesVersion,
       contentVersion: generated.dungeon.contentVersion,
@@ -960,7 +969,7 @@ export class PalaceEntryService {
           {
             slotId: command.slotId,
             snapshotClass: 'last-valid',
-            createdAt: this.dependencies.now(),
+            createdAt: transitionAt,
             schemaVersion: 1,
             sourceRevision: slot.value.revision + 1,
             body: cumulativeSnapshotBody(priorSnapshot.value.body, {
@@ -1380,9 +1389,17 @@ function isCanonicalEntryAdventurer(
     candidate.location === 'town' &&
     Number.isSafeInteger(candidate.torches) &&
     (candidate.torches ?? -1) >= 0 &&
+    Number.isSafeInteger(candidate.coins) &&
+    (candidate.coins ?? -1) >= 0 &&
     Array.isArray(candidate.backpackItemIds) &&
     candidate.backpackItemIds.every((itemId) => typeof itemId === 'string' && itemId.length > 0) &&
     new Set(candidate.backpackItemIds).size === candidate.backpackItemIds.length &&
+    Array.isArray(candidate.armourItemIds) &&
+    candidate.armourItemIds.every((itemId) => typeof itemId === 'string' && itemId.length > 0) &&
+    Array.isArray(candidate.equipment) &&
+    candidate.equipment.every(
+      (item) => typeof item === 'object' && item !== null && typeof item.itemId === 'string',
+    ) &&
     Array.isArray(candidate.spellCharges) &&
     candidate.spellCharges.every(isCanonicalSpellCharge) &&
     new Set(candidate.spellCharges.map((charge) => charge.chargeId)).size ===
@@ -1415,12 +1432,120 @@ function isCarriedActiveLamp(value: unknown, adventurerId: string): boolean {
   );
 }
 
+type CanonicalItemRecord = PersistedRecord & {
+  readonly body: {
+    readonly definitionId: string;
+    readonly ownerAdventurerId: string | null;
+    readonly carried: boolean;
+    readonly active: boolean;
+    readonly status?: string;
+    readonly locationType?: string;
+    readonly locationId?: string;
+    readonly [key: string]: unknown;
+  };
+};
+
+export function validateCanonicalInventory(
+  records: readonly PersistedRecord[],
+  adventurer: CanonicalEntryAdventurer,
+):
+  | {
+      readonly ok: true;
+      readonly items: readonly CanonicalItemRecord[];
+      readonly hasActiveLamp: boolean;
+    }
+  | { readonly ok: false; readonly message: string } {
+  const ids = records.map((record) => record.recordId);
+  if (new Set(ids).size !== ids.length)
+    return { ok: false, message: 'Canonical item identities are duplicated.' };
+  const items = records as readonly CanonicalItemRecord[];
+  const byId = new Map(items.map((record) => [record.recordId, record]));
+  for (const backpackId of adventurer.backpackItemIds) {
+    const record = byId.get(backpackId);
+    if (
+      record === undefined ||
+      record.body.ownerAdventurerId !== adventurer.adventurerId ||
+      record.body.carried !== true ||
+      (record.body.locationType !== undefined && record.body.locationType !== 'backpack') ||
+      (record.body.locationId !== undefined && record.body.locationId !== adventurer.adventurerId)
+    )
+      return { ok: false, message: 'A backpack item reference is missing or incoherent.' };
+  }
+  for (const record of items) {
+    const selectedOwner = record.body.ownerAdventurerId === adventurer.adventurerId;
+    const inBackpack = adventurer.backpackItemIds.includes(record.recordId);
+    if (selectedOwner && record.body.carried !== inBackpack)
+      return { ok: false, message: 'Selected-adventurer carried item membership is incoherent.' };
+    if (selectedOwner && !inBackpack && record.body.locationType === 'backpack')
+      return {
+        ok: false,
+        message: 'Selected-adventurer item location conflicts with its backpack.',
+      };
+    if (selectedOwner && record.body.active && !record.body.carried)
+      return { ok: false, message: 'A non-carried selected-adventurer item cannot remain active.' };
+  }
+  return {
+    ok: true,
+    items,
+    hasActiveLamp: items.some(
+      (record) =>
+        adventurer.backpackItemIds.includes(record.recordId) &&
+        isCarriedActiveLamp(record.body, adventurer.adventurerId),
+    ),
+  };
+}
+
+const nonRecoverableItemStatuses = new Set(['destroyed', 'sold', 'spent', 'consumed']);
+
+function isTransferableItem(
+  record: CanonicalItemRecord,
+  adventurer: CanonicalEntryAdventurer,
+): boolean {
+  if (
+    record.body.ownerAdventurerId !== adventurer.adventurerId ||
+    (record.body.status !== undefined && nonRecoverableItemStatuses.has(record.body.status))
+  )
+    return false;
+  const equipmentIds = adventurer.equipment.map((item) => item.itemId);
+  return (
+    adventurer.backpackItemIds.includes(record.recordId) ||
+    adventurer.armourItemIds.includes(record.recordId) ||
+    equipmentIds.includes(record.recordId) ||
+    record.body.carried
+  );
+}
+
+export function transferItemToRecovery(
+  record: PersistedRecord,
+  recoveryRecordId: string,
+  timestamp: string,
+): PersistedRecord {
+  const canonical = record as CanonicalItemRecord;
+  return {
+    ...canonical,
+    ownerType: 'expedition-recovery',
+    ownerId: recoveryRecordId,
+    locationType: 'recoverable-belongings',
+    locationId: recoveryRecordId,
+    updatedAt: timestamp,
+    body: {
+      ...canonical.body,
+      ownerAdventurerId: null,
+      carried: false,
+      active: false,
+      locationType: 'recoverable-belongings',
+      locationId: recoveryRecordId,
+    },
+  };
+}
+
 function isCanonicalItemState(value: unknown): boolean {
   return (
     typeof value === 'object' &&
     value !== null &&
     typeof Reflect.get(value, 'definitionId') === 'string' &&
-    typeof Reflect.get(value, 'ownerAdventurerId') === 'string' &&
+    (typeof Reflect.get(value, 'ownerAdventurerId') === 'string' ||
+      Reflect.get(value, 'ownerAdventurerId') === null) &&
     typeof Reflect.get(value, 'carried') === 'boolean' &&
     typeof Reflect.get(value, 'active') === 'boolean'
   );
@@ -1433,9 +1558,10 @@ interface CanonicalEntryAdventurer {
   readonly location: string;
   readonly torches: number;
   readonly currentHp: number;
+  readonly coins: number;
   readonly backpackItemIds: readonly string[];
-  readonly armourItemIds?: readonly string[];
-  readonly equipment?: readonly unknown[];
+  readonly armourItemIds: readonly string[];
+  readonly equipment: readonly { readonly itemId: string; readonly [key: string]: unknown }[];
   readonly spellCharges: readonly {
     readonly chargeId: string;
     readonly definitionId: string;

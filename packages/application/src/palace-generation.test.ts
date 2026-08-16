@@ -12,6 +12,8 @@ import {
   loadPalaceRun,
   projectPalaceMapSurfaces,
   resolvePalaceFinalLightTransition,
+  transferItemToRecovery,
+  validateCanonicalInventory,
 } from './palace-generation.ts';
 
 const content = {
@@ -83,6 +85,97 @@ function coordinator(
 }
 
 describe('Palace generation and entry application flow', () => {
+  const inventoryAdventurer = {
+    adventurerId: command.adventurer.adventurerId,
+    classId: 'class.guard',
+    status: 'alive' as const,
+    location: 'town',
+    torches: 2,
+    currentHp: 8,
+    coins: 3,
+    backpackItemIds: ['lamp'],
+    armourItemIds: [],
+    equipment: [],
+    spellCharges: [],
+    death: null,
+  };
+  const item = (
+    recordId: string,
+    overrides: Readonly<Record<string, unknown>> = {},
+  ): PersistedRecord => ({
+    slotId: command.slotId,
+    recordType: 'item',
+    recordId,
+    updatedAt: command.now,
+    body: {
+      definitionId: 'item.lamp',
+      ownerAdventurerId: command.adventurer.adventurerId,
+      carried: true,
+      active: true,
+      locationType: 'backpack',
+      locationId: command.adventurer.adventurerId,
+      ...overrides,
+    },
+  });
+
+  it('selects only a coherent active carried Lamp from the adventurer backpack', () => {
+    expect(validateCanonicalInventory([item('lamp')], inventoryAdventurer)).toMatchObject({
+      ok: true,
+      hasActiveLamp: true,
+    });
+    expect(
+      validateCanonicalInventory([item('lamp', { active: false })], inventoryAdventurer),
+    ).toMatchObject({ ok: true, hasActiveLamp: false });
+    expect(
+      validateCanonicalInventory(
+        [item('foreign', { ownerAdventurerId: 'other', carried: false, active: false })],
+        { ...inventoryAdventurer, backpackItemIds: [] },
+      ),
+    ).toMatchObject({ ok: true, hasActiveLamp: false });
+    expect(
+      validateCanonicalInventory(
+        [item('lamp', { carried: false, active: false, locationType: 'town' })],
+        { ...inventoryAdventurer, backpackItemIds: [] },
+      ),
+    ).toMatchObject({ ok: true, hasActiveLamp: false });
+  });
+
+  it('rejects missing, orphaned, duplicate, and conflicting selected inventory records', () => {
+    expect(validateCanonicalInventory([], inventoryAdventurer)).toMatchObject({ ok: false });
+    expect(
+      validateCanonicalInventory([item('lamp')], {
+        ...inventoryAdventurer,
+        backpackItemIds: [],
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      validateCanonicalInventory([item('lamp'), item('lamp')], inventoryAdventurer),
+    ).toMatchObject({
+      ok: false,
+    });
+    expect(
+      validateCanonicalInventory(
+        [item('lamp', { ownerAdventurerId: 'other' })],
+        inventoryAdventurer,
+      ),
+    ).toMatchObject({ ok: false });
+  });
+
+  it('moves an authoritative Lamp to one inactive recovery owner and location', () => {
+    expect(transferItemToRecovery(item('lamp'), 'recovery-1', command.now)).toMatchObject({
+      ownerType: 'expedition-recovery',
+      ownerId: 'recovery-1',
+      locationType: 'recoverable-belongings',
+      locationId: 'recovery-1',
+      body: {
+        ownerAdventurerId: null,
+        carried: false,
+        active: false,
+        locationType: 'recoverable-belongings',
+        locationId: 'recovery-1',
+      },
+    });
+  });
   it.each([
     [
       'ordinary entry',
