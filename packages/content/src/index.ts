@@ -9,3 +9,5 @@ export * from './palace-manifest-integrity-fixtures.ts';
 export * from './shell-notices.ts';
 export * from './palace-generation-content.ts';
 export * from './authorized-palace-entrance.ts';
+export * from './authorized-palace-exploration.ts';
+export * from './palace-exploration-content.ts';
