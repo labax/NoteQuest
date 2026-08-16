@@ -218,7 +218,25 @@ function PalaceJourney({
     void (async () => {
       const loaded = await composition.services.palace?.load(slotId);
       if (!active) return;
-      if (loaded?.ok) return setState({ status: 'expedition', map: loaded.map });
+      if (loaded?.ok) {
+        if (loaded.outcome === 'active') {
+          setState({ status: 'expedition', map: loaded.map });
+          if (composition.route.current().destination !== 'expedition')
+            composition.route.navigate({ destination: 'expedition', slotId });
+        } else {
+          setState({
+            status: 'town',
+            adventurerId: '',
+            error:
+              loaded.outcome === 'miner-emergency-exit'
+                ? 'The Miner returned safely to Town when the light was exhausted.'
+                : 'The adventurer died in darkness. The committed expedition has ended.',
+          });
+          if (composition.route.current().destination !== 'town')
+            composition.route.navigate({ destination: 'town', slotId });
+        }
+        return;
+      }
       const adventurer = await composition.services.adventurerCreation?.loadCommitted(slotId);
       if (!active) return;
       setState(
@@ -237,14 +255,32 @@ function PalaceJourney({
   }, [attempt, composition, slotId]);
   if (state.status === 'loading') return <p role="status">Loading committed Palace state…</p>;
   if (state.status === 'expedition') {
-    return <PalaceMap model={state.map} onAction={() => undefined} />;
+    return <PalaceMap model={state.map} />;
   }
   const enter = async (confirmed: boolean) => {
     if (state.adventurerId === '' || composition.services.palace === undefined) return;
     const result = await composition.services.palace.enter(slotId, state.adventurerId, confirmed);
     if (result.ok) {
+      if (result.outcome !== 'active') {
+        setState({
+          status: 'town',
+          adventurerId: state.adventurerId,
+          error:
+            result.outcome === 'miner-emergency-exit'
+              ? 'The Miner returned safely to Town when the light was exhausted.'
+              : 'The adventurer died in darkness. The committed expedition has ended.',
+          confirmation: false,
+        });
+        composition.route.navigate({ destination: 'town', slotId });
+        return;
+      }
       const loaded = await composition.services.palace.load(slotId);
-      if (loaded.ok) setState({ status: 'expedition', map: loaded.map });
+      if (loaded.ok) {
+        setState({ status: 'expedition', map: loaded.map });
+        composition.route.navigate({ destination: 'expedition', slotId });
+      } else {
+        setState({ ...state, error: 'The durable Palace entry could not be reloaded.' });
+      }
       return;
     }
     if (result.code === 'final_light_confirmation_required') {

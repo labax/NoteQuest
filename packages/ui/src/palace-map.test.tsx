@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { generatePalaceDungeon } from '@notequest/domain';
 import { projectPalaceMapSurfaces } from '@notequest/application';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { PalaceMap } from './palace-map';
 
 function model() {
@@ -37,24 +37,28 @@ function model() {
 
 describe('Palace map surfaces', () => {
   it('renders current position, connections, and actions visually', () => {
-    render(<PalaceMap model={model().visual} onAction={vi.fn()} />);
+    render(<PalaceMap model={model().visual} />);
     expect(screen.getByRole('heading', { name: 'Current position: Entrance' })).toBeInTheDocument();
     expect(screen.getByLabelText('Palace floor 1 topology')).toHaveTextContent(
-      'Exit 1: unresolved',
+      'Exit A: unresolved',
     );
     expect(screen.getAllByRole('button', { name: /Open exit/ })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /Open exit/ })).toSatisfy((buttons) =>
+      buttons.every((button: HTMLButtonElement) => button.disabled),
+    );
+    expect(screen.getByText(/Exploration is not available yet/)).toBeInTheDocument();
   });
 
   it('switches to an equivalent semantic textual surface and dispatches the same action ID', async () => {
     const user = userEvent.setup();
-    const onAction = vi.fn();
     const surfaces = model();
-    render(<PalaceMap model={surfaces.visual} onAction={onAction} />);
+    render(<PalaceMap model={surfaces.visual} />);
     await user.click(screen.getByRole('button', { name: 'Textual map' }));
     expect(screen.getByRole('heading', { name: 'Connections' })).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(surfaces.textual.connections.length);
-    await user.click(screen.getByRole('button', { name: 'Open exit 1' }));
-    expect(onAction).toHaveBeenCalledWith(surfaces.textual.actions[0]);
+    expect(screen.getAllByRole('button', { name: /Open exit/ })).toSatisfy((buttons) =>
+      buttons.every((button: HTMLButtonElement) => button.disabled),
+    );
   });
 
   it('keeps visual and textual required-information/action signatures equal', () => {

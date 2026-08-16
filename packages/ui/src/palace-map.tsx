@@ -4,10 +4,9 @@ import type { PalaceMapSurface } from '@notequest/application';
 export interface PalaceMapProps {
   readonly model: PalaceMapSurface;
   readonly initialView?: 'visual' | 'textual';
-  readonly onAction: (action: PalaceMapSurface['actions'][number]) => void;
 }
 
-export function PalaceMap({ model, initialView = 'visual', onAction }: PalaceMapProps) {
+export function PalaceMap({ model, initialView = 'visual' }: PalaceMapProps) {
   const [view, setView] = useState(initialView);
   const headingId = useId();
   const currentHeading = useRef<HTMLHeadingElement>(null);
@@ -36,9 +35,9 @@ export function PalaceMap({ model, initialView = 'visual', onAction }: PalaceMap
         </button>
       </div>
       {view === 'visual' ? (
-        <VisualPalaceMap model={model} currentHeading={currentHeading} onAction={onAction} />
+        <VisualPalaceMap model={model} currentHeading={currentHeading} />
       ) : (
-        <TextualPalaceMap model={model} currentHeading={currentHeading} onAction={onAction} />
+        <TextualPalaceMap model={model} currentHeading={currentHeading} />
       )}
     </section>
   );
@@ -47,10 +46,9 @@ export function PalaceMap({ model, initialView = 'visual', onAction }: PalaceMap
 interface SurfaceProps {
   readonly model: PalaceMapSurface;
   readonly currentHeading: RefObject<HTMLHeadingElement | null>;
-  readonly onAction: PalaceMapProps['onAction'];
 }
 
-function CurrentPosition({ model, currentHeading }: Omit<SurfaceProps, 'onAction'>) {
+function CurrentPosition({ model, currentHeading }: SurfaceProps) {
   const current = model.segments.find((segment) => segment.segmentId === model.currentSegmentId)!;
   return (
     <div className="map-current-position">
@@ -75,13 +73,14 @@ function CurrentPosition({ model, currentHeading }: Omit<SurfaceProps, 'onAction
   );
 }
 
-function ActionList({ model, onAction }: Pick<SurfaceProps, 'model' | 'onAction'>) {
+function ActionList({ model }: Pick<SurfaceProps, 'model'>) {
   return (
     <section aria-label="Available map actions">
-      <h3>Available actions</h3>
+      <h3>Connection actions</h3>
+      <p>Exploration is not available yet. The connections below are saved topology only.</p>
       <div className="map-actions">
         {model.actions.map((action, index) => (
-          <button key={action.connectionId} type="button" onClick={() => onAction(action)}>
+          <button key={action.connectionId} type="button" disabled>
             Open exit {index + 1}
           </button>
         ))}
@@ -90,7 +89,7 @@ function ActionList({ model, onAction }: Pick<SurfaceProps, 'model' | 'onAction'
   );
 }
 
-export function VisualPalaceMap({ model, currentHeading, onAction }: SurfaceProps) {
+export function VisualPalaceMap({ model, currentHeading }: SurfaceProps) {
   return (
     <div className="visual-map-surface" data-map-view="visual">
       <CurrentPosition model={model} currentHeading={currentHeading} />
@@ -98,32 +97,33 @@ export function VisualPalaceMap({ model, currentHeading, onAction }: SurfaceProp
         <div className="map-node map-node-current" aria-current="location">
           Entrance
         </div>
-        {model.connections.map((connection, index) => (
+        {model.connections.map((connection) => (
           <div className="map-node map-node-unresolved" key={connection.connectionId}>
-            <span aria-hidden="true">↔ </span>Exit {index + 1}: unresolved
+            <span aria-hidden="true">↔ </span>
+            {connection.directionLabel}: unresolved
           </div>
         ))}
       </div>
-      <ActionList model={model} onAction={onAction} />
+      <ActionList model={model} />
     </div>
   );
 }
 
-export function TextualPalaceMap({ model, currentHeading, onAction }: SurfaceProps) {
+export function TextualPalaceMap({ model, currentHeading }: SurfaceProps) {
   return (
     <div className="textual-map-surface" data-map-view="textual">
       <CurrentPosition model={model} currentHeading={currentHeading} />
       <section aria-labelledby="connection-heading">
         <h3 id="connection-heading">Connections</h3>
         <ul>
-          {model.connections.map((connection, index) => (
+          {model.connections.map((connection) => (
             <li key={connection.connectionId}>
-              Exit {index + 1} — unresolved connection from the current segment
+              {connection.directionLabel} — unresolved connection from the current segment
             </li>
           ))}
         </ul>
       </section>
-      <ActionList model={model} onAction={onAction} />
+      <ActionList model={model} />
     </div>
   );
 }

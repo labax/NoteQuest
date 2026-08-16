@@ -335,20 +335,22 @@ function persistedRecord(
   };
 }
 
-interface PersistedActiveExpedition {
+interface PersistedPalaceExpedition {
   readonly expeditionId: string;
+  readonly adventurerId: string;
   readonly dungeonId: string;
   readonly currentSegmentId: string;
   readonly physicalLight: number;
   readonly virtualLight: number;
-  readonly status: 'active';
+  readonly status: 'active' | 'ended' | 'ended-death';
 }
 
 export type LoadPalaceRunResult =
   | {
       readonly ok: true;
       readonly dungeon: PalaceDungeonState;
-      readonly expedition: PersistedActiveExpedition;
+      readonly expedition: PersistedPalaceExpedition;
+      readonly outcome: 'active' | 'miner-emergency-exit' | 'darkness-death';
     }
   | {
       readonly ok: false;
@@ -375,7 +377,14 @@ export async function loadPalaceRun(
   }
   const dungeon = dungeonRecord.value.body;
   const expedition = expeditionRecord.value.body;
-  if (!isActiveExpedition(expedition) || expedition.dungeonId !== dungeon.dungeonId) {
+  if (
+    dungeonRecord.value.slotId !== slotId ||
+    dungeonRecord.value.recordId !== dungeon.dungeonId ||
+    expeditionRecord.value.slotId !== slotId ||
+    !isPalaceExpedition(expedition) ||
+    expeditionRecord.value.recordId !== expedition.expeditionId ||
+    expedition.dungeonId !== dungeon.dungeonId
+  ) {
     return {
       ok: false,
       error: { code: 'invalid_state', message: 'Persisted Palace expedition is invalid.' },
@@ -439,7 +448,17 @@ export async function loadPalaceRun(
       error: { code: 'invalid_state', message: 'Persisted Palace component records disagree.' },
     };
   }
-  return { ok: true, dungeon, expedition };
+  return {
+    ok: true,
+    dungeon,
+    expedition,
+    outcome:
+      expedition.status === 'active'
+        ? 'active'
+        : expedition.status === 'ended'
+          ? 'miner-emergency-exit'
+          : 'darkness-death',
+  };
 }
 
 function isPalaceDungeonState(value: unknown): value is PalaceDungeonState {
@@ -477,6 +496,8 @@ function isPalaceDungeonState(value: unknown): value is PalaceDungeonState {
       segment.encounter !== null,
   );
   const segmentIds = new Set(state.segments.map((segment) => segment.segmentId));
+  const floorIds = new Set(state.floors.map((floor) => floor.floorId));
+  const connectionIds = new Set(state.connections.map((connection) => connection.connectionId));
   const connectionsValid = state.connections.every(
     (connection) =>
       typeof connection === 'object' &&
@@ -501,15 +522,29 @@ function isPalaceDungeonState(value: unknown): value is PalaceDungeonState {
     typeof stream.rng.state === 'string';
   return (
     state.dungeonType === 'palace' &&
+    state.rulesVersion === 'digital-rules-specification-v0.1' &&
     state.generationVersion === 'palace-generation.v0.1' &&
     typeof state.currentSegmentId === 'string' &&
     state.floors.length === 1 &&
+    state.segments.length === 1 &&
+    state.connections.length > 0 &&
     floorsValid &&
     segmentsValid &&
     connectionsValid &&
     streamValid &&
     new Set(state.floorIds).size === state.floorIds.length &&
+    floorIds.size === state.floors.length &&
+    segmentIds.size === state.segments.length &&
+    connectionIds.size === state.connections.length &&
     state.floorIds[0] === state.floors[0]?.floorId &&
+    safeSameValue(
+      state.floors[0]?.segmentIds,
+      state.segments.map(({ segmentId }) => segmentId),
+    ) &&
+    safeSameValue(
+      state.floors[0]?.connectionIds,
+      state.connections.map(({ connectionId }) => connectionId),
+    ) &&
     state.segments.some((segment) => segment.segmentId === state.currentSegmentId) &&
     typeof state.generationEvidence === 'object' &&
     state.generationEvidence !== null
@@ -524,18 +559,21 @@ function safeSameValue(left: unknown, right: unknown): boolean {
   }
 }
 
-function isActiveExpedition(value: unknown): value is PersistedActiveExpedition {
+function isPalaceExpedition(value: unknown): value is PersistedPalaceExpedition {
   if (typeof value !== 'object' || value === null) return false;
   const expedition = value as Record<string, unknown>;
   return (
     typeof expedition['expeditionId'] === 'string' &&
+    typeof expedition['adventurerId'] === 'string' &&
     typeof expedition['dungeonId'] === 'string' &&
     typeof expedition['currentSegmentId'] === 'string' &&
     Number.isSafeInteger(expedition['physicalLight']) &&
     Number.isSafeInteger(expedition['virtualLight']) &&
     (expedition['physicalLight'] as number) >= 0 &&
     (expedition['virtualLight'] as number) >= 0 &&
-    expedition['status'] === 'active'
+    (expedition['status'] === 'active' ||
+      expedition['status'] === 'ended' ||
+      expedition['status'] === 'ended-death')
   );
 }
 
@@ -584,7 +622,12 @@ export interface PalaceEntryServiceDependencies {
 }
 
 export type CanonicalPalaceEntryResult =
-  | { readonly ok: true; readonly dungeon: PalaceDungeonState; readonly expeditionId: string }
+  | {
+      readonly ok: true;
+      readonly dungeon: PalaceDungeonState;
+      readonly expeditionId: string;
+      readonly outcome: 'active' | 'miner-emergency-exit' | 'darkness-death';
+    }
   | {
       readonly ok: false;
       readonly committed: false | 'unknown';
@@ -597,10 +640,12 @@ export class PalaceEntryService {
   constructor(private readonly dependencies: PalaceEntryServiceDependencies) {}
 
   async enter(command: EnterCanonicalPalaceCommand): Promise<CanonicalPalaceEntryResult> {
-    const [slot, adventurerRecord, allAdventurers] = await Promise.all([
+    const [slot, adventurerRecord, allAdventurers, priorSnapshot, priorEvents] = await Promise.all([
       this.dependencies.slots.get(command.slotId),
       this.dependencies.records.get(command.slotId, 'adventurer', command.adventurerId),
       this.dependencies.records.listByType(command.slotId, 'adventurer'),
+      this.dependencies.snapshots.get(command.slotId, 'last-valid'),
+      this.dependencies.events.listForSlot(command.slotId),
     ]);
     if (!slot.ok || !adventurerRecord.ok || !allAdventurers.ok) {
       return {
@@ -629,19 +674,59 @@ export class PalaceEntryService {
       (charge) => charge.remainingUses > 0 && charge.definitionId === 'spell.light',
     );
     const itemRecords = await this.dependencies.records.listByType(command.slotId, 'item');
-    const hasLamp =
-      itemRecords.ok &&
-      itemRecords.value.some((record) => isCarriedActiveLamp(record.body, command.adventurerId));
+    if (
+      !itemRecords.ok ||
+      itemRecords.value.some(
+        (record) => record.slotId !== command.slotId || !isCanonicalItemState(record.body),
+      )
+    ) {
+      return {
+        ok: false,
+        committed: false,
+        code: 'invalid_item_state',
+        message: 'Canonical carried-item state could not be read coherently.',
+      };
+    }
+    const hasLamp = itemRecords.value.some((record) =>
+      isCarriedActiveLamp(record.body, command.adventurerId),
+    );
     const isMiner = adventurer.classId === 'class.miner';
-    const finalPhysical = adventurer.torches <= 1;
-    const needsConfirmation = finalPhysical && lightCharge === undefined && !hasLamp;
-    if (needsConfirmation && !command.finalLightConfirmed) {
+    const entryCharge = adventurer.torches === 0 ? lightCharge : undefined;
+    if (adventurer.torches === 0 && entryCharge === undefined) {
+      return {
+        ok: false,
+        committed: false,
+        code: 'entry_light_required',
+        message: 'One physical or prepared virtual light unit is required to enter the Palace.',
+      };
+    }
+    const remainingCharges = adventurer.spellCharges.filter(
+      (charge) => charge.chargeId !== entryCharge?.chargeId,
+    );
+    const preview = resolvePalaceFinalLightTransition({
+      torchesBeforeEntry: adventurer.torches,
+      lightCharges: remainingCharges.map((charge) => ({
+        chargeId: charge.chargeId,
+        available: charge.remainingUses > 0 && charge.definitionId === 'spell.light',
+      })),
+      hasPersistentLamp: hasLamp,
+      isMiner,
+    });
+    const spendsFinalEntryLight = adventurer.torches <= 1;
+    if (spendsFinalEntryLight && !command.finalLightConfirmed) {
+      const consequence =
+        preview.outcome === 'light-charge-cast'
+          ? 'a different Light charge will be cast after entry'
+          : preview.outcome === 'lamp-sustained'
+            ? 'the carried Lamp will protect the adventurer'
+            : preview.outcome === 'miner-emergency-exit'
+              ? 'the Miner will return to Town immediately'
+              : 'the adventurer will die in darkness';
       return {
         ok: false,
         committed: false,
         code: 'final_light_confirmation_required',
-        message:
-          'Entering spends the final torch; without another light source the adventurer will exit or die in darkness.',
+        message: `Entering spends the final payable light; ${consequence}.`,
       };
     }
 
@@ -660,11 +745,14 @@ export class PalaceEntryService {
         adventurer: { adventurerId: command.adventurerId, lifeState: 'alive', location: 'town' },
         expeditionId,
         seed: command.seed,
-        light: { physical: adventurer.torches, virtual: adventurer.torches === 0 ? 1 : 0 },
+        light: { physical: adventurer.torches, virtual: entryCharge === undefined ? 0 : 1 },
         selectedLightSource: adventurer.torches === 0 ? 'virtual' : 'physical',
-        finalLightConfirmed: command.finalLightConfirmed || lightCharge !== undefined || hasLamp,
+        finalLightConfirmed: command.finalLightConfirmed,
         expectedRevision: slot.value.revision,
-        expectedEventSequence: slot.value.revision + 1,
+        expectedEventSequence:
+          priorEvents.ok && priorEvents.value.length > 0
+            ? Math.max(...priorEvents.value.map((event) => event.sequence)) + 1
+            : 1,
         now: this.dependencies.now(),
       },
       this.dependencies.content,
@@ -679,15 +767,7 @@ export class PalaceEntryService {
       };
     }
 
-    const transition = resolvePalaceFinalLightTransition({
-      torchesBeforeEntry: adventurer.torches,
-      lightCharges: adventurer.spellCharges.map((charge) => ({
-        chargeId: charge.chargeId,
-        available: charge.remainingUses > 0 && charge.definitionId === 'spell.light',
-      })),
-      hasPersistentLamp: hasLamp,
-      isMiner,
-    });
+    const transition = preview;
     const remainingTorches = transition.physicalLight;
     const minerExit = transition.outcome === 'miner-emergency-exit';
     const darknessDeath = transition.outcome === 'darkness-death';
@@ -698,7 +778,7 @@ export class PalaceEntryService {
       status: darknessDeath ? 'dead' : 'alive',
       currentHp: darknessDeath ? 0 : adventurer.currentHp,
       spellCharges: adventurer.spellCharges.map((charge) =>
-        charge.chargeId === transition.consumedChargeId
+        charge.chargeId === transition.consumedChargeId || charge.chargeId === entryCharge?.chargeId
           ? { ...charge, remainingUses: 0 as const }
           : charge,
       ),
@@ -739,6 +819,20 @@ export class PalaceEntryService {
             } satisfies PersistedRecord,
           ]
         : []),
+      {
+        slotId: command.slotId,
+        recordType: 'palace-current-run',
+        recordId: 'current',
+        dungeonId: generated.dungeon.dungeonId,
+        expeditionId,
+        updatedAt: this.dependencies.now(),
+        body: {
+          dungeonId: generated.dungeon.dungeonId,
+          expeditionId,
+          adventurerId: command.adventurerId,
+          outcome: minerExit ? 'miner-emergency-exit' : darknessDeath ? 'darkness-death' : 'active',
+        },
+      } satisfies PersistedRecord,
     ];
     const nextSlot: SlotRecord = {
       ...slot.value,
@@ -766,12 +860,22 @@ export class PalaceEntryService {
             createdAt: this.dependencies.now(),
             schemaVersion: 1,
             sourceRevision: slot.value.revision + 1,
-            body: {
+            body: cumulativeSnapshotBody(priorSnapshot.ok ? priorSnapshot.value.body : undefined, {
               stateRecords,
               randomStreamRecords: captured.randomStreamRecords ?? [],
               randomResultRecords: captured.randomResultRecords ?? [],
               events: captured.events,
-            },
+              currentRun: {
+                dungeonId: generated.dungeon.dungeonId,
+                expeditionId,
+                adventurerId: command.adventurerId,
+                outcome: minerExit
+                  ? 'miner-emergency-exit'
+                  : darknessDeath
+                    ? 'darkness-death'
+                    : 'active',
+              },
+            }),
           },
         ],
       },
@@ -781,6 +885,11 @@ export class PalaceEntryService {
           ...(event.body as object),
           adventurerId: command.adventurerId,
           outcome: transition.outcome === 'continue' ? 'entered' : transition.outcome,
+          entryPreparationChargeId: entryCharge?.chargeId ?? null,
+          postEntryChargeId: transition.consumedChargeId,
+          persistentLamp: hasLamp,
+          minerEmergencyExit: minerExit,
+          darknessDeath,
         },
       })),
     };
@@ -799,6 +908,7 @@ export class PalaceEntryService {
             ok: true,
             dungeon: reconciled.dungeon,
             expeditionId: reconciled.expedition.expeditionId,
+            outcome: reconciled.outcome,
           }
         : {
             ok: false,
@@ -807,7 +917,12 @@ export class PalaceEntryService {
             message: 'The original Palace entry commit could not be reconciled.',
           };
     }
-    return { ok: true, dungeon: generated.dungeon, expeditionId };
+    return {
+      ok: true,
+      dungeon: generated.dungeon,
+      expeditionId,
+      outcome: minerExit ? 'miner-emergency-exit' : darknessDeath ? 'darkness-death' : 'active',
+    };
   }
 
   async load(slotId: SaveSlotId): Promise<
@@ -817,15 +932,8 @@ export class PalaceEntryService {
         readonly error: { readonly code: 'not_found'; readonly message: string };
       }
   > {
-    const [dungeons, expeditions] = await Promise.all([
-      this.dependencies.records.listByType(slotId, 'dungeon'),
-      this.dependencies.records.listByType(slotId, 'expedition'),
-    ]);
-    if (!dungeons.ok) return dungeons;
-    if (!expeditions.ok) return expeditions;
-    const dungeon = dungeons.value.at(-1);
-    const expedition = expeditions.value.at(-1);
-    if (dungeon === undefined || expedition === undefined) {
+    const pointer = await this.dependencies.records.get(slotId, 'palace-current-run', 'current');
+    if (!pointer.ok || !isCurrentRunPointer(pointer.value.body)) {
       return {
         ok: false,
         error: { code: 'not_found', message: 'No committed Palace run exists.' },
@@ -833,11 +941,16 @@ export class PalaceEntryService {
     }
     const current = await loadPalaceRun(
       slotId,
-      dungeon.recordId,
-      expedition.recordId,
+      pointer.value.body.dungeonId,
+      pointer.value.body.expeditionId,
       this.dependencies.records,
     );
-    if (current.ok) return current;
+    if (
+      current.ok &&
+      current.expedition.adventurerId === pointer.value.body.adventurerId &&
+      current.outcome === pointer.value.body.outcome
+    )
+      return current;
     const snapshot = await this.dependencies.snapshots.get(slotId, 'last-valid');
     if (!snapshot.ok || typeof snapshot.value.body !== 'object' || snapshot.value.body === null)
       return current;
@@ -847,9 +960,20 @@ export class PalaceEntryService {
       ...(Array.isArray(body['randomStreamRecords']) ? body['randomStreamRecords'] : []),
       ...(Array.isArray(body['randomResultRecords']) ? body['randomResultRecords'] : []),
     ].filter(isPersistedRecordValue);
-    const recoveredDungeon = rows.find((record) => record.recordType === 'dungeon');
-    const recoveredExpedition = rows.find((record) => record.recordType === 'expedition');
-    if (recoveredDungeon === undefined || recoveredExpedition === undefined) return current;
+    const snapshotPointer = isCurrentRunPointer(body['currentRun'])
+      ? body['currentRun']
+      : undefined;
+    if (snapshotPointer === undefined) return current;
+    const recoveredDungeons = rows.filter(
+      (record) => record.recordType === 'dungeon' && record.recordId === snapshotPointer.dungeonId,
+    );
+    const recoveredExpeditions = rows.filter(
+      (record) =>
+        record.recordType === 'expedition' && record.recordId === snapshotPointer.expeditionId,
+    );
+    if (recoveredDungeons.length !== 1 || recoveredExpeditions.length !== 1) return current;
+    const recoveredDungeon = recoveredDungeons[0]!;
+    const recoveredExpedition = recoveredExpeditions[0]!;
     const recoveryRecords: Pick<RecordRepository, 'get'> = {
       async get(requestedSlotId, recordType, recordId) {
         const value = rows.find(
@@ -873,6 +997,61 @@ export class PalaceEntryService {
       recoveryRecords,
     );
   }
+}
+
+interface CurrentRunPointer {
+  readonly dungeonId: string;
+  readonly expeditionId: string;
+  readonly adventurerId: string;
+  readonly outcome?: 'active' | 'miner-emergency-exit' | 'darkness-death';
+}
+
+function isCurrentRunPointer(value: unknown): value is Required<CurrentRunPointer> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof Reflect.get(value, 'dungeonId') === 'string' &&
+    typeof Reflect.get(value, 'expeditionId') === 'string' &&
+    typeof Reflect.get(value, 'adventurerId') === 'string' &&
+    (Reflect.get(value, 'outcome') === 'active' ||
+      Reflect.get(value, 'outcome') === 'miner-emergency-exit' ||
+      Reflect.get(value, 'outcome') === 'darkness-death')
+  );
+}
+
+function cumulativeSnapshotBody(
+  prior: unknown,
+  additions: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const previous = typeof prior === 'object' && prior !== null ? prior : {};
+  const mergeRecords = (key: string): readonly unknown[] => {
+    const before = Array.isArray(Reflect.get(previous, key)) ? Reflect.get(previous, key) : [];
+    const after = Array.isArray(additions[key]) ? additions[key] : [];
+    const replacements = new Set(
+      after
+        .filter(isPersistedRecordValue)
+        .map((record) => `${record.recordType}:${record.recordId}`),
+    );
+    return [
+      ...before.filter(
+        (record: unknown) =>
+          !isPersistedRecordValue(record) ||
+          !replacements.has(`${record.recordType}:${record.recordId}`),
+      ),
+      ...after,
+    ];
+  };
+  return {
+    ...previous,
+    ...additions,
+    stateRecords: mergeRecords('stateRecords'),
+    randomStreamRecords: mergeRecords('randomStreamRecords'),
+    randomResultRecords: mergeRecords('randomResultRecords'),
+    events: [
+      ...(Array.isArray(Reflect.get(previous, 'events')) ? Reflect.get(previous, 'events') : []),
+      ...(Array.isArray(additions['events']) ? additions['events'] : []),
+    ],
+  };
 }
 
 function isPersistedRecordValue(value: unknown): value is PersistedRecord {
@@ -915,6 +1094,8 @@ function isCanonicalEntryAdventurer(
     (candidate.torches ?? -1) >= 0 &&
     Array.isArray(candidate.spellCharges) &&
     candidate.spellCharges.every(isCanonicalSpellCharge) &&
+    new Set(candidate.spellCharges.map((charge) => charge.chargeId)).size ===
+      candidate.spellCharges.length &&
     typeof candidate.classId === 'string'
   );
 }
@@ -940,6 +1121,17 @@ function isCarriedActiveLamp(value: unknown, adventurerId: string): boolean {
     Reflect.get(value, 'ownerAdventurerId') === adventurerId &&
     Reflect.get(value, 'carried') === true &&
     Reflect.get(value, 'active') === true
+  );
+}
+
+function isCanonicalItemState(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof Reflect.get(value, 'definitionId') === 'string' &&
+    typeof Reflect.get(value, 'ownerAdventurerId') === 'string' &&
+    typeof Reflect.get(value, 'carried') === 'boolean' &&
+    typeof Reflect.get(value, 'active') === 'boolean'
   );
 }
 

@@ -10,6 +10,20 @@ import { validatePalaceManifestIntegrity } from './palace-manifest-integrity.ts'
 
 describe('authorized Palace entrance', () => {
   it('passes governance and integrity validation', async () => {
+    const provenance = authorizedPalaceEntranceManifest.entries[0]!.provenance;
+    expect(provenance).toMatchObject({
+      authorRightsHolder: 'Tiago Junges',
+      permissionLicenseId: 'TIAGO-JUNGES-FULL-PERMISSION-OWNER-ATTESTATION-2026-07-29',
+      attributionRequired: true,
+      attributionNoticeId: 'NOTEQUEST-TIAGO-JUNGES-CREDIT-V1',
+    });
+    expect(provenance.sourceReferences.map(({ sourceId }) => sourceId)).toEqual(
+      expect.arrayContaining([
+        'INV-PAL-INTRO',
+        'STORY-M6-002',
+        'NOTEQUEST-ISSUE-80-TIAGO-JUNGES-PERMISSION-ATTESTATION',
+      ]),
+    );
     expect(validatePalaceContentManifest(authorizedPalaceEntranceManifest)).toEqual({
       valid: true,
       errors: [],

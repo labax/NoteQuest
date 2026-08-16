@@ -69,10 +69,12 @@ export interface AppServices {
   /** Available once approved Palace creation content is composed at the web boundary. */
   readonly adventurerCreation?: AdventurerCreationUiPort;
   readonly palace?: {
-    load(
-      slotId: string,
-    ): Promise<
-      | { readonly ok: true; readonly map: PalaceMapSurface }
+    load(slotId: string): Promise<
+      | {
+          readonly ok: true;
+          readonly map: PalaceMapSurface;
+          readonly outcome: 'active' | 'miner-emergency-exit' | 'darkness-death';
+        }
       | { readonly ok: false; readonly message: string }
     >;
     enter(
@@ -460,7 +462,11 @@ export async function createWebComposition(
     async load(rawSlotId) {
       const loaded = await palaceEntry.load(rawSlotId as SaveSlotId);
       return loaded.ok
-        ? { ok: true, map: projectPalaceMapSurfaces(loaded.dungeon).visual }
+        ? {
+            ok: true,
+            map: projectPalaceMapSurfaces(loaded.dungeon).visual,
+            outcome: loaded.outcome,
+          }
         : { ok: false, message: loaded.error.message };
     },
     async enter(rawSlotId, adventurerId, finalLightConfirmed) {

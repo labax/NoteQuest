@@ -1,4 +1,5 @@
 import type { PalaceContentManifest, PalaceManifestEntry } from './palace-manifest.ts';
+import { authorizedNoteQuestAttributionNotice } from './authorized-notequest-adventurer-creation.ts';
 
 export const authorizedPalaceEntranceContentVersion = '1.1.0' as const;
 export const authorizedPalaceEntranceRulesVersion = 'digital-rules-specification-v0.1' as const;
@@ -64,19 +65,36 @@ const entranceEntry: PalaceManifestEntry = {
     sourceEditionVersion: authorizedPalaceEntranceContentVersion,
     sourceReferences: [
       {
+        kind: 'rulebook-section',
+        sourceId: 'INV-PAL-INTRO',
+        citationLabel: 'NoteQuest first-author-edition Palace entrance mechanics',
+        locator: 'NoteQuest first-author edition, Palace, page 12',
+        sourceVersion: '2020',
+        notes: 'Mechanical topology only; source prose, artwork, and layout are excluded.',
+      },
+      {
         kind: 'decision-register',
         sourceId: 'STORY-M6-002',
         citationLabel: 'Palace vertical-slice implementation decision',
         locator: 'docs/product/digital-rules-specification-v0.1.md#92-topology-model',
         sourceVersion: authorizedPalaceEntranceRulesVersion,
       },
+      {
+        kind: 'controlled-evidence-record',
+        sourceId: 'NOTEQUEST-ISSUE-80-TIAGO-JUNGES-PERMISSION-ATTESTATION',
+        citationLabel: 'Project-owner permission attestation for NoteQuest content',
+        locator: 'https://github.com/labax/NoteQuest/issues/80#issuecomment-5121522446',
+        sourceVersion: '2026-07-29',
+        notes: 'Public-safe attestation; private permission evidence is not published.',
+      },
     ],
-    authorRightsHolder: 'Permitted NoteQuest source rights holder',
-    permissionLicenseId: 'NOTEQUEST-PALACE-PERMITTED-MECHANICS',
-    rightsBasis: 'Permitted mechanical facts, encoded without source prose, artwork, or layout.',
+    authorRightsHolder: 'Tiago Junges',
+    permissionLicenseId: 'TIAGO-JUNGES-FULL-PERMISSION-OWNER-ATTESTATION-2026-07-29',
+    rightsBasis:
+      'The project owner attests that Tiago Junges granted full permission to use, adapt, and distribute NoteQuest content for this digital adaptation.',
     evidenceReference: {
-      publicId: 'STORY-M6-002-PALACE-ENTRANCE',
-      location: 'packages/content/src/authorized-palace-entrance.ts',
+      publicId: 'NOTEQUEST-ISSUE-80-TIAGO-JUNGES-PERMISSION-ATTESTATION',
+      location: 'https://github.com/labax/NoteQuest/issues/80#issuecomment-5121522446',
       confidentiality: 'public-safe-reference',
     },
     permittedReleaseModes: [
@@ -85,10 +103,21 @@ const entranceEntry: PalaceManifestEntry = {
       'public-free-core-mvp',
       'future-commercial',
     ],
-    restrictions: ['mechanics-only', 'contains-no-source-expression'],
-    attributionRequired: false,
-    attributionNoticeId: null,
-    noticeLocations: [],
+    restrictions: [
+      'permission-attested-by-project-owner',
+      'private-permission-evidence-not-published',
+      'source-artwork-layout-and-trade-dress-excluded-from-this-package',
+      'long-form-copied-source-prose-excluded-from-this-package',
+    ],
+    attributionRequired: true,
+    attributionNoticeId: authorizedNoteQuestAttributionNotice.id,
+    noticeLocations: [
+      'about-credits',
+      'notice-file',
+      'content-manifest',
+      'release-listing',
+      'release-evidence-package',
+    ],
     modifications: ['Digital stable IDs and concise non-expressive labels added.'],
     compatibilityPolicy: 'saved-history-pins-content-version',
     contentHash: {
