@@ -26,6 +26,9 @@ export type PalaceGenerationContentResult =
 export function validatePalaceGenerationContent(
   manifest: PalaceContentManifest,
 ): PalaceGenerationContentResult {
+  if (typeof manifest !== 'object' || manifest === null) {
+    return { ok: false, errors: [{ field: 'manifest', reason: 'must be an object' }] };
+  }
   const validation = validatePalaceContentManifest(manifest);
   if (!validation.valid) return { ok: false, errors: validation.errors };
 
@@ -47,8 +50,15 @@ export function validatePalaceGenerationContent(
     };
   }
   const entrance = entrances[0]!;
+  const definition = entrance.structuredDefinition;
   const connections = entrance.structuredDefinition['connections'];
-  if (!isEntranceConnections(connections)) {
+  if (
+    definition['id'] !== entrance.id ||
+    definition['floorNumber'] !== 1 ||
+    definition['segmentKind'] !== 'entrance' ||
+    definition['encounterState'] !== 'empty' ||
+    !isEntranceConnections(connections)
+  ) {
     return {
       ok: false,
       errors: [
@@ -79,7 +89,7 @@ export function validatePalaceGenerationContent(
 function isEntranceConnections(
   value: unknown,
 ): value is PalaceGenerationContentDefinition['entranceConnections'] {
-  if (!Array.isArray(value) || value.length < 1) return false;
+  if (!Array.isArray(value) || value.length !== approvedEntranceConnectionIds.length) return false;
   const definitions = value.map((candidate) =>
     typeof candidate === 'object' && candidate !== null
       ? Reflect.get(candidate, 'definitionId')
@@ -90,12 +100,22 @@ function isEntranceConnections(
       (definition) => typeof definition === 'string' && definition.startsWith('palace.'),
     ) &&
     new Set(definitions).size === definitions.length &&
+    approvedEntranceConnectionIds.every((definition) => definitions.includes(definition)) &&
     value.every(
       (candidate) =>
         typeof Reflect.get(candidate, 'directionLabel') === 'string' &&
+        Reflect.get(candidate, 'directionLabel').trim().length > 0 &&
         Reflect.get(candidate, 'connectionState') === 'unresolved' &&
         Reflect.get(candidate, 'doorState') === 'unknown' &&
         Reflect.get(candidate, 'alertState') === 'quiet',
     )
   );
 }
+
+const approvedEntranceConnectionIds = [
+  'palace.entrance.connection.side-door-1.v1',
+  'palace.entrance.connection.side-door-2.v1',
+  'palace.entrance.connection.side-door-3.v1',
+  'palace.entrance.connection.side-door-4.v1',
+  'palace.entrance.connection.central-staircase-wooden-door.v1',
+] as const;

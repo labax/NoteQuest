@@ -33,5 +33,19 @@ describe('authorized Palace entrance', () => {
       authorizedPalaceEntranceTemplate.connections[0],
     ];
     expect(validatePalaceGenerationContent(malformed)).toMatchObject({ ok: false });
+
+    const reordered = structuredClone(authorizedPalaceEntranceManifest);
+    const definition = reordered.entries[0]!.structuredDefinition;
+    definition['connections'] = [...authorizedPalaceEntranceTemplate.connections].reverse();
+    const adapted = validatePalaceGenerationContent(reordered);
+    expect(adapted.ok).toBe(true);
+    if (adapted.ok) {
+      expect(adapted.content.entranceConnections.map(({ definitionId }) => definitionId)).toEqual(
+        [...authorizedPalaceEntranceTemplate.connections]
+          .reverse()
+          .map(({ definitionId }) => definitionId),
+      );
+    }
+    expect(validatePalaceGenerationContent(null as never)).toMatchObject({ ok: false });
   });
 });

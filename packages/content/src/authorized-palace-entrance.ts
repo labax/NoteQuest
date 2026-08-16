@@ -1,24 +1,45 @@
 import type { PalaceContentManifest, PalaceManifestEntry } from './palace-manifest.ts';
 
-export const authorizedPalaceEntranceContentVersion = '1.0.0' as const;
+export const authorizedPalaceEntranceContentVersion = '1.1.0' as const;
 export const authorizedPalaceEntranceRulesVersion = 'digital-rules-specification-v0.1' as const;
 
 export const authorizedPalaceEntranceTemplate = {
-  id: 'palace.entrance.project-original.v1',
+  id: 'palace.entrance.hall.v1',
   floorNumber: 1,
   segmentKind: 'entrance',
   encounterState: 'empty',
   connections: [
     {
-      definitionId: 'palace.entrance.connection.north.v1',
-      directionLabel: 'North exit',
+      definitionId: 'palace.entrance.connection.side-door-1.v1',
+      directionLabel: 'Side door 1',
       connectionState: 'unresolved',
       doorState: 'unknown',
       alertState: 'quiet',
     },
     {
-      definitionId: 'palace.entrance.connection.east.v1',
-      directionLabel: 'East exit',
+      definitionId: 'palace.entrance.connection.side-door-2.v1',
+      directionLabel: 'Side door 2',
+      connectionState: 'unresolved',
+      doorState: 'unknown',
+      alertState: 'quiet',
+    },
+    {
+      definitionId: 'palace.entrance.connection.side-door-3.v1',
+      directionLabel: 'Side door 3',
+      connectionState: 'unresolved',
+      doorState: 'unknown',
+      alertState: 'quiet',
+    },
+    {
+      definitionId: 'palace.entrance.connection.side-door-4.v1',
+      directionLabel: 'Side door 4',
+      connectionState: 'unresolved',
+      doorState: 'unknown',
+      alertState: 'quiet',
+    },
+    {
+      definitionId: 'palace.entrance.connection.central-staircase-wooden-door.v1',
+      directionLabel: 'Central staircase and wooden door',
       connectionState: 'unresolved',
       doorState: 'unknown',
       alertState: 'quiet',
@@ -31,14 +52,14 @@ const entranceEntry: PalaceManifestEntry = {
   contentType: 'definition',
   kind: 'mechanic-reference',
   version: authorizedPalaceEntranceContentVersion,
-  label: 'Project-original Palace entrance template',
-  tags: ['palace', 'entrance', 'project-original', 'rights-safe'],
+  label: 'Source-faithful Palace entrance mechanics',
+  tags: ['palace', 'entrance', 'source-faithful', 'rights-safe'],
   references: [],
   structuredDefinition: authorizedPalaceEntranceTemplate,
   provenance: {
-    origin: 'project-original',
-    sourceCategory: 'project_original',
-    sourceName: 'NoteQuest web project Palace entrance template',
+    origin: 'approved-source',
+    sourceCategory: 'notequest_permissioned_mechanics',
+    sourceName: 'Permitted Palace entrance mechanical topology',
     sourceLocation: 'packages/content/src/authorized-palace-entrance.ts',
     sourceEditionVersion: authorizedPalaceEntranceContentVersion,
     sourceReferences: [
@@ -50,9 +71,9 @@ const entranceEntry: PalaceManifestEntry = {
         sourceVersion: authorizedPalaceEntranceRulesVersion,
       },
     ],
-    authorRightsHolder: 'NoteQuest Web Application project',
-    permissionLicenseId: 'PROJECT-ORIGINAL-PALACE-ENTRANCE-1.0.0',
-    rightsBasis: 'Project-authored mechanical template containing no copied source expression.',
+    authorRightsHolder: 'Permitted NoteQuest source rights holder',
+    permissionLicenseId: 'NOTEQUEST-PALACE-PERMITTED-MECHANICS',
+    rightsBasis: 'Permitted mechanical facts, encoded without source prose, artwork, or layout.',
     evidenceReference: {
       publicId: 'STORY-M6-002-PALACE-ENTRANCE',
       location: 'packages/content/src/authorized-palace-entrance.ts',
@@ -64,17 +85,17 @@ const entranceEntry: PalaceManifestEntry = {
       'public-free-core-mvp',
       'future-commercial',
     ],
-    restrictions: ['mechanical-placeholder', 'contains-no-official-source-expression'],
+    restrictions: ['mechanics-only', 'contains-no-source-expression'],
     attributionRequired: false,
     attributionNoticeId: null,
     noticeLocations: [],
-    modifications: ['Initial stable project-original entrance topology.'],
+    modifications: ['Digital stable IDs and concise non-expressive labels added.'],
     compatibilityPolicy: 'saved-history-pins-content-version',
     contentHash: {
       status: 'recorded',
       algorithm: 'SHA-256',
       canonicalization: 'RFC-8785',
-      value: 'sha256:3a4e012609b49dce3946ddeec1d8d698ad2484361d7951380979e7e382829782',
+      value: 'sha256:81c216efa8fcc4f128d4c446b3a2fd8481a3b55d98b8f19890a93f23652a4049',
     },
     supersedes: [],
     confidentialRightsEvidence: 'excluded-from-public-manifest',

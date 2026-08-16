@@ -60,7 +60,7 @@ export function resolvePalaceFinalLightTransition(input: {
   readonly hasPersistentLamp: boolean;
   readonly isMiner: boolean;
 }): PalaceFinalLightTransition {
-  const physicalLight = input.torchesBeforeEntry - 1;
+  const physicalLight = Math.max(0, input.torchesBeforeEntry - 1);
   if (physicalLight > 0)
     return { outcome: 'continue', physicalLight, virtualLight: 0, consumedChargeId: null };
   const charge = input.lightCharges.find((candidate) => candidate.available);
@@ -626,19 +626,14 @@ export class PalaceEntryService {
     }
     const adventurer = adventurerRecord.value.body;
     const lightCharge = adventurer.spellCharges.find(
-      (charge) => charge.remainingUses === 1 && charge.definitionId.includes('light'),
+      (charge) => charge.remainingUses > 0 && charge.definitionId === 'spell.light',
     );
     const itemRecords = await this.dependencies.records.listByType(command.slotId, 'item');
     const hasLamp =
       itemRecords.ok &&
-      itemRecords.value.some(
-        (record) =>
-          typeof record.body === 'object' &&
-          record.body !== null &&
-          String(Reflect.get(record.body, 'definitionId')).toLowerCase().includes('lamp'),
-      );
-    const isMiner = adventurer.classId.toLowerCase().includes('miner');
-    const finalPhysical = adventurer.torches === 1;
+      itemRecords.value.some((record) => isCarriedActiveLamp(record.body, command.adventurerId));
+    const isMiner = adventurer.classId === 'class.miner';
+    const finalPhysical = adventurer.torches <= 1;
     const needsConfirmation = finalPhysical && lightCharge === undefined && !hasLamp;
     if (needsConfirmation && !command.finalLightConfirmed) {
       return {
@@ -665,8 +660,8 @@ export class PalaceEntryService {
         adventurer: { adventurerId: command.adventurerId, lifeState: 'alive', location: 'town' },
         expeditionId,
         seed: command.seed,
-        light: { physical: adventurer.torches, virtual: 0 },
-        selectedLightSource: 'physical',
+        light: { physical: adventurer.torches, virtual: adventurer.torches === 0 ? 1 : 0 },
+        selectedLightSource: adventurer.torches === 0 ? 'virtual' : 'physical',
         finalLightConfirmed: command.finalLightConfirmed || lightCharge !== undefined || hasLamp,
         expectedRevision: slot.value.revision,
         expectedEventSequence: slot.value.revision + 1,
@@ -688,7 +683,7 @@ export class PalaceEntryService {
       torchesBeforeEntry: adventurer.torches,
       lightCharges: adventurer.spellCharges.map((charge) => ({
         chargeId: charge.chargeId,
-        available: charge.remainingUses === 1 && charge.definitionId.includes('light'),
+        available: charge.remainingUses > 0 && charge.definitionId === 'spell.light',
       })),
       hasPersistentLamp: hasLamp,
       isMiner,
@@ -917,9 +912,34 @@ function isCanonicalEntryAdventurer(
     candidate.status === 'alive' &&
     candidate.location === 'town' &&
     Number.isSafeInteger(candidate.torches) &&
-    (candidate.torches ?? 0) > 0 &&
+    (candidate.torches ?? -1) >= 0 &&
     Array.isArray(candidate.spellCharges) &&
+    candidate.spellCharges.every(isCanonicalSpellCharge) &&
     typeof candidate.classId === 'string'
+  );
+}
+
+function isCanonicalSpellCharge(
+  value: unknown,
+): value is CanonicalEntryAdventurer['spellCharges'][number] {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof Reflect.get(value, 'chargeId') === 'string' &&
+    typeof Reflect.get(value, 'definitionId') === 'string' &&
+    (Reflect.get(value, 'remainingUses') === 0 || Reflect.get(value, 'remainingUses') === 1)
+  );
+}
+
+/** Fail closed: a persistent lamp is usable only when its canonical instance is active and carried by this adventurer. */
+function isCarriedActiveLamp(value: unknown, adventurerId: string): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Reflect.get(value, 'definitionId') === 'item.lamp' &&
+    Reflect.get(value, 'ownerAdventurerId') === adventurerId &&
+    Reflect.get(value, 'carried') === true &&
+    Reflect.get(value, 'active') === true
   );
 }
 
