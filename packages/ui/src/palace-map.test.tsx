@@ -46,7 +46,7 @@ describe('Palace map surfaces', () => {
     expect(screen.getAllByRole('button', { name: /Open exit/ })).toSatisfy((buttons) =>
       buttons.every((button: HTMLButtonElement) => button.disabled),
     );
-    expect(screen.getByText(/Exploration is not available yet/)).toBeInTheDocument();
+    expect(screen.getAllByText(/needs a committed exploration action/)).toHaveLength(2);
   });
 
   it('switches to an equivalent semantic textual surface and dispatches the same action ID', async () => {

@@ -4,9 +4,11 @@ import type { PalaceMapSurface } from '@notequest/application';
 export interface PalaceMapProps {
   readonly model: PalaceMapSurface;
   readonly initialView?: 'visual' | 'textual';
+  readonly onAction?: (action: PalaceMapSurface['actions'][number]) => void;
+  readonly outcome?: string;
 }
 
-export function PalaceMap({ model, initialView = 'visual' }: PalaceMapProps) {
+export function PalaceMap({ model, initialView = 'visual', onAction, outcome }: PalaceMapProps) {
   const [view, setView] = useState(initialView);
   const headingId = useId();
   const currentHeading = useRef<HTMLHeadingElement>(null);
@@ -35,10 +37,11 @@ export function PalaceMap({ model, initialView = 'visual' }: PalaceMapProps) {
         </button>
       </div>
       {view === 'visual' ? (
-        <VisualPalaceMap model={model} currentHeading={currentHeading} />
+        <VisualPalaceMap model={model} currentHeading={currentHeading} onAction={onAction} />
       ) : (
-        <TextualPalaceMap model={model} currentHeading={currentHeading} />
+        <TextualPalaceMap model={model} currentHeading={currentHeading} onAction={onAction} />
       )}
+      {outcome ? <p role="status">{outcome}</p> : null}
     </section>
   );
 }
@@ -46,6 +49,7 @@ export function PalaceMap({ model, initialView = 'visual' }: PalaceMapProps) {
 interface SurfaceProps {
   readonly model: PalaceMapSurface;
   readonly currentHeading: RefObject<HTMLHeadingElement | null>;
+  readonly onAction?: PalaceMapProps['onAction'];
 }
 
 function CurrentPosition({ model, currentHeading }: SurfaceProps) {
@@ -73,23 +77,40 @@ function CurrentPosition({ model, currentHeading }: SurfaceProps) {
   );
 }
 
-function ActionList({ model }: Pick<SurfaceProps, 'model'>) {
+function ActionList({ model, onAction }: Pick<SurfaceProps, 'model' | 'onAction'>) {
   return (
     <section aria-label="Available map actions">
       <h3>Connection actions</h3>
-      <p>Exploration is not available yet. The connections below are saved topology only.</p>
       <div className="map-actions">
-        {model.actions.map((action, index) => (
-          <button key={action.connectionId} type="button" disabled>
-            Open exit {index + 1}
-          </button>
-        ))}
+        {model.actions.map((action, index) => {
+          const explanationId = `palace-action-${action.connectionId}`;
+          return (
+            <div key={`${action.id}-${action.connectionId}`}>
+              <button
+                type="button"
+                disabled={!action.enabled}
+                aria-describedby={!action.enabled && action.explanation ? explanationId : undefined}
+                onClick={() => onAction?.(action)}
+              >
+                {action.id === 'move'
+                  ? 'Move through'
+                  : action.id === 'break-door'
+                    ? 'Break'
+                    : 'Open'}{' '}
+                exit {index + 1}
+              </button>
+              {!action.enabled && action.explanation ? (
+                <p id={explanationId}>{action.explanation}</p>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
 }
 
-export function VisualPalaceMap({ model, currentHeading }: SurfaceProps) {
+export function VisualPalaceMap({ model, currentHeading, onAction }: SurfaceProps) {
   return (
     <div className="visual-map-surface" data-map-view="visual">
       <CurrentPosition model={model} currentHeading={currentHeading} />
@@ -104,12 +125,12 @@ export function VisualPalaceMap({ model, currentHeading }: SurfaceProps) {
           </div>
         ))}
       </div>
-      <ActionList model={model} />
+      <ActionList model={model} onAction={onAction} />
     </div>
   );
 }
 
-export function TextualPalaceMap({ model, currentHeading }: SurfaceProps) {
+export function TextualPalaceMap({ model, currentHeading, onAction }: SurfaceProps) {
   return (
     <div className="textual-map-surface" data-map-view="textual">
       <CurrentPosition model={model} currentHeading={currentHeading} />
@@ -123,7 +144,7 @@ export function TextualPalaceMap({ model, currentHeading }: SurfaceProps) {
           ))}
         </ul>
       </section>
-      <ActionList model={model} />
+      <ActionList model={model} onAction={onAction} />
     </div>
   );
 }
