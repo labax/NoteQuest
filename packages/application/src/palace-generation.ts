@@ -640,14 +640,16 @@ export class PalaceEntryService {
   constructor(private readonly dependencies: PalaceEntryServiceDependencies) {}
 
   async enter(command: EnterCanonicalPalaceCommand): Promise<CanonicalPalaceEntryResult> {
-    const [slot, adventurerRecord, allAdventurers, priorSnapshot, priorEvents] = await Promise.all([
-      this.dependencies.slots.get(command.slotId),
-      this.dependencies.records.get(command.slotId, 'adventurer', command.adventurerId),
-      this.dependencies.records.listByType(command.slotId, 'adventurer'),
-      this.dependencies.snapshots.get(command.slotId, 'last-valid'),
-      this.dependencies.events.listForSlot(command.slotId),
-    ]);
-    if (!slot.ok || !adventurerRecord.ok || !allAdventurers.ok) {
+    const [slot, adventurerRecord, profileRecord, allAdventurers, priorSnapshot, priorEvents] =
+      await Promise.all([
+        this.dependencies.slots.get(command.slotId),
+        this.dependencies.records.get(command.slotId, 'adventurer', command.adventurerId),
+        this.dependencies.records.get(command.slotId, 'adventurer-profile', command.adventurerId),
+        this.dependencies.records.listByType(command.slotId, 'adventurer'),
+        this.dependencies.snapshots.get(command.slotId, 'last-valid'),
+        this.dependencies.events.listForSlot(command.slotId),
+      ]);
+    if (!slot.ok || !adventurerRecord.ok || !profileRecord.ok || !allAdventurers.ok) {
       return {
         ok: false,
         committed: false,
@@ -656,8 +658,30 @@ export class PalaceEntryService {
       };
     }
     if (
+      !priorSnapshot.ok ||
+      !priorEvents.ok ||
+      !isCoherentPriorRecovery(
+        priorSnapshot.value,
+        priorEvents.value,
+        slot.value,
+        adventurerRecord.value,
+      )
+    ) {
+      return {
+        ok: false,
+        committed: false,
+        code: 'recovery_prerequisite_unavailable',
+        message: 'The current durable recovery history could not be read coherently.',
+      };
+    }
+    if (
       adventurerRecord.value.slotId !== command.slotId ||
       adventurerRecord.value.recordId !== command.adventurerId ||
+      profileRecord.value.slotId !== command.slotId ||
+      profileRecord.value.recordType !== 'adventurer-profile' ||
+      profileRecord.value.recordId !== command.adventurerId ||
+      profileRecord.value.ownerType !== 'adventurer' ||
+      profileRecord.value.ownerId !== command.adventurerId ||
       allAdventurers.value.filter((record) => record.recordId === command.adventurerId).length !==
         1 ||
       !isCanonicalEntryAdventurer(adventurerRecord.value.body, command.adventurerId)
@@ -687,9 +711,32 @@ export class PalaceEntryService {
         message: 'Canonical carried-item state could not be read coherently.',
       };
     }
-    const hasLamp = itemRecords.value.some((record) =>
-      isCarriedActiveLamp(record.body, command.adventurerId),
+    const itemIds = itemRecords.value.map((record) => record.recordId);
+    if (new Set(itemIds).size !== itemIds.length) {
+      return {
+        ok: false,
+        committed: false,
+        code: 'invalid_item_state',
+        message: 'Canonical item identities are duplicated.',
+      };
+    }
+    const lampRecords = itemRecords.value.filter(
+      (record) => Reflect.get(record.body as object, 'definitionId') === 'item.lamp',
     );
+    const lampMembershipCoherent = lampRecords.every(
+      (record) =>
+        adventurer.backpackItemIds.includes(record.recordId) &&
+        isCarriedActiveLamp(record.body, command.adventurerId),
+    );
+    if (!lampMembershipCoherent) {
+      return {
+        ok: false,
+        committed: false,
+        code: 'invalid_item_state',
+        message: 'A Lamp record is orphaned from the selected adventurer backpack.',
+      };
+    }
+    const hasLamp = lampRecords.length > 0;
     const isMiner = adventurer.classId === 'class.miner';
     const entryCharge = adventurer.torches === 0 ? lightCharge : undefined;
     if (adventurer.torches === 0 && entryCharge === undefined) {
@@ -783,7 +830,15 @@ export class PalaceEntryService {
           : charge,
       ),
       death: darknessDeath
-        ? { cause: 'darkness', dungeonId: generated.dungeon.dungeonId, expeditionId }
+        ? {
+            cause: 'darkness',
+            dungeonId: generated.dungeon.dungeonId,
+            expeditionId,
+            floor: 1,
+            segmentId: generated.dungeon.currentSegmentId,
+            occurredAt: this.dependencies.now(),
+            recoveryRecordId: `${expeditionId}:recoverable-belongings`,
+          }
         : adventurer.death,
     };
     const stateRecords = [
@@ -812,9 +867,44 @@ export class PalaceEntryService {
               updatedAt: this.dependencies.now(),
               body: {
                 adventurerId: command.adventurerId,
+                profileRecordId: profileRecord.value.recordId,
                 cause: 'darkness',
                 dungeonId: generated.dungeon.dungeonId,
                 expeditionId,
+                floor: 1,
+                segmentId: generated.dungeon.currentSegmentId,
+                occurredAt: this.dependencies.now(),
+                recoveryStatus: 'recoverable-belongings-available',
+                recoveryRecordId: `${expeditionId}:recoverable-belongings`,
+              },
+            } satisfies PersistedRecord,
+            {
+              slotId: command.slotId,
+              recordType: 'recoverable-belongings',
+              recordId: `${expeditionId}:recoverable-belongings`,
+              dungeonId: generated.dungeon.dungeonId,
+              expeditionId,
+              ownerType: 'adventurer',
+              ownerId: command.adventurerId,
+              locationType: 'dungeon-segment',
+              locationId: generated.dungeon.currentSegmentId,
+              updatedAt: this.dependencies.now(),
+              body: {
+                adventurerId: command.adventurerId,
+                dungeonId: generated.dungeon.dungeonId,
+                expeditionId,
+                floor: 1,
+                segmentId: generated.dungeon.currentSegmentId,
+                createdAt: this.dependencies.now(),
+                recoveryStatus: 'available',
+                corpsePresent: false,
+                backpackItemIds: [...adventurer.backpackItemIds],
+                armourItemIds: Array.isArray(adventurer.armourItemIds)
+                  ? [...adventurer.armourItemIds]
+                  : [],
+                equipment: Array.isArray(adventurer.equipment)
+                  ? structuredClone(adventurer.equipment)
+                  : [],
               },
             } satisfies PersistedRecord,
           ]
@@ -847,6 +937,19 @@ export class PalaceEntryService {
       recoveryAvailable: true,
       integrityStatus: 'valid',
     };
+    const enrichedEvents = captured.events.map((event) => ({
+      ...event,
+      body: {
+        ...(event.body as object),
+        adventurerId: command.adventurerId,
+        outcome: transition.outcome === 'continue' ? 'entered' : transition.outcome,
+        entryPreparationChargeId: entryCharge?.chargeId ?? null,
+        postEntryChargeId: transition.consumedChargeId,
+        persistentLamp: hasLamp,
+        minerEmergencyExit: minerExit,
+        darknessDeath,
+      },
+    }));
     const envelope: ActionCommitEnvelope = {
       ...captured,
       idempotencyKey: command.idempotencyKey,
@@ -860,11 +963,11 @@ export class PalaceEntryService {
             createdAt: this.dependencies.now(),
             schemaVersion: 1,
             sourceRevision: slot.value.revision + 1,
-            body: cumulativeSnapshotBody(priorSnapshot.ok ? priorSnapshot.value.body : undefined, {
+            body: cumulativeSnapshotBody(priorSnapshot.value.body, {
               stateRecords,
               randomStreamRecords: captured.randomStreamRecords ?? [],
               randomResultRecords: captured.randomResultRecords ?? [],
-              events: captured.events,
+              events: enrichedEvents,
               currentRun: {
                 dungeonId: generated.dungeon.dungeonId,
                 expeditionId,
@@ -879,19 +982,7 @@ export class PalaceEntryService {
           },
         ],
       },
-      events: captured.events.map((event) => ({
-        ...event,
-        body: {
-          ...(event.body as object),
-          adventurerId: command.adventurerId,
-          outcome: transition.outcome === 'continue' ? 'entered' : transition.outcome,
-          entryPreparationChargeId: entryCharge?.chargeId ?? null,
-          postEntryChargeId: transition.consumedChargeId,
-          persistentLamp: hasLamp,
-          minerEmergencyExit: minerExit,
-          darknessDeath,
-        },
-      })),
+      events: enrichedEvents,
     };
     const committed = await this.dependencies.coordinator.commit(envelope);
     if (!committed.ok)
@@ -932,28 +1023,64 @@ export class PalaceEntryService {
         readonly error: { readonly code: 'not_found'; readonly message: string };
       }
   > {
-    const pointer = await this.dependencies.records.get(slotId, 'palace-current-run', 'current');
-    if (!pointer.ok || !isCurrentRunPointer(pointer.value.body)) {
-      return {
-        ok: false,
-        error: { code: 'not_found', message: 'No committed Palace run exists.' },
-      };
-    }
-    const current = await loadPalaceRun(
-      slotId,
-      pointer.value.body.dungeonId,
-      pointer.value.body.expeditionId,
-      this.dependencies.records,
-    );
+    const [pointer, snapshot, slot] = await Promise.all([
+      this.dependencies.records.get(slotId, 'palace-current-run', 'current'),
+      this.dependencies.snapshots.get(slotId, 'last-valid'),
+      this.dependencies.slots.get(slotId),
+    ]);
+    let liveFailure: LoadPalaceRunResult | { readonly ok: false; readonly error: RepositoryError } =
+      pointer.ok
+        ? {
+            ok: false,
+            error: { code: 'invalid_record', message: 'The current Palace pointer is malformed.' },
+          }
+        : pointer;
     if (
-      current.ok &&
-      current.expedition.adventurerId === pointer.value.body.adventurerId &&
-      current.outcome === pointer.value.body.outcome
+      pointer.ok &&
+      pointer.value.slotId === slotId &&
+      pointer.value.recordType === 'palace-current-run' &&
+      pointer.value.recordId === 'current' &&
+      isCurrentRunPointer(pointer.value.body)
+    ) {
+      const current = await loadPalaceRun(
+        slotId,
+        pointer.value.body.dungeonId,
+        pointer.value.body.expeditionId,
+        this.dependencies.records,
+      );
+      liveFailure = current;
+      if (
+        current.ok &&
+        current.expedition.adventurerId === pointer.value.body.adventurerId &&
+        current.outcome === pointer.value.body.outcome
+      ) {
+        const adventurer = await this.dependencies.records.get(
+          slotId,
+          'adventurer',
+          pointer.value.body.adventurerId,
+        );
+        if (
+          adventurer.ok &&
+          isAdventurerOutcomeCoherent(adventurer.value, pointer.value.body) &&
+          (await this.hasCoherentTerminalEvidence(slotId, pointer.value.body))
+        )
+          return current;
+      }
+    }
+    if (!slot.ok) return slot;
+    if (!snapshot.ok) return liveFailure;
+    if (
+      snapshot.value.slotId !== slotId ||
+      snapshot.value.snapshotClass !== 'last-valid' ||
+      snapshot.value.schemaVersion !== 1 ||
+      snapshot.value.sourceRevision !== slot.value.revision ||
+      slot.value.currentSnapshotId !== 'last-valid' ||
+      slot.value.lastValidSnapshotId !== 'last-valid' ||
+      slot.value.integrityStatus !== 'valid' ||
+      typeof snapshot.value.body !== 'object' ||
+      snapshot.value.body === null
     )
-      return current;
-    const snapshot = await this.dependencies.snapshots.get(slotId, 'last-valid');
-    if (!snapshot.ok || typeof snapshot.value.body !== 'object' || snapshot.value.body === null)
-      return current;
+      return liveFailure;
     const body = snapshot.value.body as Record<string, unknown>;
     const rows = [
       ...(Array.isArray(body['stateRecords']) ? body['stateRecords'] : []),
@@ -963,7 +1090,7 @@ export class PalaceEntryService {
     const snapshotPointer = isCurrentRunPointer(body['currentRun'])
       ? body['currentRun']
       : undefined;
-    if (snapshotPointer === undefined) return current;
+    if (snapshotPointer === undefined) return liveFailure;
     const recoveredDungeons = rows.filter(
       (record) => record.recordType === 'dungeon' && record.recordId === snapshotPointer.dungeonId,
     );
@@ -971,30 +1098,79 @@ export class PalaceEntryService {
       (record) =>
         record.recordType === 'expedition' && record.recordId === snapshotPointer.expeditionId,
     );
-    if (recoveredDungeons.length !== 1 || recoveredExpeditions.length !== 1) return current;
+    if (recoveredDungeons.length !== 1 || recoveredExpeditions.length !== 1) return liveFailure;
     const recoveredDungeon = recoveredDungeons[0]!;
     const recoveredExpedition = recoveredExpeditions[0]!;
     const recoveryRecords: Pick<RecordRepository, 'get'> = {
       async get(requestedSlotId, recordType, recordId) {
-        const value = rows.find(
+        const values = rows.filter(
           (record) =>
             record.slotId === requestedSlotId &&
             record.recordType === recordType &&
             record.recordId === recordId,
         );
-        return value === undefined
+        return values.length !== 1
           ? {
               ok: false,
-              error: { code: 'missing_record', message: 'Recovery record is missing.' },
+              error: {
+                code: 'invalid_record',
+                message: 'Recovery record is missing or duplicated.',
+              },
             }
-          : { ok: true, value };
+          : { ok: true, value: values[0]! };
       },
     };
-    return loadPalaceRun(
+    const recovered = await loadPalaceRun(
       slotId,
       recoveredDungeon.recordId,
       recoveredExpedition.recordId,
       recoveryRecords,
+    );
+    if (!recovered.ok) return liveFailure;
+    if (
+      recovered.dungeon.rulesVersion !== slot.value.rulesVersion ||
+      recovered.dungeon.contentVersion !== slot.value.contentVersion ||
+      recovered.expedition.adventurerId !== snapshotPointer.adventurerId ||
+      recovered.outcome !== snapshotPointer.outcome
+    )
+      return liveFailure;
+    const recoveredAdventurers = rows.filter(
+      (record) =>
+        record.recordType === 'adventurer' && record.recordId === snapshotPointer.adventurerId,
+    );
+    const recoveredEvents = Array.isArray(body['events']) ? body['events'] : [];
+    if (
+      recoveredAdventurers.length !== 1 ||
+      !isAdventurerOutcomeCoherent(recoveredAdventurers[0]!, snapshotPointer) ||
+      recoveredEvents.filter(
+        (event) =>
+          typeof event === 'object' &&
+          event !== null &&
+          Reflect.get(event, 'slotId') === slotId &&
+          Reflect.get(event, 'expeditionId') === snapshotPointer.expeditionId &&
+          typeof Reflect.get(event, 'body') === 'object' &&
+          Reflect.get(event, 'body') !== null &&
+          Reflect.get(Reflect.get(event, 'body'), 'adventurerId') === snapshotPointer.adventurerId,
+      ).length !== 1 ||
+      !hasCoherentRecoveredTerminalEvidence(rows, snapshotPointer)
+    )
+      return liveFailure;
+    return recovered;
+  }
+
+  private async hasCoherentTerminalEvidence(
+    slotId: SaveSlotId,
+    pointer: Required<CurrentRunPointer>,
+  ): Promise<boolean> {
+    if (pointer.outcome !== 'darkness-death') return true;
+    const [graveyard, belongings] = await Promise.all([
+      this.dependencies.records.listByType(slotId, 'graveyard'),
+      this.dependencies.records.listByType(slotId, 'recoverable-belongings'),
+    ]);
+    return (
+      graveyard.ok &&
+      belongings.ok &&
+      hasCoherentRecoveredTerminalEvidence([...graveyard.value, ...belongings.value], pointer)
     );
   }
 }
@@ -1016,6 +1192,72 @@ function isCurrentRunPointer(value: unknown): value is Required<CurrentRunPointe
     (Reflect.get(value, 'outcome') === 'active' ||
       Reflect.get(value, 'outcome') === 'miner-emergency-exit' ||
       Reflect.get(value, 'outcome') === 'darkness-death')
+  );
+}
+
+function isAdventurerOutcomeCoherent(
+  record: PersistedRecord,
+  pointer: Required<CurrentRunPointer>,
+): boolean {
+  if (
+    record.recordType !== 'adventurer' ||
+    record.recordId !== pointer.adventurerId ||
+    typeof record.body !== 'object' ||
+    record.body === null ||
+    Reflect.get(record.body, 'adventurerId') !== pointer.adventurerId
+  )
+    return false;
+  const status = Reflect.get(record.body, 'status');
+  const location = Reflect.get(record.body, 'location');
+  if (pointer.outcome === 'active') return status === 'alive' && location === 'dungeon';
+  if (pointer.outcome === 'miner-emergency-exit') return status === 'alive' && location === 'town';
+  const death = Reflect.get(record.body, 'death');
+  return (
+    status === 'dead' &&
+    location === 'dungeon' &&
+    typeof death === 'object' &&
+    death !== null &&
+    Reflect.get(death, 'cause') === 'darkness' &&
+    Reflect.get(death, 'dungeonId') === pointer.dungeonId &&
+    Reflect.get(death, 'expeditionId') === pointer.expeditionId
+  );
+}
+
+function hasCoherentRecoveredTerminalEvidence(
+  rows: readonly PersistedRecord[],
+  pointer: Required<CurrentRunPointer>,
+): boolean {
+  if (pointer.outcome !== 'darkness-death') return true;
+  const graves = rows.filter(
+    (record) =>
+      record.recordType === 'graveyard' &&
+      record.dungeonId === pointer.dungeonId &&
+      record.expeditionId === pointer.expeditionId,
+  );
+  const belongings = rows.filter(
+    (record) =>
+      record.recordType === 'recoverable-belongings' &&
+      record.dungeonId === pointer.dungeonId &&
+      record.expeditionId === pointer.expeditionId,
+  );
+  if (graves.length !== 1 || belongings.length !== 1) return false;
+  const grave = graves[0]!.body;
+  const recovery = belongings[0]!.body;
+  return (
+    typeof grave === 'object' &&
+    grave !== null &&
+    Reflect.get(grave, 'adventurerId') === pointer.adventurerId &&
+    Reflect.get(grave, 'cause') === 'darkness' &&
+    Reflect.get(grave, 'floor') === 1 &&
+    typeof Reflect.get(grave, 'segmentId') === 'string' &&
+    typeof Reflect.get(grave, 'occurredAt') === 'string' &&
+    Reflect.get(grave, 'recoveryStatus') === 'recoverable-belongings-available' &&
+    typeof recovery === 'object' &&
+    recovery !== null &&
+    Reflect.get(recovery, 'adventurerId') === pointer.adventurerId &&
+    Reflect.get(recovery, 'corpsePresent') === false &&
+    Reflect.get(recovery, 'recoveryStatus') === 'available' &&
+    Reflect.get(recovery, 'segmentId') === Reflect.get(grave, 'segmentId')
   );
 }
 
@@ -1066,6 +1308,52 @@ function isPersistedRecordValue(value: unknown): value is PersistedRecord {
   );
 }
 
+function isCoherentPriorRecovery(
+  snapshot: import('./repositories.ts').SnapshotRecord,
+  events: readonly import('./repositories.ts').EventRecord[],
+  slot: SlotRecord,
+  adventurer: PersistedRecord,
+): boolean {
+  if (
+    snapshot.slotId !== slot.slotId ||
+    snapshot.snapshotClass !== 'last-valid' ||
+    snapshot.schemaVersion !== 1 ||
+    snapshot.sourceRevision !== slot.revision ||
+    slot.currentSnapshotId !== 'last-valid' ||
+    slot.lastValidSnapshotId !== 'last-valid' ||
+    slot.integrityStatus !== 'valid' ||
+    typeof snapshot.body !== 'object' ||
+    snapshot.body === null
+  )
+    return false;
+  const body = snapshot.body as Record<string, unknown>;
+  const stateRecords = body['stateRecords'];
+  if (!Array.isArray(stateRecords) || !stateRecords.every(isPersistedRecordValue)) return false;
+  const matchingAdventurers = stateRecords.filter(
+    (record) =>
+      record.slotId === slot.slotId &&
+      record.recordType === 'adventurer' &&
+      record.recordId === adventurer.recordId,
+  );
+  if (
+    matchingAdventurers.length !== 1 ||
+    !safeSameValue(matchingAdventurers[0]!.body, adventurer.body)
+  )
+    return false;
+  for (const key of ['randomStreamRecords', 'randomResultRecords'] as const) {
+    const records = body[key];
+    if (!Array.isArray(records) || !records.every(isPersistedRecordValue)) return false;
+    const identities = records.map((record) => `${record.recordType}:${record.recordId}`);
+    if (new Set(identities).size !== identities.length) return false;
+  }
+  if (events.length === 0 || events.some((event) => event.slotId !== slot.slotId)) return false;
+  const sequences = events.map((event) => event.sequence).sort((left, right) => left - right);
+  return (
+    new Set(sequences).size === sequences.length &&
+    sequences.every((sequence, index) => sequence === index + 1)
+  );
+}
+
 function syntheticCaptureReceipt(
   envelope: ActionCommitEnvelope,
   revision: number,
@@ -1092,6 +1380,9 @@ function isCanonicalEntryAdventurer(
     candidate.location === 'town' &&
     Number.isSafeInteger(candidate.torches) &&
     (candidate.torches ?? -1) >= 0 &&
+    Array.isArray(candidate.backpackItemIds) &&
+    candidate.backpackItemIds.every((itemId) => typeof itemId === 'string' && itemId.length > 0) &&
+    new Set(candidate.backpackItemIds).size === candidate.backpackItemIds.length &&
     Array.isArray(candidate.spellCharges) &&
     candidate.spellCharges.every(isCanonicalSpellCharge) &&
     new Set(candidate.spellCharges.map((charge) => charge.chargeId)).size ===
@@ -1142,6 +1433,9 @@ interface CanonicalEntryAdventurer {
   readonly location: string;
   readonly torches: number;
   readonly currentHp: number;
+  readonly backpackItemIds: readonly string[];
+  readonly armourItemIds?: readonly string[];
+  readonly equipment?: readonly unknown[];
   readonly spellCharges: readonly {
     readonly chargeId: string;
     readonly definitionId: string;

@@ -1,43 +1,37 @@
-# STORY-M6-002 replacement verification
+# STORY-M6-002 incremental re-review verification
 
 Verification date: 2026-08-16
-Implementation commit tested locally: `d47245d19c83806b3a08e2235e45ab0a2b68d328`.
+Implementation commit tested locally: `1e938604f8392ed8606c3777147d8bc04fef5786`.
 Required merge base: `develop` at `b49d8c56fbe69b8ade28dc3315567633358d6820`.
-Local relationship after the implementation commit: 15 commits ahead and 0 behind (`git rev-list --left-right --count b49d8c56...HEAD`).
+Implementation relationship: 15 commits ahead and 0 behind (`git rev-list --left-right --count b49d8c56...1e938604`).
 
-The checkout has no configured Git remote or GitHub credentials. Consequently this local run cannot
-retarget PR #172, inspect its mergeability/review threads, wait for exact-head GitHub Actions, or
-verify an exact-head Cloudflare deployment. Those remain required hosted gates; no earlier-head
-browser or deployment evidence is claimed here.
+The checkout has no configured Git remote or GitHub credentials. It cannot retarget PR #172, push the
+head, inspect mergeability/review threads, wait for GitHub Actions, or verify Cloudflare. Those hosted
+exact-head gates remain required and no earlier hosted result is claimed.
 
-## Passing local checks
+## Exact implementation checks
 
-- `npm run format:check`
-- `npm run lint`
-- `npm run typecheck`
-- `npm test` — 47 files / 541 tests passed.
-- `npm run simulation:palace-smoke` — both deterministic smoke seeds completed and reports were written.
-- `NOTEQUEST_RELEASE_ID=8f6299039fd43e170a9a9806cb90e8256270f55e npm run build` — typecheck, production Vite/PWA build, PWA artifact verification, and production fault-boundary verification passed before the recovery-only follow-up; the final implementation commit received format, lint, typecheck, and focused application/integration checks.
-- `npm run test:browser:smoke` — 29 Chromium tests passed across desktop, 360 px, and 390 px projects after installing the container's Playwright runtime dependencies.
-- `npm run test:browser:pwa` — 1 production-service-worker/offline Chromium test passed.
+- `npm run format:check` — passed.
+- `npm run lint` — passed.
+- `npm run typecheck` — passed.
+- `npm test` — 47 files / 541 tests passed after refreshing the lockfile-resolved installation.
+- `npm test -- --run tests/palace-generation-persistence.integration.test.ts packages/application/src/palace-generation.test.ts` — 2 files / 18 focused tests passed.
+- `npm run simulation:palace-smoke` — both configured deterministic seeds completed.
+- `NOTEQUEST_RELEASE_ID=64f0b778ad6e4613e4eb7d04655122711cd09727 npm run build` — production Vite/PWA build, artifact verification, and production fault-boundary verification passed with this release identity.
+- `npm run test:pwa-release-id` — 3 tests passed.
+- `npm run test:browser:smoke` — not runnable in this final container because the Playwright Chromium executable is absent. Hosted desktop/360/390 evidence is still required.
+- `npm run test:browser:pwa` — not run after the smoke launch failure; hosted PWA evidence is still required.
 
-A 390 px local review screenshot was captured at `.tmp/palace-entry-phone-390.png`; generated test
-artifacts are intentionally ignored by Git.
+## Diff and hosted gates
 
-## Hosted exact-head gates
-
-After pushing the evidence commit, PR #172 must target `develop`. The complete `develop...HEAD` diff
-must contain no addition or deletion of `docs/product/github-issue-creation-process-v0.1.md`. GitHub
-Actions, hosted Chromium/PWA, Cloudflare deployment, mergeability, and review-thread status must be
-recorded from that pushed exact head before merge. PR #171 is superseded and is not a merge or
-release path.
+The local `develop...HEAD` comparison contains no addition or deletion of
+`docs/product/github-issue-creation-process-v0.1.md`. After retargeting PR #172 to `develop`, record
+GitHub Actions, hosted Chromium/PWA, Cloudflare exact-head deployment, mergeability, and unresolved
+review-thread state before merge. PR #171 is not a merge or release path.
 
 ## Separate release-forward blocker
 
-`npm run security:audit` remains failing and is owned by #170. This run reported three high-severity
-advisory families (`brace-expansion`, `fast-uri`, and `nanoid`) plus one moderate `postcss` advisory,
-for five vulnerable dependency findings in total. This story does not hide, lower, bypass, or absorb
-that release-hardening gate.
-
-The two-seed entrance simulation is not the future 100,000-seed multi-floor termination and
-boss-reachability release gate. Issue #81 and epic #36 remain open for review.
+`npm run security:audit` remains failing under #170. It reports three high-severity advisory families
+(`brace-expansion`, `fast-uri`, and `nanoid`) plus one moderate `postcss` advisory, for five findings
+overall. This story does not hide, lower, bypass, or absorb that gate. Issue #81 remains open for
+re-review.

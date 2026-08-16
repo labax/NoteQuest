@@ -52,20 +52,28 @@ describe('Palace generation persistence', () => {
         rulesVersion: 'digital-rules-specification-v0.1',
         contentVersion: 'authorized-notequest-adventurer-creation-v0.1',
       } as const;
+      const adventurerRecord = {
+        slotId: repositoryFixtureSlotId,
+        recordType: 'adventurer',
+        recordId: adventurerId,
+        updatedAt: timestamp,
+        body: canonicalAdventurer,
+      } as const;
+      const profileRecord = {
+        slotId: repositoryFixtureSlotId,
+        recordType: 'adventurer-profile',
+        recordId: adventurerId,
+        ownerType: 'adventurer',
+        ownerId: adventurerId,
+        updatedAt: timestamp,
+        body: { adventurerId, playerAuthoredName: 'Palace integration hero', updatedAt: timestamp },
+      } as const;
       const creation = await coordinator.commit({
         actionId: 'integration.create-adventurer',
         idempotencyKey: 'integration-create-adventurer' as IdempotencyKey,
         slotId: repositoryFixtureSlotId,
         expectedRevision: 0,
-        stateRecords: [
-          {
-            slotId: repositoryFixtureSlotId,
-            recordType: 'adventurer',
-            recordId: adventurerId,
-            updatedAt: timestamp,
-            body: canonicalAdventurer,
-          },
-        ],
+        stateRecords: [adventurerRecord, profileRecord],
         events: [
           {
             slotId: repositoryFixtureSlotId,
@@ -84,6 +92,9 @@ describe('Palace generation persistence', () => {
           schemaVersion: 1,
           rulesVersion: canonicalAdventurer.rulesVersion,
           contentVersion: canonicalAdventurer.contentVersion,
+          currentSnapshotId: 'last-valid',
+          lastValidSnapshotId: 'last-valid',
+          recoveryAvailable: true,
           integrityStatus: 'valid',
           updatedAt: timestamp,
         },
@@ -96,9 +107,9 @@ describe('Palace generation persistence', () => {
               schemaVersion: 1,
               sourceRevision: 1,
               body: {
-                stateRecords: [
-                  { recordType: 'adventurer', recordId: adventurerId, body: canonicalAdventurer },
-                ],
+                stateRecords: [adventurerRecord, profileRecord],
+                randomStreamRecords: [],
+                randomResultRecords: [],
               },
             },
           ],
@@ -119,6 +130,56 @@ describe('Palace generation persistence', () => {
         newId: () => `00000000-0000-4000-8000-${String(id++).padStart(12, '0')}`,
         now: () => timestamp,
       });
+      const priorSnapshot = await repositories.snapshots.get(repositoryFixtureSlotId, 'last-valid');
+      if (!priorSnapshot.ok) throw new Error(priorSnapshot.error.message);
+      await database.snapshots.delete([repositoryFixtureSlotId, 'last-valid']);
+      await expect(
+        service.enter({
+          actionId: 'integration.blocked-without-recovery',
+          idempotencyKey: 'integration-blocked-without-recovery' as IdempotencyKey,
+          slotId: repositoryFixtureSlotId,
+          adventurerId,
+          seed: '0x0000000000000001',
+          finalLightConfirmed: false,
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        committed: false,
+        code: 'recovery_prerequisite_unavailable',
+      });
+      expect(id).toBe(10);
+      await repositories.snapshots.put(priorSnapshot.value);
+      const eventFailureService = new PalaceEntryService({
+        slots: repositories.slots,
+        records: repositories.records,
+        events: {
+          listForSlot: async () => ({
+            ok: false,
+            error: { code: 'read_failure', message: 'synthetic event read failure' },
+          }),
+        },
+        snapshots: repositories.snapshots,
+        coordinator,
+        content: adapted.content,
+        newId: () => {
+          throw new Error('Blocked entry must not allocate generation identities.');
+        },
+        now: () => timestamp,
+      });
+      await expect(
+        eventFailureService.enter({
+          actionId: 'integration.blocked-without-events',
+          idempotencyKey: 'integration-blocked-without-events' as IdempotencyKey,
+          slotId: repositoryFixtureSlotId,
+          adventurerId,
+          seed: '0x0000000000000001',
+          finalLightConfirmed: false,
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        committed: false,
+        code: 'recovery_prerequisite_unavailable',
+      });
       const entered = await service.enter({
         actionId: 'integration.enter-palace',
         idempotencyKey: 'integration-enter-palace' as IdempotencyKey,
@@ -130,6 +191,12 @@ describe('Palace generation persistence', () => {
       if (!entered.ok) throw new Error(entered.message);
       const reloaded = await service.load(repositoryFixtureSlotId);
       expect(reloaded).toMatchObject({ ok: true, dungeon: entered.dungeon });
+      await database.records.delete([repositoryFixtureSlotId, 'palace-current-run', 'current']);
+      await expect(service.load(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: true,
+        dungeon: entered.dungeon,
+        outcome: 'active',
+      });
       await expect(
         repositories.records.get(repositoryFixtureSlotId, 'adventurer', adventurerId),
       ).resolves.toMatchObject({
