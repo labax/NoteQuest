@@ -976,7 +976,7 @@ export class PalaceEntryService {
               stateRecords,
               randomStreamRecords: captured.randomStreamRecords ?? [],
               randomResultRecords: captured.randomResultRecords ?? [],
-              events: enrichedEvents,
+              events: [...priorEvents.value, ...enrichedEvents],
               currentRun: {
                 dungeonId: generated.dungeon.dungeonId,
                 expeditionId,
@@ -1032,11 +1032,51 @@ export class PalaceEntryService {
         readonly error: { readonly code: 'not_found'; readonly message: string };
       }
   > {
-    const [pointer, snapshot, slot] = await Promise.all([
+    const [pointer, snapshot, slot, liveEvents] = await Promise.all([
       this.dependencies.records.get(slotId, 'palace-current-run', 'current'),
       this.dependencies.snapshots.get(slotId, 'last-valid'),
       this.dependencies.slots.get(slotId),
+      this.dependencies.events.listForSlot(slotId),
     ]);
+    if (!pointer.ok && pointer.error.code !== 'missing_record') return pointer;
+    if (!slot.ok) return slot;
+    if (!liveEvents.ok) return liveEvents;
+    if (!snapshot.ok) {
+      if (snapshot.error.code !== 'missing_record') return snapshot;
+      return !pointer.ok
+        ? {
+            ok: false,
+            error: { code: 'not_found', message: 'No committed or recoverable Palace run exists.' },
+          }
+        : {
+            ok: false,
+            error: {
+              code: 'invalid_record',
+              message: 'The promised last-valid snapshot is missing.',
+            },
+          };
+    }
+    const snapshotPackage = validateSnapshotPackage(snapshot.value, slot.value);
+    if (snapshotPackage === null || snapshotPackage.currentRun === undefined) {
+      return !pointer.ok && snapshotPackage !== null
+        ? {
+            ok: false,
+            error: { code: 'not_found', message: 'No committed or recoverable Palace run exists.' },
+          }
+        : {
+            ok: false,
+            error: {
+              code: 'invalid_record',
+              message: 'The last-valid Palace snapshot is invalid.',
+            },
+          };
+    }
+    if (!eventsMatch(liveEvents.value, snapshotPackage.events, slot.value.revision)) {
+      return {
+        ok: false,
+        error: { code: 'invalid_record', message: 'Live and last-valid event histories disagree.' },
+      };
+    }
     let liveFailure: LoadPalaceRunResult | { readonly ok: false; readonly error: RepositoryError } =
       pointer.ok
         ? {
@@ -1044,6 +1084,7 @@ export class PalaceEntryService {
             error: { code: 'invalid_record', message: 'The current Palace pointer is malformed.' },
           }
         : pointer;
+    let validatedLive: Extract<LoadPalaceRunResult, { readonly ok: true }> | undefined;
     if (
       pointer.ok &&
       pointer.value.slotId === slotId &&
@@ -1051,12 +1092,22 @@ export class PalaceEntryService {
       pointer.value.recordId === 'current' &&
       isCurrentRunPointer(pointer.value.body)
     ) {
+      if (!safeSameValue(pointer.value.body, snapshotPackage.currentRun)) {
+        return {
+          ok: false,
+          error: {
+            code: 'invalid_record',
+            message: 'Live and last-valid run identities disagree.',
+          },
+        };
+      }
       const current = await loadPalaceRun(
         slotId,
         pointer.value.body.dungeonId,
         pointer.value.body.expeditionId,
         this.dependencies.records,
       );
+      if (!current.ok && isOperationalRepositoryError(current.error)) return current;
       liveFailure = current;
       if (
         current.ok &&
@@ -1068,38 +1119,31 @@ export class PalaceEntryService {
           'adventurer',
           pointer.value.body.adventurerId,
         );
+        if (!adventurer.ok && isOperationalRepositoryError(adventurer.error)) return adventurer;
+        const terminal = await this.hasCoherentTerminalEvidence(slotId, pointer.value.body);
+        if (!terminal.ok) return terminal;
+        const creation = await this.liveCreationMatchesSnapshot(
+          slotId,
+          pointer.value.body.adventurerId,
+          snapshotPackage,
+        );
+        if (!creation.ok) return creation;
         if (
           adventurer.ok &&
           isAdventurerOutcomeCoherent(adventurer.value, pointer.value.body) &&
-          (await this.hasCoherentTerminalEvidence(slotId, pointer.value.body))
+          terminal.value &&
+          creation.value &&
+          validatePalaceEvent(liveEvents.value, pointer.value.body, current.dungeon)
         )
-          return current;
+          validatedLive = current;
       }
     }
-    if (!slot.ok) return slot;
-    if (!snapshot.ok) return liveFailure;
-    if (
-      snapshot.value.slotId !== slotId ||
-      snapshot.value.snapshotClass !== 'last-valid' ||
-      snapshot.value.schemaVersion !== 1 ||
-      snapshot.value.sourceRevision !== slot.value.revision ||
-      slot.value.currentSnapshotId !== 'last-valid' ||
-      slot.value.lastValidSnapshotId !== 'last-valid' ||
-      slot.value.integrityStatus !== 'valid' ||
-      typeof snapshot.value.body !== 'object' ||
-      snapshot.value.body === null
-    )
-      return liveFailure;
-    const body = snapshot.value.body as Record<string, unknown>;
     const rows = [
-      ...(Array.isArray(body['stateRecords']) ? body['stateRecords'] : []),
-      ...(Array.isArray(body['randomStreamRecords']) ? body['randomStreamRecords'] : []),
-      ...(Array.isArray(body['randomResultRecords']) ? body['randomResultRecords'] : []),
-    ].filter(isPersistedRecordValue);
-    const snapshotPointer = isCurrentRunPointer(body['currentRun'])
-      ? body['currentRun']
-      : undefined;
-    if (snapshotPointer === undefined) return liveFailure;
+      ...snapshotPackage.stateRecords,
+      ...snapshotPackage.randomStreamRecords,
+      ...snapshotPackage.randomResultRecords,
+    ];
+    const snapshotPointer = snapshotPackage.currentRun;
     const recoveredDungeons = rows.filter(
       (record) => record.recordType === 'dungeon' && record.recordId === snapshotPointer.dungeonId,
     );
@@ -1147,40 +1191,94 @@ export class PalaceEntryService {
       (record) =>
         record.recordType === 'adventurer' && record.recordId === snapshotPointer.adventurerId,
     );
-    const recoveredEvents = Array.isArray(body['events']) ? body['events'] : [];
     if (
       recoveredAdventurers.length !== 1 ||
       !isAdventurerOutcomeCoherent(recoveredAdventurers[0]!, snapshotPointer) ||
-      recoveredEvents.filter(
-        (event) =>
-          typeof event === 'object' &&
-          event !== null &&
-          Reflect.get(event, 'slotId') === slotId &&
-          Reflect.get(event, 'expeditionId') === snapshotPointer.expeditionId &&
-          typeof Reflect.get(event, 'body') === 'object' &&
-          Reflect.get(event, 'body') !== null &&
-          Reflect.get(Reflect.get(event, 'body'), 'adventurerId') === snapshotPointer.adventurerId,
-      ).length !== 1 ||
+      !validatePalaceEvent(snapshotPackage.events, snapshotPointer, recovered.dungeon) ||
       !hasCoherentRecoveredTerminalEvidence(rows, snapshotPointer)
     )
       return liveFailure;
-    return recovered;
+    return validatedLive ?? recovered;
   }
 
   private async hasCoherentTerminalEvidence(
     slotId: SaveSlotId,
     pointer: Required<CurrentRunPointer>,
-  ): Promise<boolean> {
-    if (pointer.outcome !== 'darkness-death') return true;
+  ): Promise<
+    | { readonly ok: true; readonly value: boolean }
+    | { readonly ok: false; readonly error: RepositoryError }
+  > {
+    if (pointer.outcome !== 'darkness-death') return { ok: true, value: true };
     const [graveyard, belongings] = await Promise.all([
       this.dependencies.records.listByType(slotId, 'graveyard'),
       this.dependencies.records.listByType(slotId, 'recoverable-belongings'),
     ]);
-    return (
-      graveyard.ok &&
-      belongings.ok &&
-      hasCoherentRecoveredTerminalEvidence([...graveyard.value, ...belongings.value], pointer)
+    if (!graveyard.ok) return graveyard;
+    if (!belongings.ok) return belongings;
+    return {
+      ok: true,
+      value: hasCoherentRecoveredTerminalEvidence(
+        [...graveyard.value, ...belongings.value],
+        pointer,
+      ),
+    };
+  }
+
+  private async liveCreationMatchesSnapshot(
+    slotId: SaveSlotId,
+    adventurerId: string,
+    snapshot: ValidatedSnapshotPackage,
+  ): Promise<
+    | { readonly ok: true; readonly value: boolean }
+    | { readonly ok: false; readonly error: RepositoryError }
+  > {
+    const [profiles, evidence, streams, results] = await Promise.all([
+      this.dependencies.records.listByType(slotId, 'adventurer-profile'),
+      this.dependencies.records.listByType(slotId, 'adventurer-creation-evidence'),
+      this.dependencies.records.listByType(slotId, 'random-stream'),
+      this.dependencies.records.listByType(slotId, 'random-result'),
+    ]);
+    if (!profiles.ok) return profiles;
+    if (!evidence.ok) return evidence;
+    if (!streams.ok) return streams;
+    if (!results.ok) return results;
+    const expectedProfile = snapshot.stateRecords.filter(
+      (record) => record.recordType === 'adventurer-profile' && record.recordId === adventurerId,
     );
+    const expectedEvidence = snapshot.stateRecords.filter(
+      (record) =>
+        record.recordType === 'adventurer-creation-evidence' && record.recordId === adventurerId,
+    );
+    const expectedStreams = snapshot.randomStreamRecords.filter(
+      (record) =>
+        typeof record.body === 'object' &&
+        record.body !== null &&
+        Reflect.get(record.body, 'purpose') === 'adventurer-creation',
+    );
+    const creationStreamIds = new Set(expectedStreams.map((record) => record.recordId));
+    const expectedResults = snapshot.randomResultRecords.filter(
+      (record) =>
+        typeof record.body === 'object' &&
+        record.body !== null &&
+        creationStreamIds.has(String(Reflect.get(record.body, 'streamId'))),
+    );
+    const exact = (expected: readonly PersistedRecord[], live: readonly PersistedRecord[]) =>
+      expected.length > 0 &&
+      expected.every(
+        (record) =>
+          live.filter(
+            (candidate) =>
+              candidate.recordId === record.recordId && safeSameValue(candidate, record),
+          ).length === 1,
+      );
+    return {
+      ok: true,
+      value:
+        exact(expectedProfile, profiles.value) &&
+        exact(expectedEvidence, evidence.value) &&
+        exact(expectedStreams, streams.value) &&
+        (expectedResults.length === 0 || exact(expectedResults, results.value)),
+    };
   }
 }
 
@@ -1189,6 +1287,12 @@ interface CurrentRunPointer {
   readonly expeditionId: string;
   readonly adventurerId: string;
   readonly outcome?: 'active' | 'miner-emergency-exit' | 'darkness-death';
+}
+
+function isOperationalRepositoryError(error: { readonly code: string }): boolean {
+  return !['missing_record', 'invalid_record', 'validation_failure', 'invalid_state'].includes(
+    error.code,
+  );
 }
 
 function isCurrentRunPointer(value: unknown): value is Required<CurrentRunPointer> {
@@ -1295,13 +1399,11 @@ function cumulativeSnapshotBody(
   return {
     ...previous,
     ...additions,
+    schema: 'cumulative-state-v1',
     stateRecords: mergeRecords('stateRecords'),
     randomStreamRecords: mergeRecords('randomStreamRecords'),
     randomResultRecords: mergeRecords('randomResultRecords'),
-    events: [
-      ...(Array.isArray(Reflect.get(previous, 'events')) ? Reflect.get(previous, 'events') : []),
-      ...(Array.isArray(additions['events']) ? additions['events'] : []),
-    ],
+    events: Array.isArray(additions['events']) ? additions['events'] : [],
   };
 }
 
@@ -1317,28 +1419,244 @@ function isPersistedRecordValue(value: unknown): value is PersistedRecord {
   );
 }
 
-function isCoherentPriorRecovery(
-  snapshot: import('./repositories.ts').SnapshotRecord,
-  events: readonly import('./repositories.ts').EventRecord[],
-  slot: SlotRecord,
-  adventurer: PersistedRecord,
+function isEventRecordValue(value: unknown): value is import('./repositories.ts').EventRecord {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof Reflect.get(value, 'slotId') === 'string' &&
+    Number.isSafeInteger(Reflect.get(value, 'sequence')) &&
+    (Reflect.get(value, 'sequence') as number) > 0 &&
+    typeof Reflect.get(value, 'timestamp') === 'string' &&
+    typeof Reflect.get(value, 'eventType') === 'string' &&
+    typeof Reflect.get(value, 'retentionClass') === 'string' &&
+    Reflect.has(value, 'body')
+  );
+}
+
+function eventsMatch(
+  live: readonly import('./repositories.ts').EventRecord[],
+  snapshot: readonly import('./repositories.ts').EventRecord[],
+  revision: number,
 ): boolean {
+  if (live.length !== revision || snapshot.length !== revision) return false;
+  const order = (events: readonly import('./repositories.ts').EventRecord[]) =>
+    [...events].sort((left, right) => left.sequence - right.sequence);
+  const orderedLive = order(live);
+  const orderedSnapshot = order(snapshot);
+  return (
+    orderedLive.every((event, index) => event.sequence === index + 1) &&
+    orderedSnapshot.every((event, index) => event.sequence === index + 1) &&
+    safeSameValue(orderedLive, orderedSnapshot)
+  );
+}
+
+function validatePalaceEvent(
+  events: readonly import('./repositories.ts').EventRecord[],
+  pointer: Required<CurrentRunPointer>,
+  dungeon: PalaceDungeonState,
+): boolean {
+  const matches = events.filter(
+    (event) =>
+      event.eventType === 'palace.generated-and-entered' &&
+      event.slotId !== undefined &&
+      event.dungeonId === pointer.dungeonId &&
+      event.expeditionId === pointer.expeditionId,
+  );
+  if (matches.length !== 1) return false;
+  const event = matches[0]!;
+  const body = event.body;
+  if (typeof body !== 'object' || body === null) return false;
+  const outcome = Reflect.get(body, 'outcome');
+  const outcomeMatches =
+    pointer.outcome === 'active'
+      ? outcome === 'entered' || outcome === 'light-charge-cast' || outcome === 'lamp-sustained'
+      : outcome === pointer.outcome;
+  return (
+    event.aggregateType === 'dungeon' &&
+    event.aggregateId === pointer.dungeonId &&
+    event.retentionClass === 'canonical' &&
+    Reflect.get(body, 'adventurerId') === pointer.adventurerId &&
+    Reflect.get(body, 'seed') === dungeon.seed &&
+    Reflect.get(body, 'rulesVersion') === dungeon.rulesVersion &&
+    Reflect.get(body, 'contentVersion') === dungeon.contentVersion &&
+    Reflect.get(body, 'generationVersion') === dungeon.generationVersion &&
+    Reflect.get(body, 'entranceDefinitionId') === dungeon.generationEvidence.entranceDefinitionId &&
+    outcomeMatches &&
+    typeof Reflect.get(body, 'persistentLamp') === 'boolean' &&
+    Reflect.get(body, 'minerEmergencyExit') === (pointer.outcome === 'miner-emergency-exit') &&
+    Reflect.get(body, 'darknessDeath') === (pointer.outcome === 'darkness-death') &&
+    (Reflect.get(body, 'entryPreparationChargeId') === null ||
+      typeof Reflect.get(body, 'entryPreparationChargeId') === 'string') &&
+    (Reflect.get(body, 'postEntryChargeId') === null ||
+      typeof Reflect.get(body, 'postEntryChargeId') === 'string')
+  );
+}
+
+type ValidatedSnapshotPackage = {
+  readonly stateRecords: readonly PersistedRecord[];
+  readonly randomStreamRecords: readonly PersistedRecord[];
+  readonly randomResultRecords: readonly PersistedRecord[];
+  readonly events: readonly import('./repositories.ts').EventRecord[];
+  readonly currentRun?: Required<CurrentRunPointer>;
+};
+
+function validateSnapshotPackage(
+  snapshot: import('./repositories.ts').SnapshotRecord,
+  slot: SlotRecord,
+  adventurerId?: string,
+): ValidatedSnapshotPackage | null {
   if (
     snapshot.slotId !== slot.slotId ||
     snapshot.snapshotClass !== 'last-valid' ||
     snapshot.schemaVersion !== 1 ||
     snapshot.sourceRevision !== slot.revision ||
+    slot.schemaVersion !== 1 ||
     slot.currentSnapshotId !== 'last-valid' ||
     slot.lastValidSnapshotId !== 'last-valid' ||
     slot.integrityStatus !== 'valid' ||
     typeof snapshot.body !== 'object' ||
     snapshot.body === null
   )
-    return false;
+    return null;
   const body = snapshot.body as Record<string, unknown>;
   const stateRecords = body['stateRecords'];
-  if (!Array.isArray(stateRecords) || !stateRecords.every(isPersistedRecordValue)) return false;
-  const matchingAdventurers = stateRecords.filter(
+  const randomStreamRecords = body['randomStreamRecords'];
+  const randomResultRecords = body['randomResultRecords'];
+  const eventsValue = body['events'];
+  if (
+    !Array.isArray(stateRecords) ||
+    !stateRecords.every(isPersistedRecordValue) ||
+    !Array.isArray(randomStreamRecords) ||
+    !randomStreamRecords.every(isPersistedRecordValue) ||
+    !Array.isArray(randomResultRecords) ||
+    !randomResultRecords.every(isPersistedRecordValue)
+  )
+    return null;
+  const allRecords = [...stateRecords, ...randomStreamRecords, ...randomResultRecords];
+  if (allRecords.some((record) => record.slotId !== slot.slotId)) return null;
+  const identities = allRecords.map(
+    (record) => `${record.slotId}:${record.recordType}:${record.recordId}`,
+  );
+  if (new Set(identities).size !== identities.length) return null;
+
+  const currentRun = isCurrentRunPointer(body['currentRun']) ? body['currentRun'] : undefined;
+  if (
+    currentRun !== undefined &&
+    stateRecords.filter(
+      (record) =>
+        record.recordType === 'palace-current-run' &&
+        record.recordId === 'current' &&
+        safeSameValue(record.body, currentRun),
+    ).length !== 1
+  )
+    return null;
+  const creationEvent = body['creationEvent'];
+  const creationEventBody =
+    typeof creationEvent === 'object' && creationEvent !== null ? creationEvent : undefined;
+  const creationAdventurerId =
+    adventurerId ??
+    currentRun?.adventurerId ??
+    (creationEventBody === undefined
+      ? undefined
+      : (Reflect.get(creationEventBody, 'adventurerId') as string | undefined));
+  if (typeof creationAdventurerId !== 'string') return null;
+  const exactlyOne = (type: string, id: string) =>
+    stateRecords.filter((record) => record.recordType === type && record.recordId === id).length ===
+    1;
+  if (
+    !exactlyOne('adventurer', creationAdventurerId) ||
+    !exactlyOne('adventurer-profile', creationAdventurerId) ||
+    !exactlyOne('adventurer-creation-evidence', creationAdventurerId)
+  )
+    return null;
+  const profile = stateRecords.find(
+    (record) =>
+      record.recordType === 'adventurer-profile' && record.recordId === creationAdventurerId,
+  )!;
+  if (
+    profile.ownerType !== 'adventurer' ||
+    profile.ownerId !== creationAdventurerId ||
+    typeof profile.body !== 'object' ||
+    profile.body === null ||
+    Reflect.get(profile.body, 'adventurerId') !== creationAdventurerId
+  )
+    return null;
+  const creationStreams = randomStreamRecords.filter(
+    (record) =>
+      typeof record.body === 'object' &&
+      record.body !== null &&
+      Reflect.get(record.body, 'purpose') === 'adventurer-creation',
+  );
+  if (creationStreams.length !== 1) return null;
+  const rollRefs =
+    creationEventBody === undefined ? undefined : Reflect.get(creationEventBody, 'rollRefs');
+  if (rollRefs !== undefined) {
+    if (!Array.isArray(rollRefs)) return null;
+    const expectedResultIds = rollRefs.map((roll) =>
+      typeof roll === 'object' && roll !== null ? Reflect.get(roll, 'rollResultId') : undefined,
+    );
+    if (
+      expectedResultIds.some((id) => typeof id !== 'string') ||
+      new Set(expectedResultIds).size !== expectedResultIds.length ||
+      expectedResultIds.some(
+        (id) =>
+          randomResultRecords.filter(
+            (record) => record.recordType === 'random-result' && record.recordId === id,
+          ).length !== 1,
+      )
+    )
+      return null;
+  }
+  const creationEvidence = stateRecords.find(
+    (record) =>
+      record.recordType === 'adventurer-creation-evidence' &&
+      record.recordId === creationAdventurerId,
+  )!;
+  if (typeof creationEvidence.body !== 'object' || creationEvidence.body === null) return null;
+
+  let events: readonly import('./repositories.ts').EventRecord[];
+  if (slot.revision === 1 && eventsValue === undefined) {
+    if (creationEventBody === undefined) return null;
+    events = [];
+  } else {
+    if (!Array.isArray(eventsValue) || !eventsValue.every(isEventRecordValue)) return null;
+    events = eventsValue;
+    if (events.some((event) => event.slotId !== slot.slotId) || events.length !== slot.revision)
+      return null;
+    const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
+    if (ordered.some((event, index) => event.sequence !== index + 1)) return null;
+    const persistedCreationEvents = events.filter(
+      (event) =>
+        event.eventType === 'adventurer_created' &&
+        event.aggregateType === 'adventurer' &&
+        event.aggregateId === creationAdventurerId,
+    );
+    if (
+      persistedCreationEvents.length !== 1 ||
+      creationEventBody === undefined ||
+      !safeSameValue(persistedCreationEvents[0]!.body, creationEventBody) ||
+      !safeSameValue(Reflect.get(creationEvidence.body, 'event'), creationEventBody)
+    )
+      return null;
+  }
+  return {
+    stateRecords,
+    randomStreamRecords,
+    randomResultRecords,
+    events,
+    ...(currentRun ? { currentRun } : {}),
+  };
+}
+
+function isCoherentPriorRecovery(
+  snapshot: import('./repositories.ts').SnapshotRecord,
+  events: readonly import('./repositories.ts').EventRecord[],
+  slot: SlotRecord,
+  adventurer: PersistedRecord,
+): boolean {
+  const validated = validateSnapshotPackage(snapshot, slot, adventurer.recordId);
+  if (validated === null) return false;
+  const matchingAdventurers = validated.stateRecords.filter(
     (record) =>
       record.slotId === slot.slotId &&
       record.recordType === 'adventurer' &&
@@ -1349,17 +1667,13 @@ function isCoherentPriorRecovery(
     !safeSameValue(matchingAdventurers[0]!.body, adventurer.body)
   )
     return false;
-  for (const key of ['randomStreamRecords', 'randomResultRecords'] as const) {
-    const records = body[key];
-    if (!Array.isArray(records) || !records.every(isPersistedRecordValue)) return false;
-    const identities = records.map((record) => `${record.recordType}:${record.recordId}`);
-    if (new Set(identities).size !== identities.length) return false;
-  }
   if (events.length === 0 || events.some((event) => event.slotId !== slot.slotId)) return false;
   const sequences = events.map((event) => event.sequence).sort((left, right) => left - right);
   return (
     new Set(sequences).size === sequences.length &&
-    sequences.every((sequence, index) => sequence === index + 1)
+    sequences.length === slot.revision &&
+    sequences.every((sequence, index) => sequence === index + 1) &&
+    sequences.at(-1) === slot.revision
   );
 }
 

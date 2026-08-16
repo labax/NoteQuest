@@ -68,12 +68,29 @@ describe('Palace generation persistence', () => {
         updatedAt: timestamp,
         body: { adventurerId, playerAuthoredName: 'Palace integration hero', updatedAt: timestamp },
       } as const;
+      const creationEvidenceRecord = {
+        slotId: repositoryFixtureSlotId,
+        recordType: 'adventurer-creation-evidence',
+        recordId: adventurerId,
+        ownerType: 'adventurer',
+        ownerId: adventurerId,
+        updatedAt: timestamp,
+        body: { evidence: {}, event: { adventurerId }, initialState: canonicalAdventurer },
+      } as const;
+      const creationStreamRecord = {
+        slotId: repositoryFixtureSlotId,
+        recordType: 'random-stream',
+        recordId: 'creation-stream',
+        updatedAt: timestamp,
+        body: { purpose: 'adventurer-creation' },
+      } as const;
       const creation = await coordinator.commit({
         actionId: 'integration.create-adventurer',
         idempotencyKey: 'integration-create-adventurer' as IdempotencyKey,
         slotId: repositoryFixtureSlotId,
         expectedRevision: 0,
-        stateRecords: [adventurerRecord, profileRecord],
+        stateRecords: [adventurerRecord, profileRecord, creationEvidenceRecord],
+        randomStreamRecords: [creationStreamRecord],
         events: [
           {
             slotId: repositoryFixtureSlotId,
@@ -107,9 +124,10 @@ describe('Palace generation persistence', () => {
               schemaVersion: 1,
               sourceRevision: 1,
               body: {
-                stateRecords: [adventurerRecord, profileRecord],
-                randomStreamRecords: [],
+                stateRecords: [adventurerRecord, profileRecord, creationEvidenceRecord],
+                randomStreamRecords: [creationStreamRecord],
                 randomResultRecords: [],
+                creationEvent: { adventurerId },
               },
             },
           ],
@@ -189,6 +207,41 @@ describe('Palace generation persistence', () => {
         finalLightConfirmed: false,
       });
       if (!entered.ok) throw new Error(entered.message);
+      const palaceSnapshot = await repositories.snapshots.get(
+        repositoryFixtureSlotId,
+        'last-valid',
+      );
+      if (!palaceSnapshot.ok) throw new Error(palaceSnapshot.error.message);
+      await database.snapshots.delete([repositoryFixtureSlotId, 'last-valid']);
+      await expect(service.load(repositoryFixtureSlotId)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'invalid_record' },
+      });
+      await repositories.snapshots.put(palaceSnapshot.value);
+      for (const code of ['read_failure', 'storage_unavailable', 'storage_failure'] as const) {
+        const failingPointerService = new PalaceEntryService({
+          slots: repositories.slots,
+          records: {
+            listByType: repositories.records.listByType.bind(repositories.records),
+            get: async (slotId, recordType, recordId) =>
+              recordType === 'palace-current-run'
+                ? { ok: false, error: { code, message: `synthetic ${code}` } }
+                : repositories.records.get(slotId, recordType, recordId),
+          },
+          events: repositories.events,
+          snapshots: repositories.snapshots,
+          coordinator,
+          content: adapted.content,
+          newId: () => {
+            throw new Error('Loading must not allocate identities.');
+          },
+          now: () => timestamp,
+        });
+        await expect(failingPointerService.load(repositoryFixtureSlotId)).resolves.toMatchObject({
+          ok: false,
+          error: { code },
+        });
+      }
       const reloaded = await service.load(repositoryFixtureSlotId);
       expect(reloaded).toMatchObject({ ok: true, dungeon: entered.dungeon });
       await database.records.delete([repositoryFixtureSlotId, 'palace-current-run', 'current']);
