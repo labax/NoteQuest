@@ -4,7 +4,10 @@ import {
   authorizedPalaceEntranceManifest,
   authorizedPalaceEntranceTemplate,
 } from './authorized-palace-entrance.ts';
-import { validatePalaceGenerationContent } from './palace-generation-content.ts';
+import {
+  approvedPalaceEntranceGenerationOrigins,
+  validatePalaceGenerationContent,
+} from './palace-generation-content.ts';
 import { validatePalaceContentManifest } from './palace-manifest.ts';
 import { validatePalaceManifestIntegrity } from './palace-manifest-integrity.ts';
 
@@ -21,6 +24,7 @@ describe('authorized Palace entrance', () => {
       expect.arrayContaining([
         'INV-PAL-INTRO',
         'STORY-M6-002',
+        'ISSUE-177',
         'NOTEQUEST-ISSUE-80-TIAGO-JUNGES-PERMISSION-ATTESTATION',
       ]),
     );
@@ -61,5 +65,54 @@ describe('authorized Palace entrance', () => {
       );
     }
     expect(validatePalaceGenerationContent(null as never)).toMatchObject({ ok: false });
+  });
+
+  it('authorizes a room origin for each side door and a staircase origin for the central door', () => {
+    expect(approvedPalaceEntranceGenerationOrigins).toEqual({
+      'palace.entrance.connection.side-door-1.v1': 'room',
+      'palace.entrance.connection.side-door-2.v1': 'room',
+      'palace.entrance.connection.side-door-3.v1': 'room',
+      'palace.entrance.connection.side-door-4.v1': 'room',
+      'palace.entrance.connection.central-staircase-wooden-door.v1': 'staircase',
+    });
+
+    const adapted = validatePalaceGenerationContent(authorizedPalaceEntranceManifest);
+    if (!adapted.ok) throw new Error('expected authorized entrance content');
+    expect(
+      Object.fromEntries(
+        adapted.content.entranceConnections.map(({ definitionId, generationOriginCategory }) => [
+          definitionId,
+          generationOriginCategory,
+        ]),
+      ),
+    ).toEqual(approvedPalaceEntranceGenerationOrigins);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'entrance'],
+    ['blanket room mapping', 'room'],
+  ] as const)('rejects a %s generation origin on the central staircase door', (_case, origin) => {
+    const malformed = structuredClone(authorizedPalaceEntranceManifest);
+    const connections = malformed.entries[0]!.structuredDefinition.connections as unknown as Array<
+      Record<string, unknown>
+    >;
+    const centralDoor = connections.find(({ definitionId }) =>
+      String(definitionId).includes('central-staircase'),
+    )!;
+    if (origin === undefined) delete centralDoor['generationOriginCategory'];
+    else centralDoor['generationOriginCategory'] = origin;
+
+    expect(validatePalaceGenerationContent(malformed)).toMatchObject({ ok: false });
+  });
+
+  it('rejects swapping a side-door origin to staircase', () => {
+    const malformed = structuredClone(authorizedPalaceEntranceManifest);
+    const connections = malformed.entries[0]!.structuredDefinition.connections as unknown as Array<
+      Record<string, unknown>
+    >;
+    connections[0]!['generationOriginCategory'] = 'staircase';
+
+    expect(validatePalaceGenerationContent(malformed)).toMatchObject({ ok: false });
   });
 });
