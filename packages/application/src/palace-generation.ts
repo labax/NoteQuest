@@ -581,7 +581,12 @@ export interface PalaceMapSurface {
   readonly currentSegmentId: string;
   readonly segments: PalaceDungeonState['segments'];
   readonly connections: PalaceDungeonState['connections'];
-  readonly actions: readonly { readonly id: string; readonly connectionId: string }[];
+  readonly actions: readonly {
+    readonly id: string;
+    readonly connectionId: string;
+    readonly enabled?: boolean;
+    readonly explanation?: string;
+  }[];
 }
 
 /** Both renderers consume this projection; coordinates and labels cannot create mechanics. */
@@ -591,7 +596,12 @@ export function projectPalaceMapSurfaces(dungeon: PalaceDungeonState): {
 } {
   const actions = dungeon.connections
     .filter((connection) => connection.sourceSegmentId === dungeon.currentSegmentId)
-    .map((connection) => ({ id: 'open-connection', connectionId: connection.connectionId }));
+    .map((connection) => ({
+      id: 'open-connection',
+      connectionId: connection.connectionId,
+      enabled: false,
+      explanation: 'This connection needs a committed exploration action.',
+    }));
   const authoritative = {
     currentSegmentId: dungeon.currentSegmentId,
     segments: dungeon.segments,
