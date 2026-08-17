@@ -25,6 +25,7 @@ function content(entranceConnectionCount: number) {
     entranceConnections: Array.from({ length: entranceConnectionCount }, (_value, index) => ({
       definitionId: `palace.fixture.connection-${index + 1}` as const,
       directionLabel: `Fixture exit ${index + 1}`,
+      generationOriginCategory: index === 0 ? ('staircase' as const) : ('room' as const),
       connectionState: 'unresolved' as const,
       doorState: 'unknown' as const,
       alertState: 'quiet' as const,
@@ -50,6 +51,25 @@ describe('Palace generation seed fixtures', () => {
     expect(identities(reordered.dungeon.connections)).toEqual(
       identities(original.dungeon.connections),
     );
+  });
+
+  it('persists each authorized generation origin on its unresolved connection', () => {
+    const generated = generatePalaceDungeon('0x0000000000000001', content(3));
+    if (!generated.ok) throw new Error('expected valid fixture');
+
+    expect(
+      generated.dungeon.connections.map(({ definitionId, generationOriginCategory }) => ({
+        definitionId,
+        generationOriginCategory,
+      })),
+    ).toEqual([
+      {
+        definitionId: 'palace.fixture.connection-1',
+        generationOriginCategory: 'staircase',
+      },
+      { definitionId: 'palace.fixture.connection-2', generationOriginCategory: 'room' },
+      { definitionId: 'palace.fixture.connection-3', generationOriginCategory: 'room' },
+    ]);
   });
   it.each(seedFixtures.filter((fixture) => fixture.kind !== 'failure'))(
     'reproduces $id',
