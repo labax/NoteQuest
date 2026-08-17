@@ -13,3 +13,5 @@ export * from './authorized-palace-exploration.ts';
 export * from './palace-exploration-content.ts';
 export * from './authorized-palace-finale.ts';
 export * from './palace-finale-content.ts';
+export * from './authorized-palace-rewards.ts';
+export * from './palace-reward-content.ts';
