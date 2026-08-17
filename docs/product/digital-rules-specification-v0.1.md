@@ -142,7 +142,7 @@ All arithmetic uses integers. Unless a rule states otherwise, a calculated damag
 |---|---|---:|
 | Randomness and dice | DRS-DICE-001 to DRS-DICE-012 | Must |
 | Adventurer creation and state | DRS-ADV-001 to DRS-ADV-020 | Must |
-| Dungeon generation | DRS-DUN-001 to DRS-DUN-025 | Must |
+| Dungeon generation | DRS-DUN-001 to DRS-DUN-026 | Must |
 | Doors, traps, passages, and chests | DRS-DOOR-001 to DRS-DOOR-020 | Must |
 | Exploration, torches, and hands | DRS-EXP-001 to DRS-EXP-021 | Must |
 | Combat and traits | DRS-CMB-001 to DRS-CMB-033 | Must |
@@ -292,9 +292,11 @@ Each segment has a stable ID, floor number, type, resolved content, encounter re
 5. If pressure does not create stairs, roll the authorised segment table. A normal table staircase result remains valid.
 6. A downward staircase from floor 1 leads to floor 2 and creates its destination segment on first traversal/opening according to the content definition.
 7. A downward staircase from floor 2 leads directly to the floor-3 final room.
-8. The final room contains only the persisted boss-table result and has no unexplored outward connection.
-9. Opening a connection that creates a room immediately resolves room content and the initial monster-table result unless the room is the final room.
-10. Every generated result and graph mutation is committed atomically.
+8. Normal and secret downward staircases use the same floor transition and final-room rules.
+9. After generating a destination, but before ordinary room-content or monster resolution, test the reachable frontier. If the generated destination is a room with no outward connections, no other reachable unresolved connection remains, and no final room exists, promote that current generated room to the final room.
+10. The final room contains only the persisted boss-table result and has no unexplored outward connection.
+11. Opening a connection that creates a room immediately resolves room content and the initial monster-table result unless the room is the final room.
+12. Every generated result and graph mutation is committed atomically.
 
 ### 9.4 Requirements
 
@@ -325,6 +327,7 @@ Each segment has a stable ID, floor number, type, resolved content, encounter re
 | DRS-DUN-023 | Entrance topology shall come from the dungeon content definition and shall be persisted before the first player choice. | Must | Reload preserves entrance state. |
 | DRS-DUN-024 | A segment or connection ID shall never depend on display name, list index, or map coordinates. | Must | Stable-ID migration tests pass. |
 | DRS-DUN-025 | Generated content shall preserve the exact authorised row ID and content version. | Must | History can identify the source row. |
+| DRS-DUN-026 | If generation exhausts the reachable unresolved frontier before a floor-3 descent, the just-generated zero-outward-connection room shall become the single final room before ordinary room resolution. | Must | Frontier-exhaustion fixtures create one boss-only final room and no normal room results. |
 
 ## 10. Doors, Traps, Secret Passages, and Chests
 
@@ -957,6 +960,7 @@ stateDiagram-v2
 | DRT-050 | Cosmic weapon natural 1 in Core profile | Portal marker persists; no travel action appears. | DRS-ITEM-049 |
 | DRT-051 | Equip plain Ring with 0 durability | Ring leaves backpack, remains equipped, cannot absorb damage, and is not destroyed. | DRS-ITEM-051, DRS-ITEM-052 |
 | DRT-052 | Cold Ray against Intangible target | 4 damage is prevented; target still skips the next monster turn. | DRS-SPELL-015 |
+| DRT-053 | Last reachable unresolved connection creates a zero-outward-connection room before floor 3 | Generated room is promoted to the single boss-only final room before ordinary room resolution. | DRS-DUN-009 to 011, DRS-DUN-026 |
 
 ## 21. Traceability
 
