@@ -25,6 +25,7 @@ const content = {
     {
       definitionId: 'palace.fixture.connection-a',
       directionLabel: 'Exit A',
+      generationOriginCategory: 'room',
       connectionState: 'unresolved',
       doorState: 'unknown',
       alertState: 'quiet',
@@ -32,6 +33,7 @@ const content = {
     {
       definitionId: 'palace.fixture.connection-b',
       directionLabel: 'Exit B',
+      generationOriginCategory: 'staircase',
       connectionState: 'unresolved',
       doorState: 'unknown',
       alertState: 'quiet',
