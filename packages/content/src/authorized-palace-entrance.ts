@@ -1,7 +1,7 @@
 import type { PalaceContentManifest, PalaceManifestEntry } from './palace-manifest.ts';
 import { authorizedNoteQuestAttributionNotice } from './authorized-notequest-adventurer-creation.ts';
 
-export const authorizedPalaceEntranceContentVersion = '1.1.0' as const;
+export const authorizedPalaceEntranceContentVersion = '1.2.0' as const;
 export const authorizedPalaceEntranceRulesVersion = 'digital-rules-specification-v0.1' as const;
 
 export const authorizedPalaceEntranceTemplate = {
@@ -13,6 +13,7 @@ export const authorizedPalaceEntranceTemplate = {
     {
       definitionId: 'palace.entrance.connection.side-door-1.v1',
       directionLabel: 'Side door 1',
+      generationOriginCategory: 'room',
       connectionState: 'unresolved',
       doorState: 'unknown',
       alertState: 'quiet',
@@ -20,6 +21,7 @@ export const authorizedPalaceEntranceTemplate = {
     {
       definitionId: 'palace.entrance.connection.side-door-2.v1',
       directionLabel: 'Side door 2',
+      generationOriginCategory: 'room',
       connectionState: 'unresolved',
       doorState: 'unknown',
       alertState: 'quiet',
@@ -27,6 +29,7 @@ export const authorizedPalaceEntranceTemplate = {
     {
       definitionId: 'palace.entrance.connection.side-door-3.v1',
       directionLabel: 'Side door 3',
+      generationOriginCategory: 'room',
       connectionState: 'unresolved',
       doorState: 'unknown',
       alertState: 'quiet',
@@ -34,6 +37,7 @@ export const authorizedPalaceEntranceTemplate = {
     {
       definitionId: 'palace.entrance.connection.side-door-4.v1',
       directionLabel: 'Side door 4',
+      generationOriginCategory: 'room',
       connectionState: 'unresolved',
       doorState: 'unknown',
       alertState: 'quiet',
@@ -41,6 +45,7 @@ export const authorizedPalaceEntranceTemplate = {
     {
       definitionId: 'palace.entrance.connection.central-staircase-wooden-door.v1',
       directionLabel: 'Central staircase and wooden door',
+      generationOriginCategory: 'staircase',
       connectionState: 'unresolved',
       doorState: 'unknown',
       alertState: 'quiet',
@@ -78,6 +83,15 @@ const entranceEntry: PalaceManifestEntry = {
         citationLabel: 'Palace vertical-slice implementation decision',
         locator: 'docs/product/digital-rules-specification-v0.1.md#92-topology-model',
         sourceVersion: authorizedPalaceEntranceRulesVersion,
+      },
+      {
+        kind: 'decision-register',
+        sourceId: 'ISSUE-177',
+        citationLabel: 'Palace entrance connection generation-origin decision',
+        locator: 'https://github.com/labax/NoteQuest/issues/177',
+        sourceVersion: authorizedPalaceEntranceContentVersion,
+        notes:
+          'The four side doors generate from the room column; the central staircase door generates from the staircase column.',
       },
       {
         kind: 'controlled-evidence-record',
@@ -118,13 +132,16 @@ const entranceEntry: PalaceManifestEntry = {
       'release-listing',
       'release-evidence-package',
     ],
-    modifications: ['Digital stable IDs and concise non-expressive labels added.'],
+    modifications: [
+      'Digital stable IDs and concise non-expressive labels added.',
+      'Connection-specific segment-generation origin categories added from the authorized entrance topology.',
+    ],
     compatibilityPolicy: 'saved-history-pins-content-version',
     contentHash: {
       status: 'recorded',
       algorithm: 'SHA-256',
       canonicalization: 'RFC-8785',
-      value: 'sha256:81c216efa8fcc4f128d4c446b3a2fd8481a3b55d98b8f19890a93f23652a4049',
+      value: 'sha256:bd2af30e88da1c63b0cd7f60f39d9310813306087c6316316dad84249903b25e',
     },
     supersedes: [],
     confidentialRightsEvidence: 'excluded-from-public-manifest',
@@ -135,9 +152,9 @@ const entranceEntry: PalaceManifestEntry = {
   review: {
     approvalState: 'selected',
     reviewerRole: 'product',
-    reviewerReference: 'STORY-M6-002',
-    reviewedAt: '2026-08-12T00:00:00.000Z',
-    decisionReference: 'STORY-M6-002-PALACE-ENTRANCE',
+    reviewerReference: 'ISSUE-177',
+    reviewedAt: '2026-08-17T00:00:00.000Z',
+    decisionReference: 'ISSUE-177-PALACE-ENTRANCE-ORIGINS',
     publicReleaseEligible: true,
   },
 };
@@ -147,6 +164,6 @@ export const authorizedPalaceEntranceManifest: PalaceContentManifest = {
   packageId: 'palace',
   contentVersion: authorizedPalaceEntranceContentVersion,
   rulesVersion: authorizedPalaceEntranceRulesVersion,
-  generatedAt: '2026-08-12T00:00:00.000Z',
+  generatedAt: '2026-08-17T00:00:00.000Z',
   entries: [entranceEntry],
 };

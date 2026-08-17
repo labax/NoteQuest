@@ -15,6 +15,7 @@ export interface ValidatedPalaceGenerationContent {
   readonly entranceConnections: readonly {
     readonly definitionId: `palace.${string}`;
     readonly directionLabel: string;
+    readonly generationOriginCategory: 'room' | 'staircase';
     readonly connectionState: 'unresolved';
     readonly doorState: 'unknown';
     readonly alertState: 'quiet';
@@ -37,6 +38,7 @@ export interface PalaceConnectionState {
   readonly destinationSegmentId: null;
   readonly state: 'unresolved';
   readonly directionLabel: string;
+  readonly generationOriginCategory: 'room' | 'staircase';
   readonly definitionId: `palace.${string}`;
   readonly definitionVersion: string;
   readonly doorState: 'unknown';
@@ -127,7 +129,12 @@ export function generatePalaceDungeon(
     !Array.isArray(content.entranceConnections) ||
     content.entranceConnections.length < 1 ||
     new Set(content.entranceConnections.map((connection) => connection.definitionId)).size !==
-      content.entranceConnections.length
+      content.entranceConnections.length ||
+    content.entranceConnections.some(
+      (connection) =>
+        connection.generationOriginCategory !== 'room' &&
+        connection.generationOriginCategory !== 'staircase',
+    )
   ) {
     return failure('invalid_entrance', 'The Palace entrance needs a connection.', [
       'validate-entrance-connection-count',
@@ -160,6 +167,7 @@ export function generatePalaceDungeon(
         destinationSegmentId: null,
         state: 'unresolved',
         directionLabel: definition.directionLabel,
+        generationOriginCategory: definition.generationOriginCategory,
         definitionId: definition.definitionId,
         definitionVersion: content.contentVersion,
         doorState: definition.doorState,

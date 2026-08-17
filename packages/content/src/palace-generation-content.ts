@@ -8,6 +8,7 @@ export interface PalaceGenerationContentDefinition {
   readonly entranceConnections: readonly {
     readonly definitionId: `palace.${string}`;
     readonly directionLabel: string;
+    readonly generationOriginCategory: PalaceEntranceGenerationOriginCategory;
     readonly connectionState: 'unresolved';
     readonly doorState: 'unknown';
     readonly alertState: 'quiet';
@@ -64,7 +65,8 @@ export function validatePalaceGenerationContent(
       errors: [
         {
           field: `${entrance.id}.structuredDefinition.connections`,
-          reason: 'entrance connections must have unique stable definitions and valid states',
+          reason:
+            'entrance connections must have unique stable definitions, authorized generation origins, and valid states',
         },
       ],
     };
@@ -105,12 +107,18 @@ function isEntranceConnections(
       (candidate) =>
         typeof Reflect.get(candidate, 'directionLabel') === 'string' &&
         Reflect.get(candidate, 'directionLabel').trim().length > 0 &&
+        Reflect.get(candidate, 'generationOriginCategory') ===
+          approvedPalaceEntranceGenerationOrigins[
+            Reflect.get(candidate, 'definitionId') as ApprovedPalaceEntranceConnectionId
+          ] &&
         Reflect.get(candidate, 'connectionState') === 'unresolved' &&
         Reflect.get(candidate, 'doorState') === 'unknown' &&
         Reflect.get(candidate, 'alertState') === 'quiet',
     )
   );
 }
+
+export type PalaceEntranceGenerationOriginCategory = 'room' | 'staircase';
 
 const approvedEntranceConnectionIds = [
   'palace.entrance.connection.side-door-1.v1',
@@ -119,3 +127,15 @@ const approvedEntranceConnectionIds = [
   'palace.entrance.connection.side-door-4.v1',
   'palace.entrance.connection.central-staircase-wooden-door.v1',
 ] as const;
+
+type ApprovedPalaceEntranceConnectionId = (typeof approvedEntranceConnectionIds)[number];
+
+export const approvedPalaceEntranceGenerationOrigins: Readonly<
+  Record<ApprovedPalaceEntranceConnectionId, PalaceEntranceGenerationOriginCategory>
+> = {
+  'palace.entrance.connection.side-door-1.v1': 'room',
+  'palace.entrance.connection.side-door-2.v1': 'room',
+  'palace.entrance.connection.side-door-3.v1': 'room',
+  'palace.entrance.connection.side-door-4.v1': 'room',
+  'palace.entrance.connection.central-staircase-wooden-door.v1': 'staircase',
+};
